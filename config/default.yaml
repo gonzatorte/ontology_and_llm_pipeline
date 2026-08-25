@@ -50,6 +50,15 @@ matching:
   cross_language_always_grey: true
   blocking_strategy: embedding
   respect_declared_haskey: true
+  # Multilingual by requirement: a monolingual encoder would push every es/en pair into the
+  # grey zone on language alone.
+  bi_encoder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+  cross_encoder: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+  use_cross_encoder: false         # OFF until the cross-encoder is tuned (spec 6.3). Measured
+                                   # on this seed, the generic IR re-ranker ranked correctly but
+                                   # squashed every score to ~0.01, turning a 0.73 match into a
+                                   # false orphan — the failure R1 names.
+  device: null                     # null lets torch choose; "cuda" or "cpu" to force
 
 # ─── Iteration ───────────────────────────────────────────
 iteration:

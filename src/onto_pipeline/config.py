@@ -61,6 +61,10 @@ class Matching(BaseModel):
     cross_language_always_grey: bool = True
     blocking_strategy: str = "embedding"
     respect_declared_haskey: bool = True
+    bi_encoder: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    cross_encoder: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    use_cross_encoder: bool = False
+    device: str | None = None
 
 
 class Iteration(BaseModel):

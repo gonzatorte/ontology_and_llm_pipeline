@@ -20,6 +20,9 @@ dev = [
 reasoning = [
     "jpype1>=1.7.1",
 ]
+matching = [
+    "sentence-transformers>=6.0.1",
+]
 
 [project.scripts]
 onto-pipeline = "onto_pipeline.cli:app"
