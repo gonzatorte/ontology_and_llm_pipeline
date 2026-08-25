@@ -7,11 +7,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 import typer
-from rdflib import Graph
 from rich.console import Console
 from rich.table import Table
 
-from . import cq
+from . import cq, versioning
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
@@ -28,6 +27,8 @@ LimitOption = typer.Option(None, "--limit", "-n", help="First N documents only."
 DocumentOption = typer.Option(None, "--document", "-d", help="Specific PDFs.")
 DocIdOption = typer.Option(None, "--doc-id", help="One document; default all.")
 PageOption = typer.Option(None, "--page", "-p")
+IterationOption = typer.Option(0, "--iteration", "-i")
+VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
 
 
 @app.command("ingest")
@@ -102,6 +103,14 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
     ontology_dir.mkdir(parents=True, exist_ok=True)
     target = ontology_dir / "seed_normalized.ttl"
     seed.graph.serialize(target, format="turtle")
+
+    conn = connect(config.paths.work_dir)
+    existing = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
+    if existing is None:
+        version = versioning.commit(conn, seed.graph, version_id="v0", note="normalized seed")
+        console.print(f"[green]committed[/] version {version.id} {version.state_hash[:19]}")
+    else:
+        console.print(f"[yellow]same state[/] as version {existing.id}; nothing committed")
 
     contexts = gloss_contexts(seed)
 
@@ -184,6 +193,21 @@ def status(config_path: Path = ConfigOption) -> None:
 
 
 @app.command()
+def versions(config_path: Path = ConfigOption) -> None:
+    """The version DAG. Branches that were not chosen are kept and stay reachable."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    versioning.install(conn)
+    table = Table("version", "parent", "iteration", "branch", "state", "note")
+    for row in conn.execute("SELECT * FROM versions ORDER BY created_at"):
+        table.add_row(
+            row["id"], row["parent_id"] or "-", str(row["iteration"]),
+            row["branch_id"] or "-", row["state_hash"][7:19], row["note"] or "",
+        )
+    console.print(table)
+
+
+@app.command()
 def chunks(
     doc_id: str,
     config_path: Path = ConfigOption,
@@ -229,20 +253,27 @@ def cq_import(
 @cq_app.command("eval")
 def cq_eval(
     config_path: Path = ConfigOption,
-    iteration: int = typer.Option(0, "--iteration", "-i"),
+    iteration: int = IterationOption,
+    version: str | None = VersionOption,
 ) -> None:
-    """Run every accepted CQ against the current ontology and record the pass rate."""
+    """Run every accepted CQ against an ontology version and record the pass rate."""
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     questions = cq.load(conn)
     if not questions:
         raise typer.BadParameter("no accepted competency questions")
 
-    ontology = config.paths.work_dir / "ontology" / "seed_normalized.ttl"
-    if not ontology.exists():
-        raise typer.BadParameter(f"{ontology} not found; run normalize-seed first")
+    versioning.install(conn)
+    row = conn.execute(
+        "SELECT id FROM versions WHERE id = COALESCE(?, id) ORDER BY created_at DESC LIMIT 1",
+        (version,),
+    ).fetchone()
+    if row is None:
+        raise typer.BadParameter("no ontology version; run normalize-seed first")
+    _, graph = versioning.load(conn, row["id"])
+    console.print(f"evaluating against version [bold]{row['id']}[/]")
 
-    evaluation = cq.evaluate(Graph().parse(ontology), questions, iteration=iteration)
+    evaluation = cq.evaluate(graph, questions, iteration=iteration)
     cq.record(conn, evaluation)
 
     table = Table("cq", "type", "answered", "rows")
