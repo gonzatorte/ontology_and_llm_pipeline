@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import annotation, cq, versioning
+from . import annotation, cq, structural, versioning
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
@@ -289,7 +289,17 @@ def validate(
         "consistent" if hermit.consistent else REJECTED,
         f"{len(hermit.unsatisfiable)} unsatisfiable class(es)",
     )
+
+    metrics = structural.check(graph)
+    table.add_row(
+        "structural",
+        REJECTED if metrics.rejected else "clean",
+        f"depth {metrics.depth} · max branching {metrics.max_branching} · "
+        f"{metrics.n_classes} classes · {len(metrics.findings)} finding(s)",
+    )
     console.print(table)
+    for finding in metrics.findings:
+        console.print(f"[yellow]{finding.check}[/] {finding.subject} — {finding.detail}")
     for iri, justifications in hermit.justifications.items():
         console.print(f"[red]unsatisfiable[/] {iri}")
         for index, axioms in enumerate(justifications, start=1):
