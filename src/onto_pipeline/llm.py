@@ -31,10 +31,17 @@ class Completion:
     text: str
     in_tokens: int | None = None
     out_tokens: int | None = None
+    # Reported by the gateway. Reasoning is billed as output, so it is the cost driver and
+    # has to be visible; cached input is the saving and has to be visible for the same reason.
+    cached_tokens: int | None = None
+    reasoning_tokens: int | None = None
 
 
 class ChatModel(Protocol):
-    def complete(self, prompt: str, *, temperature: float, tier: str) -> Completion: ...
+    def complete(
+        self, prompt: str, *, temperature: float, tier: str,
+        reasoning_effort: str | None = None, max_tokens: int | None = None,
+    ) -> Completion: ...
 
 
 @dataclass
@@ -51,7 +58,7 @@ class Prompt:
 
 
 class NoProvider:
-    def complete(self, prompt: str, *, temperature: float, tier: str) -> Completion:
+    def complete(self, prompt: str, *, temperature: float, tier: str, **_) -> Completion:
         raise ProviderNotConfigured(
             "llm.provider is 'none'; set it in the config to run generation stages"
         )
@@ -64,7 +71,7 @@ class ScriptedModel:
         self.responses = list(responses)
         self.prompts: list[str] = []
 
-    def complete(self, prompt: str, *, temperature: float, tier: str) -> Completion:
+    def complete(self, prompt: str, *, temperature: float, tier: str, **_) -> Completion:
         self.prompts.append(prompt)
         if not self.responses:
             raise AssertionError("ScriptedModel ran out of responses")
@@ -103,6 +110,8 @@ def run(
             prompt.render(**payload),
             temperature=stage_model.temperature,
             tier=stage_model.tier,
+            reasoning_effort=stage_model.reasoning_effort,
+            max_tokens=stage_model.max_tokens,
         )
         return UnitResult(
             output=parse(completion.text, payload),
@@ -116,5 +125,7 @@ def run(
         worker,
         iteration=iteration,
         prompt_version=prompt.version,
-        temperature=stage_model.temperature,
+        # The whole stage configuration, not only the temperature: a different tier or a
+        # different reasoning effort is a different answer.
+        settings=stage_model.model_dump(),
     )

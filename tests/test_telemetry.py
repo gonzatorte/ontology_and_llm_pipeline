@@ -111,3 +111,29 @@ def test_token_counts_are_recorded_per_stage(ledger):
     result = ledger.run("B4", payloads(3), worker)
     assert (result.in_tokens, result.out_tokens) == (300, 75)
     assert ledger.stage_report("B4")["in_tokens"] == 300
+
+
+def test_switching_model_invalidates_the_cache(ledger):
+    """Silently serving results from a model the configuration no longer names is worse than
+    paying to recompute — and the tier is exactly the setting that is easy to forget."""
+    medium = {"tier": "medium", "temperature": 0.0, "reasoning_effort": None}
+    small = {"tier": "small", "temperature": 0.0, "reasoning_effort": None}
+
+    calls = []
+
+    def worker(payload):
+        calls.append(payload["i"])
+        return UnitResult(output="x")
+
+    ledger.run("B1", payloads(2), worker, settings=medium)
+    ledger.run("B1", payloads(2), worker, settings=medium)
+    assert len(calls) == 2, "same settings, cache hit"
+
+    ledger.run("B1", payloads(2), worker, settings=small)
+    assert len(calls) == 4, "different model, recomputed"
+
+
+def test_reasoning_effort_is_part_of_the_key(ledger):
+    base = {"tier": "small", "temperature": 0.0, "reasoning_effort": None}
+    low = {"tier": "small", "temperature": 0.0, "reasoning_effort": "low"}
+    assert unit_key("B1", "v1", base, {"c": 1}) != unit_key("B1", "v1", low, {"c": 1})

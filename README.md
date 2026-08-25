@@ -269,9 +269,21 @@ uv run onto-pipeline report                 # T1: HTML por documento
 uv run onto-pipeline chunks <doc_id>        # unidades de extracción de B1
 uv run onto-pipeline blocks <doc_id> -p 3   # bloques con procedencia, JSON
 uv run onto-pipeline versions               # el DAG
+uv run onto-pipeline diff                   # qué cambió la última versión
+uv run onto-pipeline diff --version v3 --against v1
 uv run onto-pipeline status                 # telemetría: llamadas y tokens por etapa
 uv run onto-pipeline hold-out --help        # qué documentos están retenidos
 ```
+
+**El diff es semántico, no textual** (§6.8): compara conjuntos canónicos de axiomas lógicos con
+los blank nodes canonicalizados, así que reordenar la serialización no es un cambio y un
+renombre aparece como cambio de anotación, no como axiomas que van y vienen. En pantalla se lee
+por etiquetas —con IRIs opacos, un diff de IRIs crudos no es revisable— y el JSON que queda en
+`data/ontology/<origen>-to-<destino>.diff.json` conserva los IRIs completos.
+
+Cada comando que commitea una versión lo emite solo: además de la ontología entera, deja el
+diff contra la versión inmediatamente anterior del DAG. Una versión raíz lo dice y no genera
+archivo.
 
 El **reporte T1** es el criterio de avance del paso 1: un HTML autocontenido por documento con
 el render de cada página al lado de lo que el parser entendió, mostrando clase de página con
@@ -350,7 +362,7 @@ data/                 gitignoreado; todo es derivado y regenerable
   markdown/           un .md por documento; los spans de los bloques indexan esto
   assets/             recortes de figuras
   reports/            HTML de evaluación del parser (T1)
-  ontology/           la semilla normalizada
+  ontology/           la semilla normalizada y el diff de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
 lib/                  jars del razonador (gitignoreado)

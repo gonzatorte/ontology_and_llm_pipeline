@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 
 from rdflib import Graph
 from rdflib.compare import to_canonical_graph
-from rdflib.namespace import DC, DCTERMS, OWL, RDFS, SKOS
+from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS, SKOS, XSD
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS versions (
@@ -115,6 +115,62 @@ def _labels(graph: Graph) -> set[str]:
         for subject, predicate, obj in graph
         if predicate in ANNOTATION_PREDICATES
     }
+
+
+# Vocabulary IRIs have no label in the ontology and never will; a prefix reads better than a
+# truncation for them.
+WELL_KNOWN_PREFIXES = {
+    str(OWL): "owl", str(RDF): "rdf", str(RDFS): "rdfs", str(SKOS): "skos",
+    str(DC): "dc", str(DCTERMS): "dcterms", str(XSD): "xsd",
+}
+
+
+def short_name(iri: str, labels: dict[str, str]) -> str:
+    """How an IRI is written when a diff is read by a person: its label if the ontology gives
+    one, a prefixed name for standard vocabulary, and a truncation as the last resort."""
+    label = labels.get(iri)
+    if label is not None:
+        return label
+    for namespace, prefix in WELL_KNOWN_PREFIXES.items():
+        if iri.startswith(namespace):
+            return f"{prefix}:{iri[len(namespace):]}"
+    tail = iri.rstrip("/#").rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+    return f"…{tail}"
+
+
+def label_index(*graphs: Graph) -> dict[str, str]:
+    """IRI to preferred label, across every graph given.
+
+    A0.1 mints opaque IRIs, so a diff printed as raw IRIs is unreadable by construction. The
+    labels come from both sides of the comparison: a class removed in the newer version still
+    has to be nameable, and its label only exists in the older one.
+    """
+    index: dict[str, str] = {}
+    for graph in graphs:
+        for predicate in (SKOS.prefLabel, RDFS.label):
+            for subject, _, obj in graph.triples((None, predicate, None)):
+                key = str(subject)
+                if key not in index or predicate == SKOS.prefLabel:
+                    index[key] = str(obj)
+    return index
+
+
+def diff_with_parent(
+    conn: sqlite3.Connection, version_id: str
+) -> tuple[Version, Diff] | None:
+    """What a version changed against the state it came from.
+
+    A new ontology is published whole, not as a delta — every version stores its full Turtle.
+    This is the reading aid: the whole artifact answers "what is the ontology now", the diff
+    answers "what did this iteration do", and only the second one is reviewable. Returns None
+    for a root version, which has nothing to be compared against.
+    """
+    install(conn)
+    version, graph = load(conn, version_id)
+    if version.parent_id is None:
+        return None
+    parent, parent_graph = load(conn, version.parent_id)
+    return parent, diff(parent_graph, graph)
 
 
 def commit(

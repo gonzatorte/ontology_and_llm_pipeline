@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 
@@ -36,6 +37,7 @@ from .ingest import (
     load_document,
     markdown_path,
     process_documents,
+    select_for_reload,
     set_held_out,
 )
 from .providers import load_env_file
@@ -55,6 +57,8 @@ IterationOption = typer.Option(0, "--iteration", "-i")
 VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
 EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provider credential.")
 ReleaseOption = typer.Option(False, "--release", help="Return the documents to the process.")
+AgainstOption = typer.Option(None, "--against", help="Default: the version's parent.")
+DiffLimitOption = typer.Option(10, "--limit", "-n", help="Axioms shown per lane; 0 for all.")
 IncludeHeldOutOption = typer.Option(
     False, "--include-held-out", help="Also process the retention set. Normally you do not."
 )
@@ -66,6 +70,24 @@ def main(env_file: Path | None = EnvFileOption) -> None:
     if env_file is not None:
         names = load_env_file(env_file)
         console.print(f"[dim]loaded {', '.join(names)} from {env_file}[/]")
+
+
+def _resolve_version(conn, version: str | None) -> str:
+    """The named version, or the newest one. `created_at` has second precision, so two
+    versions committed in the same second tie on it; rowid breaks the tie by insertion order,
+    which is what "newest" means here."""
+    versioning.install(conn)
+    row = conn.execute(
+        "SELECT id FROM versions WHERE id = COALESCE(?, id) "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (version,),
+    ).fetchone()
+    if row is None:
+        raise typer.BadParameter(
+            f"no version {version!r}" if version
+            else "no ontology version; run normalize-seed first"
+        )
+    return row["id"]
 
 
 @app.command("ingest")
@@ -146,6 +168,7 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
     if existing is None:
         version = versioning.commit(conn, seed.graph, version_id="v0", note="normalized seed")
         console.print(f"[green]committed[/] version {version.id} {version.state_hash[:19]}")
+        _publish_diff(config, conn, version.id)
     else:
         console.print(f"[yellow]same state[/] as version {existing.id}; nothing committed")
 
@@ -240,6 +263,7 @@ def _generate_glosses(config, conn, seed, contexts, target) -> None:
         note="glosses (annotation-only; same logical state)",
     )
     console.print(f"[green]committed[/] {version.id} (parent {parent.id if parent else '-'})")
+    _publish_diff(config, conn, version.id)
 
 
 @app.command()
@@ -292,13 +316,28 @@ def extract_cmd(
     ledger = Ledger(conn, config.execution)
 
     if doc_id:
-        ids = [doc_id]
+        ids, skipped = [doc_id], []
     else:
-        ids = process_documents(conn)
+        candidates = process_documents(conn)
         if include_held_out:
-            ids += held_out_documents(conn)
+            candidates += held_out_documents(conn)
+        ids, skipped = select_for_reload(
+            conn, candidates,
+            strategy=config.iteration.reload,
+            sample=config.iteration.reload_sample,
+            seed=config.iteration.reload_seed,
+        )
     if not ids:
-        raise typer.BadParameter("nothing to extract from; ingest first")
+        raise typer.BadParameter(
+            "nothing to extract from"
+            + (f"; {len(skipped)} already processed and reload is "
+               f"'{config.iteration.reload}'" if skipped else "; ingest first")
+        )
+    if skipped:
+        console.print(
+            f"[dim]reload '{config.iteration.reload}': re-processing {len(ids)}, "
+            f"leaving {len(skipped)} as they are[/]"
+        )
 
     table = Table(
         "document", "chunks", "mentions", "rejected", "unlocatable", "in tok", "out tok"
@@ -418,13 +457,8 @@ def match_cmd(
     conn = connect(config.paths.work_dir)
     versioning.install(conn)
 
-    row = conn.execute(
-        "SELECT id FROM versions WHERE id = COALESCE(?, id) ORDER BY created_at DESC LIMIT 1",
-        (version,),
-    ).fetchone()
-    if row is None:
-        raise typer.BadParameter("no ontology version; run normalize-seed first")
-    _, graph = versioning.load(conn, row["id"])
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
 
     targets = typing_store.targets_from(graph, config.matching.match_against)
     if not targets:
@@ -458,7 +492,7 @@ def match_cmd(
 
     with console.status(f"B2 · {len(mentions)} mentions against {len(targets)} classes"):
         typings = matcher.type_mentions(mentions, targets)
-        split = typing_store.persist_typings(conn, row["id"], typings)
+        split = typing_store.persist_typings(conn, version_id, typings)
         decisions = matcher.resolve(mentions)
 
     entities = typing_store.entities_from(decisions)
@@ -470,7 +504,7 @@ def match_cmd(
     typing_store.persist_entities(conn, entities, unresolved)
 
     table = Table("what", "count", "note")
-    table.add_row("mentions", str(split.total), f"against version {row['id']}")
+    table.add_row("mentions", str(split.total), f"against version {version_id}")
     table.add_row("typed automatically", str(split.typed), "")
     table.add_row("grey zone", str(split.grey), "needs a decision from you")
     table.add_row(
@@ -607,13 +641,8 @@ def validate(
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     versioning.install(conn)
-    row = conn.execute(
-        "SELECT id FROM versions WHERE id = COALESCE(?, id) ORDER BY created_at DESC LIMIT 1",
-        (version,),
-    ).fetchone()
-    if row is None:
-        raise typer.BadParameter("no ontology version; run normalize-seed first")
-    _, graph = versioning.load(conn, row["id"])
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
 
     try:
         reasoners = Reasoners(
@@ -665,6 +694,111 @@ def validate(
             console.print(f"  justification {index}:")
             for axiom in axioms:
                 console.print(f"    {axiom}")
+
+
+_IRI_TOKEN = re.compile(r"<([^>]+)>|(?<![\S])(https?://\S+)")
+
+
+def _readable(line: str, labels: dict[str, str]) -> str:
+    """The stored diff keeps full IRIs; the terminal shows labels. With opaque IRIs the raw
+    N-Triples are not reviewable, and reviewability is the whole point of showing a diff."""
+    def name(match: re.Match) -> str:
+        iri = match.group(1) or match.group(2)
+        trailing = ""
+        if match.group(2) and iri.endswith("."):        # the N-Triples terminator
+            iri, trailing = iri[:-1], "."
+        return versioning.short_name(iri, labels) + trailing
+
+    return _IRI_TOKEN.sub(name, line)
+
+
+def _show_diff(
+    baseline: str,
+    target: str,
+    result: versioning.Diff,
+    limit: int,
+    labels: dict[str, str] | None = None,
+) -> None:
+    table = Table("change", "count", title=f"{baseline} → {target}")
+    table.add_row("axioms added", str(len(result.added)))
+    table.add_row("axioms removed", str(len(result.removed)))
+    table.add_row("annotations changed", str(len(result.labels_changed)))
+    console.print(table)
+    if result.empty:
+        console.print("[yellow]no logical or annotation change[/]")
+        return
+    for label, lines, colour in (
+        ("+", result.added, "green"), ("-", result.removed, "red"),
+        ("~", result.labels_changed, "yellow"),
+    ):
+        shown = lines if limit == 0 else lines[:limit]
+        for line in shown:
+            console.print(f"[{colour}]{label}[/] {_readable(line, labels or {})}")
+        if len(lines) > len(shown):
+            console.print(f"[dim]  … {len(lines) - len(shown)} more[/]")
+
+
+def _write_diff(config, baseline: str, target: str, result: versioning.Diff) -> Path:
+    """Next to the whole ontology, because the two are read together: the artifact says what
+    the ontology is, the diff says what this iteration did to it."""
+    ontology_dir = config.paths.work_dir / "ontology"
+    ontology_dir.mkdir(parents=True, exist_ok=True)
+    path = ontology_dir / f"{baseline}-to-{target}.diff.json"
+    payload = {"from": baseline, "to": target, **asdict(result)}
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def _publish_diff(config, conn, version_id: str, *, limit: int = 10) -> None:
+    """Every command that commits a version reports the diff against the one before it."""
+    pair = versioning.diff_with_parent(conn, version_id)
+    if pair is None:
+        console.print(f"[dim]{version_id} is a root version: nothing to diff against[/]")
+        return
+    parent, result = pair
+    _, before = versioning.load(conn, parent.id)
+    _, after = versioning.load(conn, version_id)
+    _show_diff(parent.id, version_id, result, limit, versioning.label_index(before, after))
+    console.print(f"[green]wrote[/] {_write_diff(config, parent.id, version_id, result)}")
+
+
+@app.command("diff")
+def diff_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    against: str | None = AgainstOption,
+    limit: int = DiffLimitOption,
+) -> None:
+    """Semantic diff between two ontology versions (spec 6.8).
+
+    Canonical logical axioms with canonicalized blank nodes, annotations in a lane of their
+    own: a reordered serialization is not a change, and a rename is a label change rather
+    than axiom churn.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    versioning.install(conn)
+    target = _resolve_version(conn, version)
+
+    if against is None:
+        pair = versioning.diff_with_parent(conn, target)
+        if pair is None:
+            console.print(
+                f"[yellow]{target} is a root version[/]: no parent to diff against. "
+                "Pass --against to compare it with any other version."
+            )
+            return
+        baseline = pair[0].id
+        result = pair[1]
+    else:
+        baseline = _resolve_version(conn, against)
+    _, before = versioning.load(conn, baseline)
+    _, after = versioning.load(conn, target)
+    if against is not None:
+        result = versioning.diff(before, after)
+
+    _show_diff(baseline, target, result, limit, versioning.label_index(before, after))
+    console.print(f"[green]wrote[/] {_write_diff(config, baseline, target, result)}")
 
 
 @app.command()
@@ -739,14 +873,9 @@ def cq_eval(
         raise typer.BadParameter("no accepted competency questions")
 
     versioning.install(conn)
-    row = conn.execute(
-        "SELECT id FROM versions WHERE id = COALESCE(?, id) ORDER BY created_at DESC LIMIT 1",
-        (version,),
-    ).fetchone()
-    if row is None:
-        raise typer.BadParameter("no ontology version; run normalize-seed first")
-    _, graph = versioning.load(conn, row["id"])
-    console.print(f"evaluating against version [bold]{row['id']}[/]")
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+    console.print(f"evaluating against version [bold]{version_id}[/]")
 
     evaluation = cq.evaluate(graph, questions, iteration=iteration)
     cq.record(conn, evaluation)

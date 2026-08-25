@@ -78,6 +78,12 @@ class Iteration(BaseModel):
     trigger: str = "manual"
     batch_size: int = 5
     max_iterations: int = 20
+    # What to do with documents already processed, when something invalidated their cache —
+    # a prompt version, a threshold, a chunking change. A document never processed is always
+    # processed; this governs re-processing only.
+    reload: str = "all"                      # all | none | sample
+    reload_sample: float = 0.2
+    reload_seed: int = 0
 
 
 class CompetencyQuestions(BaseModel):
@@ -96,6 +102,12 @@ class Branching(BaseModel):
 class StageModel(BaseModel):
     tier: str
     temperature: float
+    # Every model on the configured gateway reasons, and the reasoning is billed as output.
+    # Measured: 148 reasoning tokens of 168 for a trivial extraction, dropping to 2 of 22 at
+    # "low". Extraction and classification do not need a chain of thought; axiomatization and
+    # branching do.
+    reasoning_effort: str | None = None      # None | low | medium | high
+    max_tokens: int | None = None
 
 
 class Llm(BaseModel):

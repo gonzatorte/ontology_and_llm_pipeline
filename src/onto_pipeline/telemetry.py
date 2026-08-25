@@ -56,13 +56,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def unit_key(stage: str, prompt_version: str, temperature: float, payload: Any) -> str:
-    """Cache key. Includes prompt_version and temperature so editing a prompt invalidates."""
+def unit_key(stage: str, prompt_version: str, settings: Any, payload: Any) -> str:
+    """Cache key.
+
+    `settings` is everything about *how* the unit was produced that changes its output: the
+    prompt version, the temperature, and — the part that is easy to forget — the model and its
+    reasoning effort. Leaving the model out means switching tiers silently serves results from
+    a model the configuration no longer names, which is worse than paying to recompute.
+    """
     material = json.dumps(
         {
             "stage": stage,
             "prompt_version": prompt_version,
-            "temperature": temperature,
+            "settings": settings,
             "payload": payload,
         },
         sort_keys=True,
@@ -101,10 +107,10 @@ class Ledger:
         *,
         iteration: int | None = None,
         prompt_version: str = "",
-        temperature: float = 0.0,
+        settings: Any = None,
     ) -> StageResult:
         """Run `worker` over (label, payload) pairs. Labels index the returned outputs."""
-        planned = self._plan(stage, iteration, payloads, prompt_version, temperature)
+        planned = self._plan(stage, iteration, payloads, prompt_version, settings)
         result = StageResult(stage=stage)
 
         for label, payload, key in planned:
@@ -126,11 +132,11 @@ class Ledger:
         iteration: int | None,
         payloads: Sequence[tuple[str, Any]],
         prompt_version: str,
-        temperature: float,
+        settings: Any,
     ) -> list[tuple[str, Any, str]]:
         planned = []
         for label, payload in payloads:
-            key = unit_key(stage, prompt_version, temperature, payload)
+            key = unit_key(stage, prompt_version, settings, payload)
             self.conn.execute(
                 "INSERT INTO work_units (key, stage, iteration, status, input_hash, created_at) "
                 "VALUES (?, ?, ?, 'pending', ?, ?) ON CONFLICT(key) DO NOTHING",

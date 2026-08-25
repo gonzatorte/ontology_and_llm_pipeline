@@ -81,6 +81,12 @@ iteration:
   trigger: manual         # manual | per_document | batch_of_n
   batch_size: 5
   max_iterations: 20      # hard stopping criterion
+  # What to do with documents already processed, when a prompt version, threshold or chunking
+  # change invalidated their cache. A document never processed is always processed; this
+  # governs re-processing only, which is where the bill is.
+  reload: all             # all | none | sample
+  reload_sample: 0.2      # fraction of the already-processed ones, when reload: sample
+  reload_seed: 0          # seeded, so two runs of one configuration pick the same documents
 
 # ─── Competency questions ────────────────────────────────
 cq:
@@ -114,12 +120,15 @@ llm:
   # $34 for a pass over 100. An earlier estimate of $0.23 counted input only and was wrong by
   # two orders of magnitude. Extraction is not a reasoning task; the small tier is ~3x cheaper
   # and worth trying for B1 before paying this.
-  A0_2_labels:        {tier: small,  temperature: 0.0}
+  # reasoning_effort: extraction and classification do not need a chain of thought;
+  # axiomatization and branching do. Measured on this gateway, 'low' cut reasoning
+  # tokens from 148 to 2 on a trivial extraction.
+  A0_2_labels:        {tier: small,  temperature: 0.0, reasoning_effort: low}
   A0_4_glosses:       {tier: medium, temperature: 0.3}
   A3_cq_generation:   {tier: large,  temperature: 0.3}
-  B1_extraction:      {tier: medium, temperature: 0.0}
-  B1b_coreference:    {tier: medium, temperature: 0.0}
-  B2_matching:        {tier: small,  temperature: 0.0}
+  B1_extraction:      {tier: small,  temperature: 0.0, reasoning_effort: low}
+  B1b_coreference:    {tier: medium, temperature: 0.0, reasoning_effort: low}
+  B2_matching:        {tier: small,  temperature: 0.0, reasoning_effort: low}
   B2b_bridging:       {tier: large,  temperature: 0.3}
   B3_naming:          {tier: large,  temperature: 0.3}
   B4_axiomatization:  {tier: large,  temperature: 0.7}

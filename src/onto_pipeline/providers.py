@@ -63,7 +63,8 @@ class OpenAICompatibleModel:
             ) from exc
 
     def complete(
-        self, prompt: str, *, temperature: float, tier: str, session: str | None = None
+        self, prompt: str, *, temperature: float, tier: str, session: str | None = None,
+        reasoning_effort: str | None = None, max_tokens: int | None = None,
     ) -> Completion:
         headers = {
             "Content-Type": "application/json",
@@ -86,6 +87,8 @@ class OpenAICompatibleModel:
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": temperature,
                 "stream": False,
+                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
+                **({"max_tokens": max_tokens} if max_tokens else {}),
             },
         )
         if response.status_code >= 400:
@@ -101,6 +104,10 @@ class OpenAICompatibleModel:
             text=payload["choices"][0]["message"]["content"],
             in_tokens=usage.get("prompt_tokens"),
             out_tokens=usage.get("completion_tokens"),
+            cached_tokens=(usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
+            reasoning_tokens=(usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens"
+            ),
         )
 
 

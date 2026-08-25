@@ -100,3 +100,47 @@ def test_a_version_round_trips_and_keeps_its_lineage(conn):
     # v3 is the branch not taken at iteration 1; both stay reachable from v1.
     assert versioning.lineage(conn, "v3") == ["v3", "v1"]
     assert versioning.lineage(conn, "v2") == ["v2", "v1"]
+
+
+def test_diff_with_parent_reports_what_the_iteration_did(conn):
+    versioning.commit(conn, graph(BASE), version_id="v0")
+    versioning.commit(conn, graph(EXTENDED), version_id="v1", parent_id="v0", iteration=1)
+
+    parent, result = versioning.diff_with_parent(conn, "v1")
+
+    assert parent.id == "v0"
+    assert len(result.added) == 2      # :Survey a owl:Class, :Survey rdfs:subClassOf :Technique
+    assert not result.removed
+    assert not result.labels_changed
+
+
+def test_a_root_version_has_nothing_to_diff_against(conn):
+    versioning.commit(conn, graph(BASE), version_id="v0")
+
+    assert versioning.diff_with_parent(conn, "v0") is None
+
+
+def test_a_rename_diffs_as_an_annotation_change_not_axiom_churn(conn):
+    versioning.commit(conn, graph(BASE), version_id="v0")
+    versioning.commit(conn, graph(RENAMED), version_id="v1", parent_id="v0", iteration=1)
+
+    _, result = versioning.diff_with_parent(conn, "v1")
+
+    assert not result.added and not result.removed
+    assert len(result.labels_changed) == 2   # the old label leaves, the new one arrives
+
+
+def test_a_diff_is_read_through_labels_not_opaque_iris():
+    labels = versioning.label_index(graph(BASE), graph(RENAMED))
+    interview = "http://example.org/onto#Interview"
+
+    assert versioning.short_name(interview, labels) in {"Interview", "Entrevista"}
+    assert versioning.short_name("http://www.w3.org/2002/07/owl#Class", labels) == "owl:Class"
+    assert versioning.short_name("http://example.org/onto#Unlabelled", labels) == "…Unlabelled"
+
+
+def test_the_label_index_covers_both_sides_of_the_comparison():
+    """A class the newer version removed is only nameable through the older one."""
+    labels = versioning.label_index(graph(EXTENDED), graph(BASE))
+
+    assert labels["http://example.org/onto#Technique"] == "Technique"

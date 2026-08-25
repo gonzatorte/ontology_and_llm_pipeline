@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import sqlite3
 from pathlib import Path
 
@@ -237,3 +238,46 @@ def held_out_documents(conn: sqlite3.Connection) -> list[str]:
             "SELECT id FROM documents WHERE held_out = 1 ORDER BY id"
         )
     ]
+
+
+RELOAD_ALL = "all"
+RELOAD_NONE = "none"
+RELOAD_SAMPLE = "sample"
+
+
+def select_for_reload(
+    conn: sqlite3.Connection,
+    candidates: list[str],
+    *,
+    strategy: str,
+    sample: float,
+    seed: int,
+    table: str = "mentions",
+) -> tuple[list[str], list[str]]:
+    """Split candidates into (to process, skipped) under the reload policy.
+
+    A document that has never been processed is always processed — the policy governs
+    *re*-processing, which is what costs money after a prompt or threshold change invalidates
+    the cache. Re-running an unchanged document is already free through the work-unit ledger;
+    this only bites when something did change, and then a full corpus pass is a real bill.
+
+    Sampling is seeded so two runs of the same configuration choose the same documents. An
+    unseeded sample would make the corpus a moving target across iterations, and the
+    accumulation curve (spec 10.3) could not be read.
+    """
+    done = {
+        row["document_id"]
+        for row in conn.execute(f"SELECT DISTINCT document_id FROM {table}")  # noqa: S608
+    }
+    fresh = [doc for doc in candidates if doc not in done]
+    already = [doc for doc in candidates if doc in done]
+
+    if strategy == RELOAD_ALL:
+        return fresh + already, []
+    if strategy == RELOAD_NONE:
+        return fresh, already
+    if strategy != RELOAD_SAMPLE:
+        raise ValueError(f"unknown reload strategy {strategy!r}")
+
+    chosen = sorted(random.Random(seed).sample(already, k=round(len(already) * sample)))
+    return fresh + chosen, [doc for doc in already if doc not in set(chosen)]
