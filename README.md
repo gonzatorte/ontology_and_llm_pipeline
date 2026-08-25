@@ -158,6 +158,7 @@ uv run onto-pipeline chunks <doc_id>        # unidades de extracción de B1
 uv run onto-pipeline blocks <doc_id> -p 3   # bloques con procedencia, JSON
 uv run onto-pipeline versions               # el DAG
 uv run onto-pipeline status                 # telemetría: llamadas y tokens por etapa
+uv run onto-pipeline hold-out --help        # qué documentos están retenidos
 ```
 
 El **reporte T1** es el criterio de avance del paso 1: un HTML autocontenido por documento con
@@ -167,15 +168,41 @@ boilerplate descartó aparecen atenuados.
 
 ### 6. Conjunto de retención
 
+Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
+la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
+
 ```bash
-uv run onto-pipeline export-annotations examples/retention_set.jsonl
+uv run onto-pipeline ingest -d ruta/al/doc.pdf      # 1. parsear
+uv run onto-pipeline hold-out <doc_id> [<doc_id>…]  # 2. marcar como retenidos
+uv run onto-pipeline annotate                       # 3. generar la herramienta
+uv run onto-pipeline export-annotations doc.jsonl   # 4. validar e ir a BRAT
 ```
 
-JSONL propio, porque lleva un campo que ningún estándar contempla: `in_seed`, que es el que
-separa el **falso huérfano** (la clase existía y el matcher falló — un error) del **huérfano
-genuino** (la semilla no cubre el concepto — funcionamiento normal). Valida los offsets contra
-el `markdown_hash`: si cambió el parser, se niega en vez de desalinear en silencio. Exporta a
-BRAT/INCEpTION.
+Hay que parsearlos aunque no entren al proceso: los offsets de la anotación indexan el
+Markdown que produce A2, así que sin parsear no hay a qué anclarlos. `hold-out` marca la
+diferencia; sin esa marca el conjunto se filtra a B1 y la evaluación mediría el pipeline contra
+su propio insumo. La marca sobrevive a una re-ingesta.
+
+**La herramienta de anotación** (paso 3) es un HTML autocontenido por documento en
+`data/annotate/`. Se abre en el navegador —el corpus no sale de tu máquina— y tiene tres
+acciones: seleccionar texto y elegir una clase de la semilla, escribir una clase que la semilla
+no tiene, o marcar la mención como válida sin clase asignable.
+
+`in_seed` no se pregunta: se deriva de por dónde elegiste la clase. Es la distinción sobre la
+que descansa toda la métrica y es demasiado fácil de errar si es un checkbox.
+
+| Acción en la herramienta | `gold_class` | `in_seed` | Qué significa si el matcher no la tipa |
+|---|---|---|---|
+| Clase de la semilla | el label | `true` | **falso huérfano** — un error del matcher |
+| Clase nueva | lo que escribas | `false` | **huérfano genuino** — alimenta B3 |
+| Sin clase asignable | `null` | `false` | no cuenta: no es falla del matcher |
+
+Va guardando en `localStorage` del navegador; exportá antes de cerrar. El JSONL exportado
+valida los offsets contra el `markdown_hash`: si cambió el parser, se niega en vez de
+desalinear en silencio.
+
+El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
+BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
 ## Dónde queda todo
 
@@ -204,7 +231,7 @@ la tasa supere `execution.stage_failure_rate_abort`.
 ## Desarrollo
 
 ```bash
-uv run pytest -q                                       # 118 tests
+uv run pytest -q                                       # 126 tests
 uv run --extra reasoning --extra matching pytest -q    # incluye razonador y encoders
 uv run ruff check .
 ```

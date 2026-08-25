@@ -114,7 +114,7 @@ def _persist(conn: sqlite3.Connection, parsed: ParsedDocument) -> None:
         "ON CONFLICT(id) DO UPDATE SET path = excluded.path, "
         "content_hash = excluded.content_hash, n_pages = excluded.n_pages, "
         "parser_used = excluded.parser_used, parser_version = excluded.parser_version, "
-        "markdown_hash = excluded.markdown_hash",
+        "markdown_hash = excluded.markdown_hash",   # held_out se preserva a propósito
         (
             parsed.document_id,
             str(parsed.path),
@@ -200,5 +200,35 @@ def load_block_objects(conn: sqlite3.Connection, doc_id: str) -> list[Block]:
         )
         for row in conn.execute(
             "SELECT * FROM blocks WHERE document_id = ? ORDER BY page, ordinal", (doc_id,)
+        )
+    ]
+
+
+def set_held_out(conn: sqlite3.Connection, doc_ids: list[str], held_out: bool = True) -> int:
+    """Mark documents as the retention set (spec 10.1)."""
+    cursor = conn.executemany(
+        "UPDATE documents SET held_out = ? WHERE id = ?",
+        [(int(held_out), doc_id) for doc_id in doc_ids],
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+def process_documents(conn: sqlite3.Connection) -> list[str]:
+    """The documents the process may consume. Held-out ones are parsed but never fed to it:
+    evaluating the pipeline against documents it learned from measures nothing."""
+    return [
+        row["id"]
+        for row in conn.execute(
+            "SELECT id FROM documents WHERE held_out = 0 ORDER BY id"
+        )
+    ]
+
+
+def held_out_documents(conn: sqlite3.Connection) -> list[str]:
+    return [
+        row["id"]
+        for row in conn.execute(
+            "SELECT id FROM documents WHERE held_out = 1 ORDER BY id"
         )
     ]

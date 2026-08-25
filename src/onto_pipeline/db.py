@@ -29,7 +29,11 @@ CREATE TABLE IF NOT EXISTS documents (
   id            TEXT PRIMARY KEY,
   path          TEXT, content_hash TEXT,
   n_pages       INTEGER, parser_used TEXT, parser_version TEXT,
-  markdown_hash TEXT
+  markdown_hash TEXT,
+  -- Retention set (spec 10.1): parsed, because the annotation offsets index the Markdown A2
+  -- produces, but never fed to the process. Without this flag the held-out documents leak
+  -- into B1 and the evaluation measures the pipeline against its own training material.
+  held_out      INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS page_classification (

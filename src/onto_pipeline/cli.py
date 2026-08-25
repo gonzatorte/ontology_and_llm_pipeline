@@ -7,20 +7,25 @@ from dataclasses import asdict
 from pathlib import Path
 
 import typer
+from rdflib import Graph
 from rich.console import Console
 from rich.table import Table
 
-from . import annotation, cq, glosses, llm, structural, versioning
+from . import annotate, annotation, cq, glosses, llm, structural, versioning
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
 from .ingest import (
     STAGE,
     discover,
+    held_out_documents,
     ingest,
     load_block_objects,
+    load_blocks,
     load_document,
     markdown_path,
+    process_documents,
+    set_held_out,
 )
 from .providers import load_env_file
 from .report import build_report
@@ -38,6 +43,7 @@ PageOption = typer.Option(None, "--page", "-p")
 IterationOption = typer.Option(0, "--iteration", "-i")
 VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
 EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provider credential.")
+ReleaseOption = typer.Option(False, "--release", help="Return the documents to the process.")
 
 
 @app.callback()
@@ -252,6 +258,78 @@ def status(config_path: Path = ConfigOption) -> None:
     ).fetchall()
     for row in failures:
         console.print(f"[red]{row['key'][:12]}[/]: {row['error']}")
+
+
+@app.command("annotate")
+def annotate_cmd(
+    config_path: Path = ConfigOption,
+    doc_id: str | None = DocIdOption,
+) -> None:
+    """Build the annotation tool for the held-out documents (spec 10.1).
+
+    Offsets index the parser's Markdown, so the tool embeds it verbatim; the corpus never
+    leaves the machine.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+
+    ids = [doc_id] if doc_id else held_out_documents(conn)
+    if not ids:
+        raise typer.BadParameter(
+            "no held-out documents. Mark them first: onto-pipeline hold-out <doc_id> ..."
+        )
+
+    ontology = config.paths.work_dir / "ontology" / "seed_normalized.ttl"
+    if not ontology.exists():
+        raise typer.BadParameter(f"{ontology} not found; run normalize-seed first")
+    classes = annotate.seed_classes(Graph().parse(ontology))
+    glossed = sum(1 for item in classes if item.gloss)
+
+    for identifier in ids:
+        document = load_document(conn, identifier)
+        if document is None:
+            console.print(f"[red]{identifier}[/]: not ingested")
+            continue
+        target = annotate.build(
+            doc_id=identifier,
+            markdown=markdown_path(config, identifier).read_text(encoding="utf-8"),
+            markdown_hash=document["markdown_hash"],
+            classes=classes,
+            pages=annotate.page_index(load_blocks(conn, identifier)),
+            target=config.paths.work_dir / "annotate" / f"{identifier}.html",
+        )
+        console.print(f"[green]wrote[/] {target}")
+
+    console.print(
+        f"{len(classes)} seed classes offered ({glossed} with a gloss). "
+        "Open the file in a browser, annotate, export the JSONL, then: "
+        "onto-pipeline export-annotations <archivo.jsonl>"
+    )
+
+
+@app.command("hold-out")
+def hold_out(
+    doc_id: list[str],
+    config_path: Path = ConfigOption,
+    release: bool = ReleaseOption,
+) -> None:
+    """Mark documents as the retention set: parsed, but never fed to the process (spec 10.1).
+
+    They have to be parsed — the annotation offsets index the Markdown A2 produces — but they
+    must not reach B1, or the evaluation measures the pipeline against its own input.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    changed = set_held_out(conn, list(doc_id), held_out=not release)
+    if changed != len(doc_id):
+        console.print("[yellow]some ids did not match an ingested document[/]")
+
+    table = Table("document", "role")
+    for identifier in process_documents(conn):
+        table.add_row(identifier[:52], "process")
+    for identifier in held_out_documents(conn):
+        table.add_row(identifier[:52], "[bold]retention set[/]")
+    console.print(table)
 
 
 @app.command("export-annotations")

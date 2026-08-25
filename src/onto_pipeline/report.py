@@ -79,6 +79,7 @@ def build_report(config: Config, conn: sqlite3.Connection, doc_id: str, dpi: int
             _page_section(
                 pdf[number - 1], number, page_classes.get(number),
                 by_page.get(number, []), markdown, dpi, number in gaps,
+                config.paths.work_dir,
             )
             for number in sorted(page_classes)
         ]
@@ -146,11 +147,14 @@ def _header(document: dict, blocks: list[dict], markdown: str, gaps: set[int]) -
 
 def _page_section(
     page: pymupdf.Page, number: int, page_class: dict | None, blocks: list[dict],
-    markdown: str, dpi: int, table_gap: bool,
+    markdown: str, dpi: int, table_gap: bool, work_dir: Path,
 ) -> str:
     render = page.get_pixmap(dpi=dpi).tobytes("png")
     encoded = base64.b64encode(render).decode("ascii")
-    rendered_blocks = "".join(_block_html(block) for block in blocks) or "<p><em>no blocks</em></p>"
+    rendered_blocks = (
+        "".join(_block_html(block, work_dir) for block in blocks)
+        or "<p><em>no blocks</em></p>"
+    )
     slice_ = _markdown_slice(markdown, blocks)
     gap = "<div class='warn'>table caption, no extracted table</div>" if table_gap else ""
     return (
@@ -186,7 +190,7 @@ def _format(value) -> str:
     return str(value)
 
 
-def _block_html(block: dict) -> str:
+def _block_html(block: dict, work_dir: Path) -> str:
     kind = block["block_type"]
     classes = f"block {kind}" + (" boilerplate" if block["is_boilerplate"] else "")
     span = (
@@ -200,14 +204,14 @@ def _block_html(block: dict) -> str:
     )
     return (
         f"<div class='{classes}'><span class='tag'>{html.escape(tag)}</span>"
-        f"<div class='body'>{_body_html(block)}</div></div>"
+        f"<div class='body'>{_body_html(block, work_dir)}</div></div>"
     )
 
 
-def _body_html(block: dict) -> str:
+def _body_html(block: dict, work_dir: Path) -> str:
     kind = block["block_type"]
     if kind == "figure":
-        asset = Path(block["asset_path"]) if block["asset_path"] else None
+        asset = _resolve_asset(block["asset_path"], work_dir)
         if asset and asset.exists():
             encoded = base64.b64encode(asset.read_bytes()).decode("ascii")
             return f"<img alt='figure' src='data:image/png;base64,{encoded}'>"
@@ -219,6 +223,14 @@ def _body_html(block: dict) -> str:
     if kind == "unparsed":
         return f"<strong>{html.escape(block['text'])}</strong>"
     return html.escape(block["text"])
+
+
+def _resolve_asset(asset_path: str | None, work_dir: Path) -> Path | None:
+    """Asset paths are stored relative to the work directory so the Markdown stays portable."""
+    if not asset_path:
+        return None
+    path = Path(asset_path)
+    return path if path.is_absolute() else work_dir / path
 
 
 def _table_html(markdown: str) -> str:
