@@ -26,12 +26,15 @@ def matcher():
     return Matcher(KeywordEncoder(), auto_merge_threshold=0.92, grey_zone_lower=0.70)
 
 
+# Explicitly gloss-matching: these exercise the retrieval path, and the default moved to the
+# label once measurement showed glosses lose with a symmetric encoder.
 TARGETS = [
-    Target(iri="c:Technique", label="Technique",
+    Target(iri="c:Technique", label="Technique", match_against="gloss",
            gloss="A procedure applied within a methodological strategy."),
-    Target(iri="c:Subject", label="Subject",
+    Target(iri="c:Subject", label="Subject", match_against="gloss",
            gloss="A subject studied by a methodological strategy."),
-    Target(iri="c:Policy", label="Policy", gloss="A policy on commercialization."),
+    Target(iri="c:Policy", label="Policy", match_against="gloss",
+           gloss="A policy on commercialization."),
 ]
 
 
@@ -39,8 +42,9 @@ def mention(identifier, text, document="d1", language="en", **kwargs):
     return Mention(id=identifier, text=text, document_id=document, language=language, **kwargs)
 
 
-def test_typing_matches_against_the_gloss_not_the_name(matcher):
-    """A mention whose words appear in the definition and not in the label still types."""
+def test_typing_can_match_against_the_gloss(matcher):
+    """A mention whose words appear in the definition and not in the label still types, which
+    is the case the spec's gloss premise is meant to cover."""
     typing = matcher.type_mentions([mention("m1", "a procedure we applied")], TARGETS)[0]
     assert typing.iri == "c:Technique"
     assert typing.zone == matching.AUTO
@@ -76,7 +80,7 @@ def test_the_cross_encoder_reranks_the_bi_encoders_shortlist(matcher):
     assert reranked.zone == matching.AUTO, "and on the score the zone is read from"
 
 
-def test_a_target_without_a_gloss_falls_back_to_its_label():
+def test_a_target_without_a_gloss_has_only_its_label():
     """Glosses arrive in A0.4 and improve in B4b; until then the label is what there is."""
     target = Target(iri="c:Technique", label="Technique")
     assert target.text == "Technique" and not target.grounded_in_gloss
@@ -199,3 +203,18 @@ def test_an_uncalibrated_reranker_turns_matches_into_false_orphans():
 
     assert bi_only.type_mentions(subject, TARGETS)[0].zone == matching.AUTO
     assert with_reranker.type_mentions(subject, TARGETS)[0].zone == matching.DISCARDED
+
+
+def test_what_a_mention_is_compared_against_is_configurable():
+    """The spec matches against the gloss; measured on the real seed the label wins, so the
+    default moved and the choice became explicit rather than hard-coded."""
+    target = Target(iri="c:T", label="Technique", gloss="A systematic procedure.")
+    assert target.text == "Technique"
+    assert Target(iri="c:T", label="Technique", gloss="A systematic procedure.",
+                  match_against="gloss").text == "A systematic procedure."
+    assert Target(iri="c:T", label="Technique", gloss="A systematic procedure.",
+                  match_against="label_and_gloss").text == "Technique: A systematic procedure."
+
+
+def test_a_target_with_no_gloss_falls_back_to_the_label_whatever_the_setting():
+    assert Target(iri="c:T", label="Technique", match_against="gloss").text == "Technique"

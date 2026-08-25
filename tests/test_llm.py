@@ -70,7 +70,11 @@ def test_editing_the_prompt_invalidates_the_cached_glosses(ledger):
     stage = settings(Llm(), "A0_4_glosses")
     run_stage(ledger, ScriptedModel([_ANSWER]), glosses.PROMPT, stage, payloads, glosses.parse)
 
-    edited = glosses.Prompt(stage=glosses.STAGE, version="v2", template=glosses.PROMPT.template)
+    # A version distinct from the production one, so the test does not break every time the
+    # real prompt is revised.
+    edited = glosses.Prompt(
+        stage=glosses.STAGE, version="edited-for-test", template=glosses.PROMPT.template
+    )
     model = ScriptedModel([_ANSWER])
     again = run_stage(ledger, model, edited, stage, payloads, glosses.parse)
     assert again.executed == 1 and len(model.prompts) == 1

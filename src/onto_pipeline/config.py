@@ -64,6 +64,7 @@ class Matching(BaseModel):
     bi_encoder: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     cross_encoder: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     use_cross_encoder: bool = False
+    match_against: str = "label"   # label | gloss | label_and_gloss
     device: str | None = None
 
 

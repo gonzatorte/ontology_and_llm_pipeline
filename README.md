@@ -240,12 +240,15 @@ Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
 
 ## Limitaciones conocidas
 
-- **El matcher (B2) no está calibrado y no debe confiarse todavía.** Los umbrales 0.92/0.70
-  del spec no son universales: dependen del encoder. Medido sobre la semilla real, un modelo
-  simétrico con glosas convierte matches correctos en huérfanos, y uno asimétrico (e5)
-  comprime todo a 0.80–0.86, donde esos umbrales no separan nada. Calibrar requiere el
-  conjunto de retención anotado (§10.1), y §12.1 marca esto como punto de decisión no-go:
-  si la tasa de falsos huérfanos es alta, hay que arreglar el matcher antes de seguir.
+- **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice §6.2.**
+  Medido sobre 10 pares mención/clase inequívocos: 7/10 recall@1 contra etiquetas, 2/10 contra
+  glosas, con dos generaciones independientes de glosas. Una mención es un sintagma corto y una
+  etiqueta también; una glosa es una oración larga, y un encoder simétrico pierde más por esa
+  diferencia de forma de lo que gana en significado. Configurable con `matching.match_against`;
+  revisar cuando el cross-encoder esté tuneado o haya un modelo asimétrico.
+- **Los umbrales 0.92/0.70 del spec no están calibrados.** No son universales: dependen del
+  encoder. Calibrarlos requiere el conjunto de retención anotado (§10.1), y §12.1 marca esto
+  como punto de decisión no-go.
 - **El cross-encoder viene apagado.** Un reranker genérico de IR ordena bien pero aplasta los
   puntajes, fabricando falsos huérfanos. Recién sirve tuneado con LoRA sobre etiquetas
   acumuladas (§6.3).

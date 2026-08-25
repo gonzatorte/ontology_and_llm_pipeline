@@ -54,6 +54,11 @@ matching:
   # grey zone on language alone.
   bi_encoder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
   cross_encoder: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+  match_against: label             # label | gloss | label_and_gloss. The spec matches against
+                                   # the gloss; measured on this seed, labels score 7/10
+                                   # recall@1 against 2/10 for glosses, over two independently
+                                   # generated gloss sets. Revisit when the cross-encoder is
+                                   # tuned or an asymmetric retrieval model is in place.
   use_cross_encoder: false         # OFF until the cross-encoder is tuned (spec 6.3). Measured
                                    # on this seed, the generic IR re-ranker ranked correctly but
                                    # squashed every score to ~0.01, turning a 0.73 match into a

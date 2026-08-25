@@ -28,8 +28,9 @@ STAGE = "A0_4_glosses"
 
 PROMPT = Prompt(
     stage=STAGE,
-    version="v1",
-    template="""You are defining one concept from an ontology.
+    version="v2",
+    template="""You are writing a dictionary definition of one concept, for a reader who has
+never seen the ontology it comes from.
 
 Concept label: {label}
 Parent concepts: {superclasses}
@@ -38,10 +39,16 @@ Properties it is the domain of: {domain_of}
 Properties it is the range of: {range_of}
 Incompatible with: {disjoint_with}
 
-Write a definition of this concept, grounded in the structure above rather than in the
-wording of the label. State what the concept is and what distinguishes it from its siblings.
-One sentence per language, no more than 40 words each. Do not restate the label as a
-definition of itself.
+The structure above is evidence about what the concept means. Use it to work out the meaning,
+then describe the concept itself. Do NOT describe the ontology.
+
+Hard constraints:
+- Never mention a property or relation name, and never write "relation", "linked via",
+  "the range of", "the domain of", "the target of" or "the source of".
+- Write the words a research paper would actually use for this thing. The definition is what
+  a passage of text gets compared against, so it must read like the domain, not like a schema.
+- Say what it is and what separates it from its sibling concepts.
+- One sentence per language, at most 40 words. Do not restate the label as its own definition.
 
 Answer with JSON only: {{"en": "...", "es": "..."}}""",
 )

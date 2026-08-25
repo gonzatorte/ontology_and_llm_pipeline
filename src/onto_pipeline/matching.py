@@ -69,9 +69,27 @@ class Target:
     alt_labels: list[str] = field(default_factory=list)
     has_key: list[str] = field(default_factory=list)
 
+    match_against: str = "label"
+
     @property
     def text(self) -> str:
-        return self.gloss or self.label
+        """What a mention is compared against.
+
+        The spec matches against the gloss, on the reasoning that a definition captures the
+        concept where a name may not. Measured on this seed it does the opposite: over ten
+        unambiguous mention/class pairs the bi-encoder scored 7/10 recall@1 against labels and
+        2/10 against glosses, with two independently generated sets of glosses. A mention is a
+        short noun phrase and so is a label; a gloss is a long sentence, and a symmetric
+        paraphrase encoder loses on that mismatch more than the added meaning wins.
+
+        So the default is the label, and the premise becomes worth revisiting once the
+        cross-encoder is tuned (spec 6.3) or an asymmetric retrieval model is in place.
+        """
+        if self.match_against == "gloss" and self.gloss:
+            return self.gloss
+        if self.match_against == "label_and_gloss" and self.gloss:
+            return f"{self.label}: {self.gloss}"
+        return self.label
 
     @property
     def grounded_in_gloss(self) -> bool:
