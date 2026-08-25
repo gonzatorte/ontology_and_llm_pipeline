@@ -136,6 +136,11 @@ def _rewrite(graph: Graph, mapping: dict[URIRef, str]) -> Graph:
 
     for original, opaque in mapping.items():
         rewritten.add((URIRef(opaque), SKOS.historyNote, Literal(str(original))))
+
+    # OWL 2 DL requires every annotation property to be declared. Without this the seed
+    # leaves the DL profile, ELK's coverage collapses and it is skipped as a filter (spec 9.2).
+    for annotation in (SKOS.prefLabel, SKOS.altLabel, SKOS.definition, SKOS.historyNote):
+        rewritten.add((annotation, RDF.type, OWL.AnnotationProperty))
     return rewritten
 
 

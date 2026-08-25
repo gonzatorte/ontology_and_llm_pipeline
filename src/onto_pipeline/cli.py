@@ -193,6 +193,71 @@ def status(config_path: Path = ConfigOption) -> None:
 
 
 @app.command()
+def validate(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+) -> None:
+    """B5's reasoner filters over an ontology version, plus A0.0's profile detection.
+
+    ELK never returns an approval: an inconsistency it finds is real, but its silence only
+    means the offending axiom may have been ignored, so the verdict is INCONCLUSIVE.
+    """
+    from .reasoning import REJECTED, Reasoners, ReasonerUnavailable
+
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    versioning.install(conn)
+    row = conn.execute(
+        "SELECT id FROM versions WHERE id = COALESCE(?, id) ORDER BY created_at DESC LIMIT 1",
+        (version,),
+    ).fetchone()
+    if row is None:
+        raise typer.BadParameter("no ontology version; run normalize-seed first")
+    _, graph = versioning.load(conn, row["id"])
+
+    try:
+        reasoners = Reasoners(
+            config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+        )
+    except ReasonerUnavailable as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    ontology = reasoners.load(graph)
+    profile = reasoners.profile(ontology)
+    table = Table("check", "result", "detail")
+    table.add_row(
+        "A0.0 profile",
+        profile.detected,
+        f"target {config.owl_profile.target} · "
+        + ", ".join(f"{name} {count}" for name, count in sorted(profile.violations.items())),
+    )
+
+    elk = reasoners.elk(ontology, coverage_threshold=config.reasoner.elk_coverage_threshold)
+    table.add_row("ELK", elk.verdict, f"EL coverage {elk.coverage:.0%} · {elk.note}")
+
+    if elk.verdict == REJECTED:
+        table.add_row("HermiT", "not run", "ELK already rejected; its finding is real")
+        console.print(table)
+        for iri in elk.unsatisfiable:
+            console.print(f"[red]unsatisfiable[/] {iri}")
+        return
+
+    hermit = reasoners.hermit(ontology)
+    table.add_row(
+        "HermiT",
+        "consistent" if hermit.consistent else REJECTED,
+        f"{len(hermit.unsatisfiable)} unsatisfiable class(es)",
+    )
+    console.print(table)
+    for iri, justifications in hermit.justifications.items():
+        console.print(f"[red]unsatisfiable[/] {iri}")
+        for index, axioms in enumerate(justifications, start=1):
+            console.print(f"  justification {index}:")
+            for axiom in axioms:
+                console.print(f"    {axiom}")
+
+
+@app.command()
 def versions(config_path: Path = ConfigOption) -> None:
     """The version DAG. Branches that were not chosen are kept and stay reachable."""
     config = Config.load(config_path)

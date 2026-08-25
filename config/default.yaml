@@ -4,7 +4,8 @@
 paths:
   corpus_root: ../../Corpus-08052026/General/files
   seed_ontology: ../../qualitative_ontology.rdf
-  work_dir: ../data                # SQLite stores, markdown, crops, reports
+  work_dir: ../data              # SQLite stores, markdown, crops, reports
+  reasoner_lib: ../lib           # OWL API, ELK, HermiT (scripts/fetch-jars.sh)
 
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:

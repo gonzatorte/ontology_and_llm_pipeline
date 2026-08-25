@@ -1,0 +1,27 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>local</groupId><artifactId>onto-pipeline-reasoning</artifactId><version>1</version>
+  <packaging>pom</packaging>
+  <dependencies>
+    <dependency>
+      <groupId>net.sourceforge.owlapi</groupId>
+      <artifactId>owlapi-distribution</artifactId><version>4.5.29</version>
+    </dependency>
+    <dependency>
+      <groupId>net.sourceforge.owlapi</groupId>
+      <artifactId>org.semanticweb.hermit</artifactId><version>1.4.5.456</version>
+    </dependency>
+    <dependency>
+      <groupId>org.semanticweb.elk</groupId>
+      <artifactId>elk-owlapi</artifactId><version>0.4.3</version>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.reload4j</groupId>
+      <artifactId>reload4j</artifactId><version>1.2.25</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId><version>1.7.36</version>
+    </dependency>
+  </dependencies>
+</project>

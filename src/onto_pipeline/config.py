@@ -12,6 +12,7 @@ class Paths(BaseModel):
     corpus_root: Path
     seed_ontology: Path
     work_dir: Path = Path("data")
+    reasoner_lib: Path = Path("lib")
 
 
 class OwlProfile(BaseModel):
@@ -135,4 +136,5 @@ class Config(BaseModel):
         config.paths.corpus_root = (base / config.paths.corpus_root).resolve()
         config.paths.seed_ontology = (base / config.paths.seed_ontology).resolve()
         config.paths.work_dir = (base / config.paths.work_dir).resolve()
+        config.paths.reasoner_lib = (base / config.paths.reasoner_lib).resolve()
         return config
