@@ -10,11 +10,18 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import cq, versioning
+from . import annotation, cq, versioning
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
-from .ingest import STAGE, discover, ingest, load_block_objects
+from .ingest import (
+    STAGE,
+    discover,
+    ingest,
+    load_block_objects,
+    load_document,
+    markdown_path,
+)
 from .report import build_report
 from .seed import gloss_contexts, normalize_seed
 from .telemetry import Ledger
@@ -190,6 +197,40 @@ def status(config_path: Path = ConfigOption) -> None:
     ).fetchall()
     for row in failures:
         console.print(f"[red]{row['key'][:12]}[/]: {row['error']}")
+
+
+@app.command("export-annotations")
+def export_annotations(
+    path: Path,
+    config_path: Path = ConfigOption,
+) -> None:
+    """T3: retention-set JSONL to BRAT/INCEpTION, validated against the Markdown on disk."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    out_dir = config.paths.work_dir / "brat"
+
+    table = Table("document", "mentions", "in seed", "relations", "status")
+    for document in annotation.read_jsonl(path):
+        stored = load_document(conn, document.doc_id)
+        if stored is None:
+            table.add_row(document.doc_id, "", "", "", "[red]not ingested[/]")
+            continue
+        markdown = markdown_path(config, document.doc_id).read_text(encoding="utf-8")
+        try:
+            annotation.validate(document, markdown, stored["markdown_hash"])
+        except annotation.OffsetMismatch as exc:
+            table.add_row(document.doc_id, "", "", "", f"[red]{exc}[/]")
+            continue
+        annotation.export_brat(document, markdown, out_dir)
+        table.add_row(
+            document.doc_id,
+            str(len(document.mentions)),
+            str(sum(1 for mention in document.mentions if mention.in_seed)),
+            str(len(document.relations)),
+            "[green]exported[/]",
+        )
+    console.print(table)
+    console.print(f"output in {out_dir}")
 
 
 @app.command()
