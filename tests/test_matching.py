@@ -230,3 +230,24 @@ def test_the_config_refuses_a_blocking_strategy_that_is_not_built():
     assert Matching().blocking_strategy == "surface_and_keys"
     with pytest.raises(ValidationError, match="not implemented"):
         Matching(blocking_strategy="embedding")
+
+
+def test_declared_synonyms_are_indexed_in_both_directions():
+    targets = [
+        Target(iri="urn:i", label="Interview", alt_labels=["Entrevista", "guided conversation"]),
+    ]
+    index = matching.synonym_index(targets)
+
+    assert "entrevista" in index["interview"]
+    assert "interview" in index["entrevista"]
+    assert "guided conversation" in index["entrevista"]
+
+
+def test_the_synonym_index_does_not_join_two_unrelated_classes():
+    targets = [
+        Target(iri="urn:i", label="Interview", alt_labels=["Entrevista"]),
+        Target(iri="urn:o", label="Observation", alt_labels=["Observación"]),
+    ]
+    index = matching.synonym_index(targets)
+
+    assert "observation" not in index["interview"]

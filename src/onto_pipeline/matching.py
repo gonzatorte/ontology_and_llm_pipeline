@@ -324,6 +324,21 @@ class Matcher:
         return dot(vectors[0], vectors[1])
 
 
+def synonym_index(targets: Sequence[Target]) -> dict[str, set[str]]:
+    """Surface form to the surfaces the ontology declares equivalent to it.
+
+    A class's label and its `skos:altLabel`s name the same concept, so two mentions carrying
+    two of those names are the same entity by assertion, not by similarity — which is why the
+    resolver merges them without consulting a threshold.
+    """
+    index: dict[str, set[str]] = {}
+    for target in targets:
+        group = {_normalized(name) for name in [target.label, *target.alt_labels] if name}
+        for name in group:
+            index.setdefault(name, set()).update(group - {name})
+    return index
+
+
 def unresolved_duplicates(decisions: Sequence[Decision]) -> set[str]:
     """Mentions left in the grey zone. They carry `possible_duplicate_unresolved` in the
     mention layer and are excluded from functional-property support counts (spec 6.8)."""

@@ -20,6 +20,8 @@ from . import (
     extraction,
     glosses,
     llm,
+    matching,
+    review,
     structural,
     typing_store,
     versioning,
@@ -59,6 +61,12 @@ EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provide
 ReleaseOption = typer.Option(False, "--release", help="Return the documents to the process.")
 AgainstOption = typer.Option(None, "--against", help="Default: the version's parent.")
 DiffLimitOption = typer.Option(10, "--limit", "-n", help="Axioms shown per lane; 0 for all.")
+KindOption = typer.Option(None, "--kind", help="divergent_label | pending_semantic_check | typo.")
+StatusOption = typer.Option(
+    "open", "--status", help="open | accepted | rejected | superseded | any."
+)
+JsonOption = typer.Option(False, "--json", help="Machine-readable output.")
+CommentOption = typer.Option("", "--comment", help="Why, in your words.")
 IncludeHeldOutOption = typer.Option(
     False, "--include-held-out", help="Also process the retention set. Normally you do not."
 )
@@ -174,31 +182,12 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
 
     contexts = gloss_contexts(seed)
 
-    def entry(entity) -> dict:
-        return {
-            "iri": entity.iri,
-            "original_iri": entity.original_iri,
-            "reason": entity.divergence_reason,
-            "labels": [
-                {"text": label.text, "language": label.language, "source": label.source}
-                for label in entity.labels
-            ],
-        }
-
-    review = {
-        "divergent_labels": [
-            entry(entity) for entity in seed.entities
-            if entity.divergence_reason == "same_language_mismatch"
-        ],
-        "pending_semantic_check": [
-            entry(entity) for entity in seed.entities
-            if entity.divergence_reason == "cross_language_unverified"
-        ],
-        "typos": [asdict(finding) for finding in seed.typos],
-    }
-    review_path = config.paths.work_dir / "review" / "seed_review.json"
-    review_path.parent.mkdir(parents=True, exist_ok=True)
-    review_path.write_text(json.dumps(review, indent=2, ensure_ascii=False), encoding="utf-8")
+    current = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
+    sync = review.sync(
+        conn, review.findings_from_seed(seed),
+        version_id=current.id if current else "v0",
+        kinds=[review.DIVERGENT_LABEL, review.PENDING_SEMANTIC_CHECK, review.TYPO],
+    )
 
     kinds: dict[str, int] = {}
     for entity in seed.entities:
@@ -206,12 +195,13 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
     summary = Table("what", "count")
     for kind, count in sorted(kinds.items()):
         summary.add_row(kind, str(count))
-    summary.add_row("divergent label pairs", str(len(review["divergent_labels"])))
-    summary.add_row("pending semantic check", str(len(review["pending_semantic_check"])))
-    summary.add_row("typo candidates", str(len(seed.typos)))
     summary.add_row("classes awaiting a gloss", str(len(contexts)))
+    summary.add_row("review: new findings", str(sync.added))
+    summary.add_row("review: already decided or open", str(sync.already_known))
+    summary.add_row("review: superseded", str(sync.superseded))
     console.print(summary)
-    console.print(f"[green]wrote[/] {target}\n[green]wrote[/] {review_path}")
+    console.print(f"[green]wrote[/] {target}")
+    console.print("run [bold]onto-pipeline review list[/] to see what needs a decision")
 
     if config.llm.provider == "none":
         console.print(
@@ -490,10 +480,20 @@ def match_cmd(
     )
     mentions = typing_store.mentions_from(rows)
 
-    with console.status(f"B2 · {len(mentions)} mentions against {len(targets)} classes"):
+    # What the ontology already says about identity, handed to the resolver: declared
+    # synonyms, declared keys, and the class each mention was just typed to. Without the last
+    # two, `respect_declared_haskey` cannot fire at all — a declared key is checked against the
+    # class both mentions were assigned, and there is no class to check against.
+    synonyms = matching.synonym_index(targets)
+    keys = {target.iri: target.has_key for target in targets if target.has_key}
+
+    with console.status(f"{len(mentions)} mentions against {len(targets)} classes"):
         typings = matcher.type_mentions(mentions, targets)
         split = typing_store.persist_typings(conn, version_id, typings)
-        decisions = matcher.resolve(mentions)
+        inferred_class = {item.mention_id: item.iri for item in typings if item.iri}
+        decisions = matcher.resolve(
+            mentions, synonyms=synonyms, keys=keys, inferred_class=inferred_class
+        )
 
     entities = typing_store.entities_from(decisions)
     unresolved = {
@@ -565,6 +565,57 @@ def annotate_cmd(
         "Open the file in a browser, annotate, export the JSONL, then: "
         "onto-pipeline export-annotations <archivo.jsonl>"
     )
+
+
+review_app = typer.Typer(help="Findings from A0 that are waiting for a decision.")
+app.add_typer(review_app, name="review")
+
+
+@review_app.command("list")
+def review_list(
+    config_path: Path = ConfigOption,
+    kind: str | None = KindOption,
+    status: str = StatusOption,
+    as_json: bool = JsonOption,
+) -> None:
+    """What needs a decision. Nothing is applied here; the decision is recorded."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    items = review.load(conn, status=None if status == "any" else status, kind=kind)
+
+    if as_json:
+        # Plain stdout, not the console: rich colours its JSON, which is unparseable.
+        print(json.dumps(items, ensure_ascii=False))
+        return
+
+    table = Table("id", "kind", "status", "finding")
+    for item in items:
+        table.add_row(item["id"], item["kind"], item["status"], item["summary"][:60])
+    console.print(table)
+
+    tally = review.counts(conn)
+    console.print(
+        " · ".join(f"{k}/{s}: {n}" for (k, s), n in sorted(tally.items())) or "nothing yet"
+    )
+
+
+@review_app.command("resolve")
+def review_resolve(
+    item_id: str,
+    decision: str,
+    config_path: Path = ConfigOption,
+    comment: str = CommentOption,
+) -> None:
+    """Record a decision on one finding: accept or reject."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    try:
+        found = review.resolve(conn, item_id, decision, comment)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if not found:
+        raise typer.BadParameter(f"no review item {item_id!r}")
+    console.print(f"[green]{decision}[/] {item_id}")
 
 
 @app.command("hold-out")
@@ -913,7 +964,7 @@ def blocks(
         query += " AND page = ?"
         params.append(page)
     rows = conn.execute(query + " ORDER BY page, ordinal", params).fetchall()
-    console.print_json(json.dumps([dict(row) for row in rows], ensure_ascii=False))
+    print(json.dumps([dict(row) for row in rows], ensure_ascii=False))
 
 
 if __name__ == "__main__":

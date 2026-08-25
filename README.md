@@ -263,8 +263,20 @@ Acuña IRIs opacos (uuid5, reproducible), deriva etiquetas, corre los cuatro det
 erratas, arma los contextos de glosa y —si hay proveedor— genera las glosas. Commitea la
 ontología al DAG de versiones.
 
-Salidas: `data/ontology/seed_normalized.ttl` y `data/review/seed_review.json`, este último con
-tres listas para que revises: `divergent_labels`, `pending_semantic_check` y `typos`.
+Salida: `data/ontology/seed_normalized.ttl`. Los hallazgos que necesitan tu decisión
+—divergencias de etiqueta, pares sin verificar entre idiomas, erratas— van a la tabla
+`review_items`:
+
+```bash
+uv run onto-pipeline review list                       # lo que espera decisión
+uv run onto-pipeline review list --kind typo --json    # para máquina
+uv run onto-pipeline review resolve <id> rejected --comment "es un término del dominio"
+```
+
+Un hallazgo tiene identidad derivada de su contenido, así que re-correr `normalize-seed` no
+duplica nada ni reabre lo ya decidido: lo que rechazaste queda rechazado. Y si un hallazgo deja
+de aparecer porque cambiaste la semilla, pasa a `superseded` en vez de quedar colgado como
+pendiente.
 
 Sin proveedor configurado saltea A0.4 y te dice cuántas glosas quedaron pendientes.
 
