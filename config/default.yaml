@@ -1,0 +1,84 @@
+# Central configuration (spec section 7). One file, no thresholds hardcoded elsewhere.
+
+# ─── Paths (not in spec section 7; the pipeline needs them to find its inputs) ──
+paths:
+  corpus_root: ../../Corpus-08052026/General/files
+  seed_ontology: ../../qualitative_ontology.rdf
+  work_dir: ../data                # SQLite stores, markdown, crops, reports
+
+# ─── Profile and reasoning ───────────────────────────────
+owl_profile:
+  detected: auto          # computed in A0.0
+  target: OWL_DL_no_cardinality
+reasoner:
+  elk_filter_enabled: true
+  elk_coverage_threshold: 0.7    # fraction of non-ignored axioms
+  hermit_timeout_s: 120
+upper_ontology: none      # none | skos | dolce_ultralite | bfo
+                          # FIXED AT PROJECT START. Changing it = starting over.
+
+# ─── Corpus and parsing ──────────────────────────────────
+parser:
+  born_digital: pymupdf
+  scan: mineru
+  uncertain: mineru
+classification:
+  min_visible_chars: 100
+  garbled_ratio_threshold: 0.35
+  image_coverage_scan_threshold: 0.65
+boilerplate:
+  page_frequency_threshold: 0.8
+  bbox_tolerance_px: 12
+  normalize_before_compare: [digits, ips, dates]
+  max_block_chars: 200   # running heads are short; a long recurring paragraph is body text
+
+# ─── Matching and entity resolution ──────────────────────
+matching:
+  auto_merge_threshold: 0.92
+  grey_zone_lower: 0.70
+  cross_language_always_grey: true
+  blocking_strategy: embedding
+  respect_declared_haskey: true
+
+# ─── Iteration ───────────────────────────────────────────
+iteration:
+  mode: global            # global | incremental
+  cache_extraction: true
+  trigger: manual         # manual | per_document | batch_of_n
+  batch_size: 5
+  max_iterations: 20      # hard stopping criterion
+
+# ─── Competency questions ────────────────────────────────
+cq:
+  n_candidates: 60
+  type_quota: {definitional: 8, relational: 12, restrictive: 8,
+               quantificational: 6, inferential: 10, negative: 6}
+  sparql_regeneration: on_class_change
+  target_pass_rate: 0.90
+
+# ─── Branches ────────────────────────────────────────────
+branching:
+  max_branches: 5
+  present_independent_axes_separately: true
+  auto_apply_when_no_axis: true
+
+# ─── Models and temperature (per stage) ──────────────────
+llm:
+  provider: none          # none | anthropic | ollama  (deferred, spec D13 allows API)
+  A0_2_labels:        {tier: small,  temperature: 0.0}
+  A0_4_glosses:       {tier: medium, temperature: 0.3}
+  A3_cq_generation:   {tier: large,  temperature: 0.3}
+  B1_extraction:      {tier: medium, temperature: 0.0}
+  B1b_coreference:    {tier: medium, temperature: 0.0}
+  B2_matching:        {tier: small,  temperature: 0.0}
+  B2b_bridging:       {tier: large,  temperature: 0.3}
+  B3_naming:          {tier: large,  temperature: 0.3}
+  B4_axiomatization:  {tier: large,  temperature: 0.7}
+  B6_branching:       {tier: large,  temperature: 0.3}
+  regeneration_retry: {tier: large,  temperature: 0.7}
+
+# ─── Execution ───────────────────────────────────────────
+execution:
+  max_retries: 3
+  backoff_base_s: 2
+  stage_failure_rate_abort: 0.10
