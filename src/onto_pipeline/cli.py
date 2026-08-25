@@ -11,7 +11,17 @@ from rdflib import Graph
 from rich.console import Console
 from rich.table import Table
 
-from . import annotate, annotation, cq, extraction, glosses, llm, structural, versioning
+from . import (
+    annotate,
+    annotation,
+    coreference,
+    cq,
+    extraction,
+    glosses,
+    llm,
+    structural,
+    versioning,
+)
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
@@ -329,6 +339,62 @@ def extract_cmd(
         )
         for chunk_id, error in list(result.failures.items())[:3]:
             console.print(f"  [red]{chunk_id}[/]: {error}")
+    console.print(table)
+
+
+@app.command("coref")
+def coref_cmd(
+    config_path: Path = ConfigOption,
+    doc_id: str | None = DocIdOption,
+    include_held_out: bool = IncludeHeldOutOption,
+) -> None:
+    """B1b: intra-document coreference over the mentions B1 extracted (spec 6.1b).
+
+    The model groups mention identifiers, never spans, so its answer can be checked: a marker
+    that does not exist or is claimed twice is rejected instead of silently linking the wrong
+    mentions.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, coreference.STAGE)
+    ledger = Ledger(conn, config.execution)
+
+    if doc_id:
+        ids = [doc_id]
+    else:
+        ids = process_documents(conn)
+        if include_held_out:
+            ids += held_out_documents(conn)
+
+    table = Table("document", "mentions", "groups", "linked", "rejected", "in tok", "out tok")
+    for identifier in ids:
+        mentions = extraction.load(conn, identifier)
+        if not mentions:
+            continue
+        marked = coreference.mark(
+            markdown_path(config, identifier).read_text(encoding="utf-8"), mentions
+        )
+
+        with console.status(f"B1b · {identifier[:40]} · {len(mentions)} mentions"):
+            result = llm.run(
+                ledger, model, coreference.PROMPT, stage,
+                [(identifier, coreference.payload(marked))], coreference.parse,
+            )
+
+        groups = result.outputs.get(identifier, [])
+        grouping = coreference.resolve(marked, groups)
+        coreference.persist(conn, grouping.assignments)
+
+        rejected = len(grouping.unknown_markers) + len(grouping.duplicated_markers)
+        table.add_row(
+            identifier[:32], str(len(mentions)), str(len(grouping.groups)),
+            str(len(grouping.assignments)),
+            f"[red]{rejected}[/]" if rejected else "0",
+            str(result.in_tokens), str(result.out_tokens),
+        )
+        for label, error in result.failures.items():
+            console.print(f"  [red]{label}[/]: {error}")
     console.print(table)
 
 
