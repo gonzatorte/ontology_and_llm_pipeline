@@ -7,6 +7,36 @@ sólo explica cómo se usa lo que está construido y qué falta.
 El sistema opera en inglés (prompts, esquemas, logs). El corpus y las glosas son bilingües
 es/en con etiqueta de idioma.
 
+## Las etapas, por nombre
+
+El spec las llama A0…B8 y esos códigos siguen siendo la referencia cruzada canónica, pero los
+códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y los módulos.
+
+| Código | Nombre | Qué hace |
+|---|---|---|
+| A0.0 | **profile** | Detecta el perfil OWL de la semilla (EL/QL/RL/DL) |
+| A0.1–A0.3 | **normalize** | IRIs opacos, etiquetas derivadas, detección de erratas |
+| A0.4 | **gloss** | Escribe una definición para cada clase |
+| A1 | **classify** | Decide por página: born-digital, escaneada o incierta |
+| A2 | **parse** | Extrae bloques con procedencia y arma el Markdown |
+| — | **chunk** | Agrupa bloques en unidades de extracción sin partir tablas |
+| A3 | **propose-cq** | Genera competency questions desde el corpus |
+| A4 | **import-cq** | Carga las competency questions que escribís vos |
+| B1 | **extract** | Saca menciones de concepto de cada chunk |
+| B1b | **corefer** | Agrupa las menciones que hablan del mismo individuo |
+| B2 | **match** | Tipa cada mención contra una clase, y resuelve entidades |
+| B2b | **bridge** | Conecta huérfanas con la semilla por conocimiento del mundo |
+| B3 | **induce** | Convierte huérfanas en clases nuevas |
+| B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
+| B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
+| B5 | **validate** | Cadena de filtros: ELK, HermiT, SHACL, OntoClean, OOPS!, evidencia, estructura |
+| B6 | **branch** | Arma las alternativas coherentes entre las que elegís |
+| B7–B8 | **apply** | Aplica la rama, versiona en el DAG, detecta loops |
+| — | **regenerate** | Recomputa el ABox desde las menciones |
+
+Los comandos del CLI ya usan estos nombres (`extract`, `coref`, `match`, `validate`), y los
+módulos también (`extraction.py`, `coreference.py`, `matching.py`).
+
 ## Estado
 
 El spec define una secuencia de construcción de 5 pasos (§12) y prohíbe explícitamente armar

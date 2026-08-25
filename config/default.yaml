@@ -51,7 +51,10 @@ matching:
   auto_merge_threshold: 0.92
   grey_zone_lower: 0.70
   cross_language_always_grey: true
-  blocking_strategy: embedding
+  # Named for what Matcher.blocks does: group by surface form and by declared key values.
+  # Spec 6.2's `embedding` blocking is not implemented, and the config refuses the name rather
+  # than accepting it and doing something else.
+  blocking_strategy: surface_and_keys
   respect_declared_haskey: true
   # Multilingual by requirement: a monolingual encoder would push every es/en pair into the
   # grey zone on language alone.

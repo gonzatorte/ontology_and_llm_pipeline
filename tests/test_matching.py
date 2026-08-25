@@ -218,3 +218,15 @@ def test_what_a_mention_is_compared_against_is_configurable():
 
 def test_a_target_with_no_gloss_falls_back_to_the_label_whatever_the_setting():
     assert Target(iri="c:T", label="Technique", match_against="gloss").text == "Technique"
+
+
+def test_the_config_refuses_a_blocking_strategy_that_is_not_built():
+    """The thresholds are calibrated against these numbers: a pair the blocking never formed
+    must not be silently indistinguishable from one the encoder scored too low."""
+    from pydantic import ValidationError
+
+    from onto_pipeline.config import Matching
+
+    assert Matching().blocking_strategy == "surface_and_keys"
+    with pytest.raises(ValidationError, match="not implemented"):
+        Matching(blocking_strategy="embedding")

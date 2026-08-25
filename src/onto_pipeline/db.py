@@ -95,5 +95,11 @@ def connect(work_dir: Path) -> sqlite3.Connection:
     work_dir.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(work_dir / "pipeline.sqlite3")
     conn.row_factory = sqlite3.Row
+    # WAL: one writer and any number of concurrent readers, instead of a lock that excludes
+    # both. The pipeline is sequential by design — the ledger puts a barrier between stages —
+    # but B1 makes hundreds of API calls whose latency dwarfs a write, so parallelising those
+    # only needs readers not to block. It is also more robust to an interrupted run.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(SCHEMA)
     return conn
