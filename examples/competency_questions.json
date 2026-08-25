@@ -1,0 +1,42 @@
+[
+  {
+    "id": "cq_a4_01",
+    "question": "What kinds of technique does the ontology distinguish?",
+    "type": "definitional",
+    "language": "en",
+    "origin": "user",
+    "sparql": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?technique WHERE { ?technique rdfs:subClassOf <https://ontology.local/id/fd430fb0-4ffb-52f2-a1c9-36a710a93a4d> }"
+  },
+  {
+    "id": "cq_a4_02",
+    "question": "Which techniques can a methodological strategy apply?",
+    "type": "relational",
+    "language": "en",
+    "origin": "user",
+    "sparql": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?property WHERE { ?property rdfs:domain <https://ontology.local/id/7345572a-0807-5e96-a8e5-62a77667496e> ; rdfs:range <https://ontology.local/id/fd430fb0-4ffb-52f2-a1c9-36a710a93a4d> }"
+  },
+  {
+    "id": "cq_a4_03",
+    "question": "Can a subject also be a technique?",
+    "type": "restrictive",
+    "language": "en",
+    "origin": "user",
+    "sparql": "PREFIX owl: <http://www.w3.org/2002/07/owl#> SELECT ?other WHERE { { <https://ontology.local/id/473a0425-c04e-575b-97e2-51793301f154> owl:disjointWith ?other } UNION { ?other owl:disjointWith <https://ontology.local/id/473a0425-c04e-575b-97e2-51793301f154> } }"
+  },
+  {
+    "id": "cq_a4_04",
+    "question": "If an interview is a technique and a technique is a methodological strategy, is an interview a methodological strategy?",
+    "type": "inferential",
+    "language": "en",
+    "origin": "user",
+    "sparql": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?ancestor WHERE { <https://ontology.local/id/566cab27-d174-5b93-99ec-3d3586ecf81a> rdfs:subClassOf+ ?ancestor . FILTER (?ancestor = <https://ontology.local/id/7345572a-0807-5e96-a8e5-62a77667496e>) }"
+  },
+  {
+    "id": "cq_a4_05",
+    "question": "Which classes have no definition yet?",
+    "type": "negative",
+    "language": "en",
+    "origin": "user",
+    "sparql": "PREFIX owl: <http://www.w3.org/2002/07/owl#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#> SELECT ?class WHERE { ?class a owl:Class . FILTER NOT EXISTS { ?class skos:definition ?gloss } }"
+  }
+]

@@ -44,6 +44,11 @@ class Boilerplate(BaseModel):
     max_block_chars: int = 200
 
 
+class Chunking(BaseModel):
+    target_chars: int = 3000
+    max_chars: int = 6000
+
+
 class Seed(BaseModel):
     base_iri: str = "https://ontology.local/id/"
     label_divergence_threshold: float = 0.8
@@ -111,6 +116,7 @@ class Config(BaseModel):
     upper_ontology: str = "none"
     parser: Parser = Parser()
     seed: Seed = Seed()
+    chunking: Chunking = Chunking()
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()

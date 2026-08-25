@@ -7,12 +7,15 @@ from dataclasses import asdict
 from pathlib import Path
 
 import typer
+from rdflib import Graph
 from rich.console import Console
 from rich.table import Table
 
+from . import cq
+from .chunking import chunk_document
 from .config import Config
 from .db import connect
-from .ingest import STAGE, discover, ingest
+from .ingest import STAGE, discover, ingest, load_block_objects
 from .report import build_report
 from .seed import gloss_contexts, normalize_seed
 from .telemetry import Ledger
@@ -178,6 +181,86 @@ def status(config_path: Path = ConfigOption) -> None:
     ).fetchall()
     for row in failures:
         console.print(f"[red]{row['key'][:12]}[/]: {row['error']}")
+
+
+@app.command()
+def chunks(
+    doc_id: str,
+    config_path: Path = ConfigOption,
+) -> None:
+    """Show B1's extraction units for one document. Derived, never stored."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    document_chunks = chunk_document(
+        load_block_objects(conn, doc_id),
+        config.chunking.target_chars,
+        config.chunking.max_chars,
+    )
+    if not document_chunks:
+        raise typer.BadParameter(f"no blocks for {doc_id}")
+    table = Table("chunk", "pages", "blocks", "chars", "context")
+    for chunk in document_chunks:
+        table.add_row(
+            str(chunk.ordinal),
+            ",".join(str(page) for page in chunk.pages),
+            str(len(chunk.block_ids)),
+            str(len(chunk.text)),
+            str(len(chunk.context_block_ids)),
+        )
+    console.print(table)
+
+
+cq_app = typer.Typer(help="Competency questions: the primary stopping criterion.")
+app.add_typer(cq_app, name="cq")
+
+
+@cq_app.command("import")
+def cq_import(
+    path: Path,
+    config_path: Path = ConfigOption,
+) -> None:
+    """A4: load questions written by the user, each paired with its SPARQL."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    questions = cq.read_file(path)
+    console.print(f"[green]stored[/] {cq.add(conn, questions)} competency questions")
+
+
+@cq_app.command("eval")
+def cq_eval(
+    config_path: Path = ConfigOption,
+    iteration: int = typer.Option(0, "--iteration", "-i"),
+) -> None:
+    """Run every accepted CQ against the current ontology and record the pass rate."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    questions = cq.load(conn)
+    if not questions:
+        raise typer.BadParameter("no accepted competency questions")
+
+    ontology = config.paths.work_dir / "ontology" / "seed_normalized.ttl"
+    if not ontology.exists():
+        raise typer.BadParameter(f"{ontology} not found; run normalize-seed first")
+
+    evaluation = cq.evaluate(Graph().parse(ontology), questions, iteration=iteration)
+    cq.record(conn, evaluation)
+
+    table = Table("cq", "type", "answered", "rows")
+    for question in questions:
+        answered = (
+            "error" if question.id in evaluation.errored
+            else "yes" if question.id in evaluation.passed
+            else "no"
+        )
+        table.add_row(question.id, question.cq_type, answered,
+                      str(evaluation.n_rows.get(question.id, "")))
+    console.print(table)
+    console.print(
+        f"pass rate [bold]{evaluation.pass_rate:.0%}[/] "
+        f"(target {config.cq.target_pass_rate:.0%})"
+    )
+    for cq_id, error in evaluation.errored.items():
+        console.print(f"[red]{cq_id}[/]: {error}")
 
 
 @app.command()

@@ -13,7 +13,15 @@ import sqlite3
 from pathlib import Path
 
 from .config import Config
-from .parse import CAPTION, TABLE, ParsedDocument, document_id, is_table_caption, parse_document
+from .parse import (
+    CAPTION,
+    TABLE,
+    Block,
+    ParsedDocument,
+    document_id,
+    is_table_caption,
+    parse_document,
+)
 from .telemetry import Ledger, StageResult, UnitResult
 
 STAGE = "A1_A2_ingest"
@@ -171,3 +179,26 @@ def load_page_classes(conn: sqlite3.Connection, doc_id: str) -> list[dict]:
 def load_document(conn: sqlite3.Connection, doc_id: str) -> dict | None:
     row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
     return dict(row) if row else None
+
+
+def load_block_objects(conn: sqlite3.Connection, doc_id: str) -> list[Block]:
+    """Blocks as parsed, for the derived stages (chunking) that work on them directly."""
+    return [
+        Block(
+            document_id=row["document_id"],
+            page=row["page"],
+            ordinal=row["ordinal"],
+            bbox=tuple(json.loads(row["bbox"])),
+            block_type=row["block_type"],
+            text=row["text"],
+            span_start=row["span_start"],
+            span_end=row["span_end"],
+            language=row["language"],
+            language_source=row["language_source"],
+            is_boilerplate=bool(row["is_boilerplate"]),
+            asset_path=row["asset_path"],
+        )
+        for row in conn.execute(
+            "SELECT * FROM blocks WHERE document_id = ? ORDER BY page, ordinal", (doc_id,)
+        )
+    ]

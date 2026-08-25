@@ -32,6 +32,10 @@ boilerplate:
   normalize_before_compare: [digits, ips, dates]
   max_block_chars: 200   # running heads are short; a long recurring paragraph is body text
 
+chunking:
+  target_chars: 3000     # a chunk is B1's unit of extraction
+  max_chars: 6000        # a table is atomic and may exceed this
+
 # ─── Seed normalization (A0) ─────────────────────────────
 seed:
   base_iri: https://ontology.local/id/   # opaque IRIs; the original is kept as provenance
