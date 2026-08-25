@@ -119,6 +119,32 @@ Cuatro capas con naturaleza y ciclo de vida distintos. **No mezclarlas es el inv
 └──────────────────────────────────────────────────────────┘
 ```
 
+El movimiento entre capas, y por qué ninguna reorganización necesita migración:
+
+```mermaid
+flowchart TB
+  DOC[/"documento"/] --> MEN["CAPA DE MENCIONES<br/>inmutable salvo extensión<br/>span · página · bbox · idioma · procedencia"]
+  MEN -->|"reglas de mapeo · versionadas"| ABOX["ABox<br/>derivado, regenerable"]
+  ABOX -->|"conforma a"| TBOX["TBox<br/>versionada en DAG"]
+  TBOX -->|"cambio de organización"| RULES["nuevas reglas de mapeo"]
+  RULES -.->|"recomputar, no migrar"| ABOX
+  HIST["HISTORIAL DE DECISIONES<br/>ramas elegidas y descartadas · feedback · hashes"]
+  TBOX --> HIST
+  HIST -->|"input de la iteración siguiente"| TBOX
+  NEW[/"documentos nuevos"/] -.->|"sólo extienden"| MEN
+
+  classDef immutable fill:#e6e8eb,stroke:#374151,color:#111827
+  classDef derived fill:#fdf0ce,stroke:#b7791f,color:#4a3208
+  classDef versioned fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
+  class MEN immutable
+  class ABOX,RULES derived
+  class TBOX,HIST versioned
+```
+
+**Lo que el diagrama prohíbe:** una flecha que entre a la capa de menciones desde abajo. Si la
+TBox pudiera reescribir menciones, la procedencia dejaría de ser verificable y la regeneración
+dejaría de ser idempotente.
+
 **Regla de regeneración (D10 + §1.4):** como el ABox se deriva de las menciones y no de fuentes externas, una reorganización de la TBox **nunca requiere script de migración**. Se cambian las reglas de mapeo y se recomputa. Esto sostiene la reorganizabilidad (D1) sin deuda acumulada.
 
 ### 3.1 Distinción ontología / grafo
@@ -138,6 +164,42 @@ El pipeline **proyecta la ontología a grafo en puntos concretos y acotados**, n
 ---
 
 ## 4. Fase A — Preparación (una sola vez)
+
+Dos rutas independientes que sólo se encuentran en A3: el corpus se convierte en chunks con
+procedencia, la semilla en una TBox normalizada y versionada.
+
+```mermaid
+flowchart TB
+  subgraph CORPUS["ruta del corpus · A1-A2"]
+    direction TB
+    P[/"PDF"/] --> CL{"clase de página<br/>A1"}
+    CL -->|"born_digital"| PY["parser born-digital"]
+    CL -->|"scan · uncertain"| VLM["ruta VLM<br/>páginas registradas como unparsed"]
+    PY --> BLK["bloques: bbox · tipo · idioma · span"]
+    BLK --> BOIL["filtro de boilerplate<br/>frecuencia por página + bbox"]
+    BOIL --> MD[/"un Markdown por documento"/]
+    MD --> CH["chunking estructura-consciente<br/>unidad de extracción de B1"]
+  end
+
+  subgraph SEED["ruta de la semilla · A0"]
+    direction TB
+    S[/"ontología semilla"/] --> A00["A0.0 · detección de perfil OWL"]
+    A00 --> A01["A0.1 · IRIs opacos uuid5<br/>el original queda como procedencia"]
+    A01 --> A02["A0.2 · etiquetas derivadas es/en"]
+    A02 --> A03["A0.3 · cuatro detectores de erratas"]
+    A03 --> A04["A0.4 · glosas · LLM"]
+    A04 --> V0[/"v0 commiteada al DAG"/]
+    A03 -.-> REV[/"seed_review.json<br/>lo que espera revisión humana"/]
+  end
+
+  CH --> A3["A3 · CQ generadas<br/>cada una con cita al corpus"]
+  V0 --> A3
+  A3 --> A4["A4 · CQ del usuario"]
+  A4 --> CQ[/"40-60 CQ con su SPARQL"/]
+
+  classDef todo fill:#fbdcdc,stroke:#c53030,color:#4d1414
+  class VLM,A3 todo
+```
 
 ### 4.1 A1 — Clasificación de documentos
 
@@ -409,6 +471,31 @@ Si se pregunta todo lo que no es obviamente idéntico, se vuelve a la revisión 
 
 **d) Claves declaradas.** Si la semilla declara `owl:hasKey` para una clase, **esa clave manda sobre los umbrales de similaridad**. Toda clase nueva propuesta en B3 debería recibir la pregunta de si tiene clave.
 
+Las tres zonas y lo que las gobierna:
+
+```mermaid
+flowchart TB
+  M["mención · B1"] --> BL["blocking<br/>agrupar por embedding o superficie"]
+  BL --> BI["bi-encoder multilingüe<br/>recuperación de candidatos"]
+  BI --> CE["cross-encoder<br/>re-ranking · apagado hasta tunear, §6.3"]
+  CE --> Z{"zona de similaridad"}
+  Z -->|"≥ auto_merge_threshold · 0.92"| AUTO["fusión automática"]
+  Z -->|"0.70 a 0.92<br/>o par cross-idioma, siempre"| GREY["zona gris<br/>pregunta al usuario"]
+  Z -->|"< 0.70"| ORPH["huérfano<br/>descarte automático, sin preguntar"]
+  KEY["owl:hasKey declarada"] -.->|"manda sobre los umbrales"| Z
+  AUTO --> ABOX["ABox"]
+  GREY --> DEC["Decision registrada<br/>estado possible_duplicate_unresolved"]
+  DEC -.->|"excluido del conteo<br/>de soporte funcional, §6.8"| ABOX
+  ORPH --> NEXT["B2b · puenteo → B3 · inducción"]
+
+  classDef risk fill:#fbdcdc,stroke:#c53030,color:#4d1414
+  class ORPH risk
+```
+
+**El riesgo que el diagrama hace visible:** el nodo rojo. Una mención que *sí* pertenecía a la
+semilla y cae en `< 0.70` no genera ningún error — genera una clase nueva en B3. Por eso los
+umbrales no se fijan por decreto sino midiéndolos contra el conjunto de retención (§10.1).
+
 #### Consecuencia de la política conservadora
 
 Habrá duplicados no resueltos. **Esto contamina el conteo de soporte de propiedades funcionales**: dos individuos duplicados, cada uno con un valor distinto, parecen confirmar funcionalidad cuando en realidad son la misma entidad con dos valores → conflicto oculto.
@@ -524,6 +611,26 @@ Apilados. **Solo lo que sobrevive los seis llega a formar ramas.** El usuario nu
 
 Cuerpos de conocimiento a incorporar: **ODPs** (Ontology Design Patterns) como plantillas de prompt y enumerador de ramas; **OntoClean** como validador; **OOPS!** como scanner de anti-patrones.
 
+```mermaid
+flowchart TB
+  POOL["pool sobre-generado de axiomas candidatos · B4"] --> F1
+  F1["1 · ELK<br/>rechazo duro, incompleto"] --> F2["2 · HermiT<br/>consistencia + satisfacibilidad, con justificaciones"]
+  F2 --> F3["3 · SHACL<br/>restricciones de forma sobre el ABox"]
+  F3 --> F4["4 · OntoClean<br/>rigidez · identidad · unidad · dependencia"]
+  F4 --> F5["5 · OOPS!<br/>advertencia, no rechazo"]
+  F5 --> F6["6 · evidencia textual<br/>sólo para procedencia textual"]
+  F6 --> F7["7 · métricas estructurales<br/>profundidad · ramificación · huérfanas · nivel de una sola subclase"]
+  F7 --> SURV["sobrevivientes<br/>lo único que llega a formar ramas"]
+
+  classDef ok fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
+  classDef todo fill:#fbdcdc,stroke:#c53030,color:#4d1414
+  class F1,F2,F7 ok
+  class F3,F4,F5,F6 todo
+```
+
+Verde: implementado. Rojo: pendiente. **El usuario no ve ninguno de estos rechazos** (D5): ve
+ramas, y la cadena decide qué entra en ellas.
+
 #### B6 — Construcción de ramas
 
 Lo que el usuario describió corresponde a **revisión de creencias con extensiones múltiples**. Cuando un conjunto de axiomas candidatos es inconsistente, los subconjuntos consistentes maximales son los "conjuntos coherentes". Herramientas teóricas: MUPS, diagnóstico por hitting sets de Reiter, QuickXplain.
@@ -547,6 +654,34 @@ Lo que el usuario describió corresponde a **revisión de creencias con extensio
 **Las del segundo tipo son las ramas que valen** — mutuamente excluyentes en la práctica, perfectamente consistentes en lógica. **Se enumeran desde el catálogo de ODPs; no se descubren.** Cada elección del segundo tipo condiciona el resto de la ontología.
 
 **Control de explosión combinatoria.** Con k ejes binarios independientes hay 2^k ramas. **Presentar los ejes por separado cuando son independientes; ramas completas solo cuando están acoplados.** Techo práctico: 3–5 ramas.
+
+```mermaid
+flowchart TB
+  SURV["sobrevivientes de B5"] --> CONF["razonador: detectar conflictos<br/>→ grafo de incompatibilidad"]
+  CONF --> AX{"¿hay ejes de decisión?"}
+  AX -->|"no · el camino habitual"| APPLY["aplicar todo automáticamente<br/>con entrada de log"]
+  AX -->|"sí"| GROUP["agrupar por EJE, no por axioma"]
+  GROUP --> SRC{"naturaleza del eje"}
+  SRC -->|"conflicto lógico"| L["lo detecta el razonador"]
+  SRC -->|"compromiso de modelado"| MOD["NO lo detecta el razonador<br/>se enumera desde el catálogo ODP"]
+  L --> BUILD
+  MOD --> BUILD["cada rama = una elección coherente por eje<br/>techo práctico 3-5"]
+  BUILD --> IND{"¿ejes independientes?"}
+  IND -->|"sí"| SEP["presentarlos por separado<br/>evita la explosión 2^k"]
+  IND -->|"no · acoplados"| FULL["presentar ramas completas"]
+  SEP --> PICK
+  FULL --> PICK["el usuario elige una rama, nunca un axioma"]
+  PICK --> B78["B7-B8"]
+  APPLY --> B78
+  PICK -.->|"ninguna convence"| REGEN["regenerar con instrucción textual del usuario · D20"]
+
+  classDef key fill:#fdf0ce,stroke:#b7791f,color:#4a3208
+  class MOD key
+```
+
+**El nodo ámbar es el que justifica todo el mecanismo.** Reificar vs. propiedad directa, o
+jerarquizar por función vs. por estructura, son perfectamente consistentes en lógica: ningún
+razonador los va a separar, y cada elección condiciona el resto de la ontología.
 
 #### Scoring de ramas
 
@@ -628,6 +763,26 @@ Como el almacén ya es un DAG, la oscilación A→B→A **es exactamente un cicl
 3. **Si el hash ya existe en el DAG → no presentarla como novedad; mostrar que es un retorno a la versión N.**
 
 No bloquea nada: volver al estado 4 es válido, pero explícitamente, no por accidente. Captura ciclos de longitud arbitraria.
+
+```mermaid
+flowchart LR
+  v0(("v0<br/>semilla")) --> v1(("v1"))
+  v1 --> v2a(("v2·A<br/>elegida"))
+  v1 -.->|"conservada"| v2b(("v2·B<br/>no elegida"))
+  v2a --> v3(("v3"))
+  v3 -->|"la rama propuesta<br/>reproduce un hash ya presente"| CHK{"¿hash en el DAG?"}
+  CHK -->|"sí"| BACK["no es novedad:<br/>mostrar que es un retorno a v1"]
+  CHK -->|"no"| NEW(("v4"))
+  BACK -.-> v1
+  v2b -.->|"retomable en cualquier momento"| ALT(("v2·B → v3'"))
+
+  classDef loop fill:#fdf0ce,stroke:#b7791f,color:#4a3208
+  class BACK loop
+```
+
+El hash se computa sobre la ontología normalizada —axiomas ordenados, IRIs canónicos, **nunca
+etiquetas**—, así que un renombre puro no cuenta como estado nuevo y la oscilación A→B→A es
+literalmente un ciclo en este grafo.
 
 **Caso parcial no cubierto por el hash exacto:** la rama vuelve *casi* al estado anterior (mismo compromiso, IRIs distintos). Para eso, distancia sobre el conjunto de axiomas normalizados con umbral. Menos limpio; cubre lo que falta.
 
@@ -738,6 +893,98 @@ execution:
 ---
 
 ## 8. Esquemas de datos
+
+Cómo se relacionan los almacenes. `documents` es la raíz de toda procedencia; `work_units` y
+`decisions` son transversales —no cuelgan de ningún documento— y las relaciones se sostienen
+por convención de `document_id`, no por claves foráneas declaradas, salvo `versions.parent_id`,
+que sí lo es y es lo que hace del almacén de versiones un DAG.
+
+```mermaid
+erDiagram
+  documents ||--o{ page_classification : "A1 clasifica"
+  documents ||--o{ blocks : "A2 produce"
+  documents ||--o{ mentions : "B1 extrae"
+  blocks ||--o{ mentions : "ancla spans"
+  versions ||--o{ versions : "parent_id · DAG"
+  versions ||--o{ decisions : "rama aplicada"
+  competency_questions ||--o{ cq_results : "evaluada en"
+  versions ||--o{ cq_results : "corrida contra"
+
+  documents {
+    TEXT id PK
+    TEXT content_hash
+    TEXT markdown_hash
+    TEXT parser_used
+    INTEGER held_out
+  }
+  blocks {
+    TEXT id PK
+    TEXT document_id FK
+    INTEGER page
+    TEXT block_type
+    INTEGER span_start
+    INTEGER span_end
+    INTEGER is_boilerplate
+  }
+  mentions {
+    TEXT id PK
+    TEXT document_id FK
+    TEXT surface_text
+    TEXT coref_group
+    TEXT candidate_entity
+    TEXT status
+  }
+  page_classification {
+    TEXT document_id PK
+    INTEGER page PK
+    TEXT class
+    TEXT signals
+  }
+  versions {
+    TEXT id PK
+    TEXT parent_id FK
+    INTEGER iteration
+    TEXT branch_id
+    TEXT state_hash
+    TEXT turtle
+  }
+  decisions {
+    TEXT id PK
+    INTEGER iteration
+    TEXT branch_id
+    TEXT status
+    TEXT axis
+    TEXT normalized_axioms
+    TEXT ontology_state
+  }
+  work_units {
+    TEXT key PK
+    TEXT stage
+    INTEGER iteration
+    TEXT status
+    TEXT input_hash
+    INTEGER in_tokens
+    INTEGER out_tokens
+  }
+  competency_questions {
+    TEXT id PK
+    TEXT cq_type
+    TEXT origin
+    TEXT sparql
+    TEXT citation
+  }
+  cq_results {
+    TEXT cq_id PK
+    INTEGER iteration PK
+    INTEGER passed
+    INTEGER n_rows
+  }
+```
+
+`work_units` no aparece conectada porque es deliberadamente transversal: su clave incluye
+etapa, versión del prompt, temperatura y hash del input, y eso la vuelve simultáneamente caché,
+checkpoint y telemetría (§8.3).
+
 
 ### 8.1 Capa de menciones (SQLite)
 
@@ -1007,6 +1254,27 @@ Mitigaciones:
 | **3** | B1–B2 + evaluación contra el conjunto de retención | **Punto de decisión no-go**, ver §12.1 |
 | **4** | B4–B5 **sin ramas**: axiomatización con aplicación directa | Ontología de juguete funcional |
 | **5** | B6–B8: ramas, scoring, DAG completo | — |
+
+```mermaid
+flowchart LR
+  P1["paso 1<br/>A1-A2 + T1"] -->|"el parseo es aceptable<br/>a inspección visual"| P2["paso 2<br/>A0 + A3-A4"]
+  P2 -->|"40-60 CQ con SPARQL"| P3["paso 3<br/>B1-B2 + conjunto de retención"]
+  P3 --> GATE{"tasa de<br/>falsos huérfanos"}
+  GATE -->|"alta"| FIX["arreglar el matcher:<br/>mejor encoder · mejores glosas · LoRA"]
+  FIX --> P3
+  GATE -->|"aceptable"| P4["paso 4<br/>B4-B5 sin ramas, aplicación directa"]
+  P4 -->|"ontología de juguete funcional"| P5["paso 5<br/>B6-B8: ramas, scoring, DAG completo"]
+  VER["versionado, historial y hash de estado<br/>desde el paso 4, sin excepción"] -.-> P4
+
+  classDef gate fill:#fbdcdc,stroke:#c53030,color:#4d1414
+  classDef done fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
+  class GATE,FIX gate
+  class P1,P2 done
+```
+
+Verde: pasos completados. **La compuerta roja es de decisión no-go, no un checkpoint de
+progreso:** si se cruza con la tasa alta, cada falso huérfano se convierte en una clase espuria
+en B3 y con multi-rama se estaría eligiendo entre variantes de ruido.
 
 **Requisito que no se pospone:** aunque el paso 4 no tenga multi-rama, **el versionado, el historial y el hash de estado se implementan desde ahí**. Retrofittear el DAG sobre 15 iteraciones ya aplicadas sin registro significa perder ese historial. Lo que se pospone es la ramificación, no el registro.
 

@@ -76,14 +76,16 @@ class Target:
         """What a mention is compared against.
 
         The spec matches against the gloss, on the reasoning that a definition captures the
-        concept where a name may not. Measured on this seed it does the opposite: over ten
-        unambiguous mention/class pairs the bi-encoder scored 7/10 recall@1 against labels and
-        2/10 against glosses, with two independently generated sets of glosses. A mention is a
-        short noun phrase and so is a label; a gloss is a long sentence, and a symmetric
-        paraphrase encoder loses on that mismatch more than the added meaning wins.
+        concept where a name may not. Over ten hand-built unambiguous pairs the bi-encoder
+        scored 7/10 recall@1 against labels and 2/10 against glosses, with two independently
+        generated sets of glosses, which is why the default sits on the label.
 
-        So the default is the label, and the premise becomes worth revisiting once the
-        cross-encoder is tuned (spec 6.3) or an asymmetric retrieval model is in place.
+        That evidence is thin and one-sided, and saying so here matters more than the number:
+        n=10, recall only, on a corpus and seed that turned out to be thematically mismatched.
+        It does not measure precision, and labels lose there — "subject" in the sense of *topic*
+        types as the class Subject at 0.992, inside the auto-merge zone, by lexical echo that no
+        threshold can filter. Whichever way this setting ends up, it needs an annotated corpus
+        to decide, not another handful of pairs.
         """
         if self.match_against == "gloss" and self.gloss:
             return self.gloss

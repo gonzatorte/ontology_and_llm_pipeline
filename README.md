@@ -19,12 +19,13 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | A0.4 glosas | listo (requiere proveedor LLM) |
 | A1 clasificación por página | listo |
 | A2 parseo e ingesta | listo, sólo ruta born-digital |
-| A3 generación de CQ | **no implementado** (requiere LLM) |
+| A3 generación de CQ | **no implementado** |
 | A4 CQ del usuario | listo |
 | Chunking estructura-consciente | listo |
-| B1 extracción de candidatos | **no implementado** |
-| B1b correferencia intra-documento | **no implementado** |
+| B1 extracción de candidatos | listo |
+| B1b correferencia intra-documento | listo |
 | B2 matching y resolución de entidades | listo, **sin calibrar** (ver Limitaciones) |
+| Conjunto de retención: hold-out, anotador, exportador | listo |
 | B2b puenteo por conocimiento del mundo | **no implementado** |
 | B3 inducción de clases | **no implementado** |
 | B4 axiomatización · B4b enriquecimiento de glosas | **no implementado** |
@@ -33,6 +34,70 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B6 construcción de ramas | **no implementado** |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Regeneración del ABox | **no implementado** (depende de B1–B2) |
+
+
+```mermaid
+flowchart TB
+  corpus[/"corpus PDF"/]
+  seed[/"ontología semilla"/]
+
+  subgraph FA["FASE A · preparación, una sola vez"]
+    direction TB
+    A1["A1 · clasificación por página"]
+    A2["A2 · parseo e ingesta"]
+    CHK["chunking estructura-consciente"]
+    A0["A0 · normalización de la semilla<br/>IRIs opacos · etiquetas · erratas · glosas"]
+    A3["A3 · generación de CQ"]
+    A4["A4 · CQ del usuario"]
+  end
+
+  subgraph FB["FASE B · iteración"]
+    direction TB
+    B1["B1 · extracción de candidatos"]
+    B1b["B1b · correferencia intra-documento"]
+    B2["B2 · matching y resolución de entidades"]
+    B2b["B2b · puenteo por conocimiento del mundo"]
+    B3["B3 · inducción de clases"]
+    B4["B4 · axiomatización"]
+    B5["B5 · cadena de 7 filtros"]
+    B6["B6 · construcción de ramas"]
+    B78["B7-B8 · aplicación · DAG · hash de estado"]
+  end
+
+  ABOX["regeneración del ABox"]
+  CQE["cq eval · tasa de aprobación"]
+  OUT[/"TBox versionada + ABox derivado"/]
+  HOLD["conjunto de retención<br/>nunca entra al proceso"]
+
+  corpus --> A1 --> A2 --> CHK --> B1 --> B1b --> B2
+  A2 -.-> HOLD
+  seed --> A0 --> B2
+  A0 --> B5
+  A2 --> A3 --> A4 --> CQE
+  B2 -->|"mención tipada"| ABOX
+  B2 -->|"huérfana"| B2b --> B3 --> B4 --> B5 --> B6 --> B78
+  B78 --> ABOX --> OUT
+  B78 -->|"iteración siguiente"| B1
+  B78 --> CQE
+  CQE -->|"bajo el umbral"| B1
+  CQE -->|"umbral alcanzado"| OUT
+  HOLD -.->|"mide falsos huérfanos"| B2
+
+  classDef ok fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
+  classDef partial fill:#fdf0ce,stroke:#b7791f,color:#4a3208
+  classDef todo fill:#fbdcdc,stroke:#c53030,color:#4d1414
+  classDef io fill:#e6e8eb,stroke:#6b7280,color:#1f2937
+
+  class A1,CHK,A0,A4,B1,B1b,B78,CQE,HOLD ok
+  class A2,B2,B5 partial
+  class A3,B2b,B3,B4,B6,ABOX todo
+  class corpus,seed,OUT io
+```
+
+Verde: listo. Ámbar: parcial —`A2` sólo born-digital, `B2` sin calibrar, `B5` con 3 de 7
+filtros—. Rojo: no implementado. **El corte hoy está en B2b:** el corpus ya llega
+hasta menciones extraídas y correferidas, y la semilla hasta la TBox normalizada y validada,
+pero nada cruza todavía de las menciones huérfanas a la inducción de clases.
 
 **No hay sesión interactiva.** Hoy esto es un CLI de comandos discretos. El spec tiene varios
 puntos donde el usuario decide —elegir rama (§6.6), zona gris del matcher (§6.2), pregunta por
@@ -93,6 +158,53 @@ Para Ollama local: `base_url: http://127.0.0.1:11434/v1`, `api_key_env: ""`.
 ## Uso
 
 `--env-file` es una opción global y va **antes** del subcomando.
+
+Cada comando es una etapa discreta que deja su salida en disco; el siguiente la levanta de ahí.
+No hay estado en memoria entre comandos.
+
+```mermaid
+flowchart LR
+  subgraph C["comandos"]
+    direction TB
+    i["ingest"]
+    n["normalize-seed"]
+    v["validate"]
+    q["cq import · cq eval"]
+    r["report"]
+    a["hold-out · annotate · export-annotations"]
+    s["versions · status"]
+  end
+
+  db[("pipeline.sqlite3<br/>blocks · documents · mentions<br/>work_units · decisions · versions · CQs")]
+  md[/"data/markdown/"/]
+  as[/"data/assets/"/]
+  on[/"data/ontology/seed_normalized.ttl"/]
+  rv[/"data/review/seed_review.json"/]
+  rp[/"data/reports/ · T1"/]
+  an[/"data/annotate/ · data/brat/"/]
+  di["diagnóstico: perfil · ELK · HermiT · métricas"]
+  pr["tasa de aprobación por iteración"]
+
+  i --> db
+  i --> md
+  i --> as
+  n --> on
+  n --> rv
+  n --> db
+  db --> v
+  on --> v --> di
+  q --> db
+  db --> q --> pr
+  db --> r --> rp
+  md --> r
+  db --> a --> an
+  md --> a
+  db --> s
+
+  classDef store fill:#e6e8eb,stroke:#6b7280,color:#1f2937
+  class db,md,as,on,rv,rp,an store
+```
+
 
 ### 1. Ingesta del corpus (A1 + A2)
 
@@ -197,6 +309,32 @@ que descansa toda la métrica y es demasiado fácil de errar si es un checkbox.
 | Clase nueva | lo que escribas | `false` | **huérfano genuino** — alimenta B3 |
 | Sin clase asignable | `null` | `false` | no cuenta: no es falla del matcher |
 
+
+```mermaid
+flowchart TB
+  M["mención en un documento retenido"] --> Q{"¿de dónde salió la clase<br/>que elegiste en la herramienta?"}
+  Q -->|"la elegí de la semilla"| S["gold_class = label<br/>in_seed = true"]
+  Q -->|"la escribí yo"| N["gold_class = texto libre<br/>in_seed = false"]
+  Q -->|"no hay clase asignable"| X["gold_class = null<br/>in_seed = false"]
+
+  S --> R{"¿el matcher la tipó?"}
+  R -->|"sí"| HIT["acierto"]
+  R -->|"no"| FO["FALSO HUÉRFANO<br/>error del matcher"]
+  N --> GO["huérfano genuino<br/>alimenta B3"]
+  X --> NC["no cuenta"]
+
+  FO --> RATE["tasa de falsos huérfanos"]
+  HIT --> RATE
+  RATE --> GATE{"§12.1"}
+  GATE -->|"alta"| STOP["no seguir construyendo:<br/>arreglar el matcher primero"]
+  GATE -->|"aceptable"| GO2["seguir al paso 4"]
+
+  classDef bad fill:#fbdcdc,stroke:#c53030,color:#4d1414
+  classDef good fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
+  class FO,STOP bad
+  class HIT,GO2 good
+```
+
 Va guardando en `localStorage` del navegador; exportá antes de cerrar. El JSONL exportado
 valida los offsets contra el `markdown_hash`: si cambió el parser, se niega en vez de
 desalinear en silencio.
@@ -239,6 +377,14 @@ uv run ruff check .
 Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
 
 ## Limitaciones conocidas
+
+- **El corpus y la semilla no se corresponden.** Medido sobre los 495.213 caracteres de los 10
+  documentos parseados: `field note`, `informant`, `ethnograph`, `coding scheme`,
+  `thematic analysis`, `content analysis`, `grounded theory` y `theoretical framework` aparecen
+  **cero veces**. La semilla es de metodología cualitativa; el corpus son papers de política de
+  ciencia abierta, que hablan *sobre* investigación en vez de reportar estudios cualitativos.
+  Una tasa de falsos huérfanos medida sobre este par no sería mala: sería sin significado,
+  porque mediría el desajuste temático y no la calidad del matcher.
 
 - **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice §6.2.**
   Medido sobre 10 pares mención/clase inequívocos: 7/10 recall@1 contra etiquetas, 2/10 contra
