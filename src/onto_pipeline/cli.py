@@ -20,6 +20,7 @@ from . import (
     glosses,
     llm,
     structural,
+    typing_store,
     versioning,
 )
 from .chunking import chunk_document
@@ -396,6 +397,93 @@ def coref_cmd(
         for label, error in result.failures.items():
             console.print(f"  [red]{label}[/]: {error}")
     console.print(table)
+
+
+@app.command("match")
+def match_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    include_held_out: bool = IncludeHeldOutOption,
+) -> None:
+    """B2: type the mentions against an ontology version, then resolve entities (spec 6.2).
+
+    This is the pipeline's quality bottleneck, and it is uncalibrated: the thresholds it reads
+    have not been set from data. Treat the numbers as a first look, not as the no-go decision
+    of 12.1, which needs the gold annotations.
+    """
+    from .embeddings import CrossEncoderReranker, EncoderUnavailable, SentenceTransformerEncoder
+    from .matching import ASK, Matcher
+
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    versioning.install(conn)
+
+    row = conn.execute(
+        "SELECT id FROM versions WHERE id = COALESCE(?, id) ORDER BY created_at DESC LIMIT 1",
+        (version,),
+    ).fetchone()
+    if row is None:
+        raise typer.BadParameter("no ontology version; run normalize-seed first")
+    _, graph = versioning.load(conn, row["id"])
+
+    targets = typing_store.targets_from(graph, config.matching.match_against)
+    if not targets:
+        raise typer.BadParameter("the ontology version has no labelled classes")
+
+    ids = process_documents(conn)
+    if include_held_out:
+        ids += held_out_documents(conn)
+    rows = [mention for identifier in ids for mention in extraction.load(conn, identifier)]
+    if not rows:
+        raise typer.BadParameter("no mentions; run extract first")
+
+    try:
+        encoder = SentenceTransformerEncoder(config.matching.bi_encoder, config.matching.device)
+        reranker = (
+            CrossEncoderReranker(config.matching.cross_encoder, config.matching.device)
+            if config.matching.use_cross_encoder
+            else None
+        )
+    except EncoderUnavailable as exc:
+        raise typer.BadParameter(f"{exc}; uv sync --extra matching") from exc
+
+    matcher = Matcher(
+        encoder, reranker,
+        auto_merge_threshold=config.matching.auto_merge_threshold,
+        grey_zone_lower=config.matching.grey_zone_lower,
+        cross_language_always_grey=config.matching.cross_language_always_grey,
+        respect_declared_haskey=config.matching.respect_declared_haskey,
+    )
+    mentions = typing_store.mentions_from(rows)
+
+    with console.status(f"B2 · {len(mentions)} mentions against {len(targets)} classes"):
+        typings = matcher.type_mentions(mentions, targets)
+        split = typing_store.persist_typings(conn, row["id"], typings)
+        decisions = matcher.resolve(mentions)
+
+    entities = typing_store.entities_from(decisions)
+    unresolved = {
+        mention_id
+        for decision in decisions if decision.action == ASK
+        for mention_id in (decision.left, decision.right)
+    }
+    typing_store.persist_entities(conn, entities, unresolved)
+
+    table = Table("what", "count", "note")
+    table.add_row("mentions", str(split.total), f"against version {row['id']}")
+    table.add_row("typed automatically", str(split.typed), "")
+    table.add_row("grey zone", str(split.grey), "needs a decision from you")
+    table.add_row(
+        "orphans", str(split.orphan),
+        f"{split.orphan_rate:.0%} — false vs genuine needs the retention set (10.1)",
+    )
+    table.add_row("merge decisions", str(sum(1 for d in decisions if d.action == "merge")), "")
+    table.add_row("pairs to ask about", str(len(unresolved)), "possible_duplicate_unresolved")
+    console.print(table)
+    console.print(
+        "[yellow]uncalibrated[/]: the thresholds are the spec's defaults, not measured ones. "
+        "See Limitaciones in the README."
+    )
 
 
 @app.command("annotate")

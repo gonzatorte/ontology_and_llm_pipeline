@@ -24,7 +24,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | Chunking estructura-consciente | listo |
 | B1 extracción de candidatos | listo |
 | B1b correferencia intra-documento | listo |
-| B2 matching y resolución de entidades | listo, **sin calibrar** (ver Limitaciones) |
+| B2 matching y resolución de entidades | cableado, **sin calibrar** (ver Limitaciones) |
 | Conjunto de retención: hold-out, anotador, exportador | listo |
 | B2b puenteo por conocimiento del mundo | **no implementado** |
 | B3 inducción de clases | **no implementado** |
@@ -386,6 +386,11 @@ Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
   Una tasa de falsos huérfanos medida sobre este par no sería mala: sería sin significado,
   porque mediría el desajuste temático y no la calidad del matcher.
 
+- **Corrido sobre datos reales, B2 tipa mal.** De 1.725 menciones: 32 automáticas, 219 en zona
+  gris, 1.474 huérfanas (85%). Y las 32 automáticas son **todas** eco léxico — `question` 0.998,
+  `information` 0.998, `support` 0.993, `subject` 0.992 — el nombre de la clase apareciendo como
+  palabra corriente, ninguna una instanciación real. Con el par corpus/semilla desalineado ese
+  85% no es un veredicto sobre el matcher.
 - **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice §6.2.**
   Medido sobre 10 pares mención/clase inequívocos: 7/10 recall@1 contra etiquetas, 2/10 contra
   glosas, con dos generaciones independientes de glosas. Una mención es un sintagma corto y una
