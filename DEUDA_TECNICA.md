@@ -83,7 +83,48 @@ recomputar solo cuando el estado cambia.
 Bibliografía y referencias son ~20% de un paper y no producen menciones útiles. Un filtro
 determinista por tipo de sección cortaría ~20% de las llamadas de B1 sin perder nada.
 
-### 5. Medir si el prompt caching del proveedor se activa
+### 5. Footprint de memoria: representación primero, infraestructura después
+
+Todo vive en memoria: el grafo en rdflib (D17) y los vectores en un dict dentro del `Matcher`.
+La pregunta natural es si eso escala y si conviene mover cosas a almacenes externos —triplestore,
+base de vectores, Postgres—. **Medido, la respuesta corta es que a la escala declarada no hace
+falta, y que la mejora que sí rinde no es infraestructura sino representación.**
+
+Lo medido sobre el estado actual:
+
+| Qué | Ahora | Proyección |
+|---|---|---|
+| Grafo rdflib | 1.087 tripletas · 1,5 MB (1.386 B/tripleta) | 20k tripletas → **28 MB** · 200k → 277 MB |
+| Un vector como `list[float]` | **12,1 KB** | 1.000 documentos → **1,0 GB** |
+| El mismo en `numpy float32` | **1,5 KB** (8× menos) | 1.000 documentos → **0,13 GB** |
+
+Menciones medidas: 85 por documento. §12.2 estima que un ABox de 1.000 páginas da 5k–20k
+tripletas, así que a la escala del spec —100 documentos, 30–50 clases— el grafo son ~28 MB y
+los vectores ~0,1 GB. Nada de eso justifica un servicio aparte.
+
+**Lo que sí conviene hacer, y es barato:** el caché de vectores del `Matcher` guarda
+`dict[str, list[float]]`. En numpy `float32` ocupa 8× menos, sin dependencia nueva ni servicio
+nuevo — numpy ya está instalado con el extra `matching`. Es un cambio local que convierte 1 GB
+en 130 MB en el peor caso proyectado.
+
+**Cuándo sí cambiaría la respuesta.** El spec ya fijó los umbrales y conviene respetarlos en vez
+de anticiparse:
+
+- **Fuseki / triplestore** (§12.2): "reconsiderar cuando el ABox no entre en memoria". Con
+  1.386 B/tripleta eso son millones de tripletas, dos órdenes de magnitud más que lo previsto.
+- **Base de vectores**: el criterio análogo es cuando la búsqueda exhaustiva deje de servir.
+  Hoy son 34 clases objetivo; el blocking ya acota los pares de resolución de entidades y el
+  cálculo de similaridad se materializa por bloques de 512 filas, así que el pico no es n².
+  Una base de vectores con ANN paga recién cuando los objetivos sean decenas de miles.
+- **Embeddings de grafos de conocimiento** (D4, §12.2): explícitamente fuera de v1 hasta que el
+  grafo crezca uno o dos órdenes de magnitud.
+
+**Postgres es otro eje, no éste.** Migrar el store no baja el footprint: el grafo y los vectores
+siguen en el proceso. Solo ayudaría si además se mueve el *cómputo* al motor —por ejemplo
+pgvector resolviendo la búsqueda por similaridad del lado del servidor—, y eso recién rinde a
+escalas muy superiores a ésta. Para la discusión de motor de base ver el punto 1.
+
+### 6. Medir si el prompt caching del proveedor se activa
 
 El gateway reporta `prompt_tokens_details.cached_tokens` y los prompts ya tienen el prefijo
 estático adelante, que es la forma correcta para caching por prefijo. Nunca se midió si se
@@ -97,7 +138,7 @@ información gratis.
 Estas no son mejoras opcionales: son decisiones que hoy están apoyadas en muy poco y que
 condicionan todo lo que viene después.
 
-### 6. `matching.match_against` y `matching.use_cross_encoder`
+### 7. `matching.match_against` y `matching.use_cross_encoder`
 
 Ambas se decidieron sobre **10 pares armados a mano, midiendo solo recall**, y sobre un par
 corpus/semilla que después resultó estar temáticamente desalineado. La medición de recall no
@@ -108,12 +149,12 @@ ningún umbral lo filtra.
 Ninguna de las dos opciones está resuelta. Ver el plan en
 [`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md).
 
-### 7. Los umbrales 0.92 / 0.70
+### 8. Los umbrales 0.92 / 0.70
 
 Son los defaults del spec, nunca medidos. Y no son universales: dependen del encoder. Deberían
 ser **salida** de una calibración, no entrada escrita a mano.
 
-### 8. El par corpus/semilla
+### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
 Medido sobre 495.213 caracteres: `field note`, `informant`, `coding scheme`,
@@ -124,7 +165,7 @@ caso de aplicación válido, pero no sirve como instrumento de calibración.
 
 ## Alcance pendiente del spec
 
-### 9. Sesión interactiva
+### 10. Sesión interactiva
 
 El spec tiene cinco puntos donde decide el usuario —elegir rama (§6.6), zona gris del matcher
 (§6.2), propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas (§4.3)— y
@@ -132,7 +173,7 @@ ninguno tiene interfaz. La mitad del camino ya está: los hallazgos de A0 viven 
 `review_items` con estado y decisiones que sobreviven a re-correr. Falta lo mismo para la zona
 gris de B2 (219 menciones esperando) y una interfaz encima.
 
-### 10. Mundo abierto: lo que falta
+### 11. Mundo abierto: lo que falta
 
 - **Propiedades funcionales (§6.8)**: no implementado, y es donde el spec dice que la evidencia
   del ABox es inválida *en principio* bajo OWA. El riesgo que nombra es silencioso: una
@@ -145,18 +186,18 @@ gris de B2 (219 menciones esperando) y una interfaz encima.
   define el tipo negativo como "mundo abierto explícito". Mal precedente para quien escriba CQ
   nuevas.
 
-### 11. Ruta VLM
+### 12. Ruta VLM
 
 Páginas `scan`/`uncertain` quedan sin parsear, las figuras sin captioning y las fórmulas sin
 extraer. El pipeline lo registra en vez de fingir que las procesó.
 
-### 12. Tablas sin bordes
+### 13. Tablas sin bordes
 
 `find_tables` solo ve tablas con líneas; la estrategia por texto devuelve la página entera como
 tabla. El hueco se **mide** —columna "table gap"— pero no se cubre. La respuesta del spec es
 rutear esas páginas a MinerU.
 
-### 13. `language.py` está cableado a es/en
+### 14. `language.py` está cableado a es/en
 
 Los marcadores de palabras función están hardcodeados. Otro idioma son ~10 líneas más, o
 apoyarse en el `/Lang` declarado del PDF.
