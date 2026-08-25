@@ -50,6 +50,10 @@ class Chunking(BaseModel):
     max_chars: int = 6000
 
 
+class Extraction(BaseModel):
+    max_mention_words: int = 8
+
+
 class Seed(BaseModel):
     base_iri: str = "https://ontology.local/id/"
     label_divergence_threshold: float = 0.8
@@ -116,6 +120,7 @@ class Execution(BaseModel):
     max_retries: int = 3
     backoff_base_s: float = 2
     stage_failure_rate_abort: float = 0.10
+    request_timeout_s: float = 300
 
 
 class Config(BaseModel):
@@ -126,6 +131,7 @@ class Config(BaseModel):
     parser: Parser = Parser()
     seed: Seed = Seed()
     chunking: Chunking = Chunking()
+    extraction: Extraction = Extraction()
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()

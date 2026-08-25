@@ -104,7 +104,7 @@ class OpenAICompatibleModel:
         )
 
 
-def build(config: Llm) -> ChatModel:
+def build(config: Llm, *, timeout_s: float = 300.0) -> ChatModel:
     """Replaces `llm.build`'s placeholder once a provider is configured."""
     from .llm import NoProvider
 
@@ -116,6 +116,7 @@ def build(config: Llm) -> ChatModel:
             api_key_env=config.api_key_env or None,
             models=dict(config.models),
         ),
+        timeout_s=timeout_s,
         # Some gateways ask for a stable session id per conversation so they can route and
         # cache prompts; one per process is the honest granularity for a batch run.
         session=f"onto-pipeline-{uuid.uuid4().hex[:16]}",

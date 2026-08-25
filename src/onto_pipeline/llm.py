@@ -71,12 +71,12 @@ class ScriptedModel:
         return Completion(text=self.responses.pop(0), in_tokens=len(prompt), out_tokens=32)
 
 
-def build(config: Llm) -> ChatModel:
+def build(config: Llm, *, timeout_s: float = 300.0) -> ChatModel:
     if config.provider == "none":
         return NoProvider()
     from .providers import build as build_provider
 
-    return build_provider(config)
+    return build_provider(config, timeout_s=timeout_s)
 
 
 def settings(config: Llm, stage: str) -> StageModel:

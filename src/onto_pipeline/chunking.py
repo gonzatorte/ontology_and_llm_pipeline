@@ -36,10 +36,21 @@ class Chunk:
     text: str = ""
     context_text: str = ""
     pages: list[int] = field(default_factory=list)
+    # (offset within this chunk, block id, that block's start in the Markdown). A chunk is not
+    # a contiguous slice of the Markdown — boilerplate and unparsed blocks are skipped — so an
+    # offset can only be translated through the block it falls in.
+    layout: list[tuple[int, str, int]] = field(default_factory=list)
 
     @property
     def id(self) -> str:
         return f"{self.document_id}:c{self.ordinal}"
+
+    def absolute_offset(self, chunk_offset: int) -> tuple[str, int]:
+        """Chunk offset -> (block id, offset into the document Markdown)."""
+        for start, block_id, block_start in reversed(self.layout):
+            if chunk_offset >= start:
+                return block_id, block_start + (chunk_offset - start)
+        raise ValueError(f"offset {chunk_offset} is before the start of chunk {self.id}")
 
 
 def chunk_document(blocks: list, target_chars: int, max_chars: int) -> list[Chunk]:
@@ -120,6 +131,10 @@ def _build(blocks: list, ordinal: int, references: dict[str, list]) -> Chunk:
         for paragraph in references.get(block.id, [])
         if paragraph.id not in own
     ]
+    layout, cursor = [], 0
+    for block in blocks:
+        layout.append((cursor, block.id, block.span_start))
+        cursor += len(block.render()) + 2      # the "\n\n" joiner
     return Chunk(
         document_id=blocks[0].document_id,
         ordinal=ordinal,
@@ -128,4 +143,5 @@ def _build(blocks: list, ordinal: int, references: dict[str, list]) -> Chunk:
         text="\n\n".join(block.render() for block in blocks),
         context_text="\n\n".join(paragraph.text for paragraph in context),
         pages=sorted({block.page for block in blocks}),
+        layout=layout,
     )

@@ -11,7 +11,7 @@ from rdflib import Graph
 from rich.console import Console
 from rich.table import Table
 
-from . import annotate, annotation, cq, glosses, llm, structural, versioning
+from . import annotate, annotation, cq, extraction, glosses, llm, structural, versioning
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
@@ -44,6 +44,9 @@ IterationOption = typer.Option(0, "--iteration", "-i")
 VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
 EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provider credential.")
 ReleaseOption = typer.Option(False, "--release", help="Return the documents to the process.")
+IncludeHeldOutOption = typer.Option(
+    False, "--include-held-out", help="Also process the retention set. Normally you do not."
+)
 
 
 @app.callback()
@@ -258,6 +261,75 @@ def status(config_path: Path = ConfigOption) -> None:
     ).fetchall()
     for row in failures:
         console.print(f"[red]{row['key'][:12]}[/]: {row['error']}")
+
+
+@app.command("extract")
+def extract_cmd(
+    config_path: Path = ConfigOption,
+    doc_id: str | None = DocIdOption,
+    include_held_out: bool = IncludeHeldOutOption,
+) -> None:
+    """B1: extract candidate mentions from every chunk (spec 6.1).
+
+    Held-out documents are skipped unless asked for: they are the retention set, and running
+    the process over them would measure the pipeline against its own input.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, extraction.STAGE)
+    ledger = Ledger(conn, config.execution)
+
+    if doc_id:
+        ids = [doc_id]
+    else:
+        ids = process_documents(conn)
+        if include_held_out:
+            ids += held_out_documents(conn)
+    if not ids:
+        raise typer.BadParameter("nothing to extract from; ingest first")
+
+    table = Table(
+        "document", "chunks", "mentions", "rejected", "unlocatable", "in tok", "out tok"
+    )
+    for identifier in ids:
+        blocks = {block.id: block for block in load_block_objects(conn, identifier)}
+        chunks = chunk_document(
+            list(blocks.values()), config.chunking.target_chars, config.chunking.max_chars
+        )
+        if not chunks:
+            continue
+
+        with console.status(f"B1 · {identifier[:40]} · {len(chunks)} chunks"):
+            result = llm.run(
+                ledger, model, extraction.PROMPT, stage,
+                [(chunk.id, extraction.payload(chunk)) for chunk in chunks],
+                extraction.parse,
+            )
+
+        mentions, unlocatable, rejected = [], 0, 0
+        for chunk in chunks:
+            candidates = [
+                extraction.Candidate(item["text"], item["kind"])
+                for item in result.outputs.get(chunk.id, [])
+            ]
+            located = extraction.locate(
+                chunk, candidates, blocks,
+                max_words=config.extraction.max_mention_words,
+            )
+            mentions.extend(located.mentions)
+            unlocatable += len(located.unlocatable)
+            rejected += len(located.rejected)
+        extraction.persist(conn, identifier, mentions)
+
+        table.add_row(
+            identifier[:38], str(len(chunks)), str(len(mentions)), str(rejected),
+            f"[red]{unlocatable}[/]" if unlocatable else "0",
+            str(result.in_tokens), str(result.out_tokens),
+        )
+        for chunk_id, error in list(result.failures.items())[:3]:
+            console.print(f"  [red]{chunk_id}[/]: {error}")
+    console.print(table)
 
 
 @app.command("annotate")
