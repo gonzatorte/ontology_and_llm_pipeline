@@ -892,6 +892,7 @@ name = "onto-pipeline"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "pydantic" },
     { name = "pymupdf" },
     { name = "pyyaml" },
@@ -914,6 +915,7 @@ reasoning = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jpype1", marker = "extra == 'reasoning'", specifier = ">=1.7.1" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "pymupdf", specifier = ">=1.24.0" },

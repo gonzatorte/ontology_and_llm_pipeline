@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import annotation, cq, structural, versioning
+from . import annotation, cq, glosses, llm, structural, versioning
 from .chunking import chunk_document
 from .config import Config
 from .db import connect
@@ -22,6 +22,7 @@ from .ingest import (
     load_document,
     markdown_path,
 )
+from .providers import load_env_file
 from .report import build_report
 from .seed import gloss_contexts, normalize_seed
 from .telemetry import Ledger
@@ -36,6 +37,15 @@ DocIdOption = typer.Option(None, "--doc-id", help="One document; default all.")
 PageOption = typer.Option(None, "--page", "-p")
 IterationOption = typer.Option(0, "--iteration", "-i")
 VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
+EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provider credential.")
+
+
+@app.callback()
+def main(env_file: Path | None = EnvFileOption) -> None:
+    """Env files are explicit, never auto-discovered."""
+    if env_file is not None:
+        names = load_env_file(env_file)
+        console.print(f"[dim]loaded {', '.join(names)} from {env_file}[/]")
 
 
 @app.command("ingest")
@@ -165,6 +175,51 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
             f"[yellow]A0.4 skipped[/]: {len(contexts)} glosses need generation and "
             "llm.provider is 'none'. Set a provider in the config to run it."
         )
+        return
+
+    _generate_glosses(config, conn, seed, contexts, target)
+
+
+def _generate_glosses(config, conn, seed, contexts, target) -> None:
+    """A0.4. The gloss is what B2 matches against, so this is what closes the false-orphan
+    gap the matcher shows while every class still has only a label."""
+    model = llm.build(config.llm)
+    stage = llm.settings(config.llm, glosses.STAGE)
+    ledger = Ledger(conn, config.execution)
+
+    with console.status(f"A0.4: {len(contexts)} glosses at temperature {stage.temperature}"):
+        result = llm.run(
+            ledger, model, glosses.PROMPT, stage,
+            [(context.iri, glosses.payload(context)) for context in contexts],
+            glosses.parse,
+        )
+
+    written = [
+        glosses.Gloss(iri=iri, en=value["en"], es=value["es"])
+        for iri, value in result.outputs.items()
+    ]
+    glosses.write(seed.graph, written)
+    seed.graph.serialize(target, format="turtle")
+
+    console.print(
+        f"[green]A0.4[/]: {len(written)} glosses ({result.executed} generated, "
+        f"{result.cached} cached, {len(result.failures)} failed) · "
+        f"{result.in_tokens} in / {result.out_tokens} out tokens"
+    )
+    for iri, error in list(result.failures.items())[:5]:
+        console.print(f"  [red]{iri}[/]: {error}")
+
+    # A gloss changes the stored artifact but not the logical state, so the new version keeps
+    # its parent's hash: a re-glossing is not a new state to reason about (spec 6.8), while
+    # the gloss itself is still versioned and travels in the DAG (spec 4.3).
+    parent = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
+    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    version = versioning.commit(
+        conn, seed.graph, version_id=next_id,
+        parent_id=parent.id if parent else None,
+        note="glosses (annotation-only; same logical state)",
+    )
+    console.print(f"[green]committed[/] {version.id} (parent {parent.id if parent else '-'})")
 
 
 @app.command()

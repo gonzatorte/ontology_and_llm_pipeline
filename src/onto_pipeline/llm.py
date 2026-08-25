@@ -74,7 +74,9 @@ class ScriptedModel:
 def build(config: Llm) -> ChatModel:
     if config.provider == "none":
         return NoProvider()
-    raise ProviderNotConfigured(f"unknown llm provider {config.provider!r}")
+    from .providers import build as build_provider
+
+    return build_provider(config)
 
 
 def settings(config: Llm, stage: str) -> StageModel:

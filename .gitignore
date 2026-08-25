@@ -6,3 +6,7 @@ __pycache__/
 .ruff_cache/
 lib/
 .tools/
+
+# Archivos de entorno: nunca se commitean (contienen credenciales)
+.env
+*.env

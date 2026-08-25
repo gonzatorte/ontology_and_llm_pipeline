@@ -95,6 +95,9 @@ class StageModel(BaseModel):
 
 class Llm(BaseModel):
     provider: str = "none"
+    base_url: str = ""
+    api_key_env: str = ""          # the variable name; never the key itself
+    models: dict[str, str] = Field(default_factory=dict)   # tier -> model id
     A0_2_labels: StageModel = StageModel(tier="small", temperature=0.0)
     A0_4_glosses: StageModel = StageModel(tier="medium", temperature=0.3)
     A3_cq_generation: StageModel = StageModel(tier="large", temperature=0.3)

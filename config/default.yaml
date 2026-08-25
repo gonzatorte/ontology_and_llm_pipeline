@@ -84,7 +84,16 @@ branching:
 
 # ─── Models and temperature (per stage) ──────────────────
 llm:
-  provider: none          # none | anthropic | ollama  (deferred, spec D13 allows API)
+  provider: openai_compatible
+  # OpenCode Go:  https://opencode.ai/zen/go/v1   (OPENCODE_API_KEY)
+  # Ollama local: http://127.0.0.1:11434/v1       (no key)
+  base_url: https://opencode.ai/zen/go/v1
+  api_key_env: OPENCODE_API_KEY   # the NAME of the variable. The key itself lives in
+                                  # opencode.env, which is gitignored; pass --env-file.
+  models:                 # tier -> model id. B1 drives the volume (~1.3k calls per pass over
+    small:  glm-5.3-flash # the corpus), B4 and B6 drive the quality.
+    medium: deepseek-v4-flash
+    large:  glm-5.2
   A0_2_labels:        {tier: small,  temperature: 0.0}
   A0_4_glosses:       {tier: medium, temperature: 0.3}
   A3_cq_generation:   {tier: large,  temperature: 0.3}
