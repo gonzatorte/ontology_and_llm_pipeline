@@ -104,10 +104,16 @@ llm:
   base_url: https://opencode.ai/zen/go/v1
   api_key_env: OPENCODE_API_KEY   # the NAME of the variable. The key itself lives in
                                   # opencode.env, which is gitignored; pass --env-file.
-  models:                 # tier -> model id. B1 drives the volume (~1.3k calls per pass over
-    small:  glm-5.3-flash # the corpus), B4 and B6 drive the quality.
+  models:                 # tier -> model id
+    small:  glm-5.3-flash
     medium: deepseek-v4-flash
     large:  glm-5.2
+  # MEASURED COST, and it is not what input tokens suggest. Every model on this gateway is a
+  # reasoning model, and the reasoning is billed as output: B1 over one 11-page paper spent
+  # 34,549 in and 505,443 out — a ratio of 14.6x — which is $0.34 for that document and about
+  # $34 for a pass over 100. An earlier estimate of $0.23 counted input only and was wrong by
+  # two orders of magnitude. Extraction is not a reasoning task; the small tier is ~3x cheaper
+  # and worth trying for B1 before paying this.
   A0_2_labels:        {tier: small,  temperature: 0.0}
   A0_4_glosses:       {tier: medium, temperature: 0.3}
   A3_cq_generation:   {tier: large,  temperature: 0.3}
