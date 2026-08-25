@@ -28,7 +28,12 @@ STAGE = "A1_A2_ingest"
 
 
 def discover(corpus_root: Path) -> list[Path]:
-    return sorted(corpus_root.rglob("*.pdf"))
+    """Case-insensitive: `.PDF` is common enough in a real corpus that matching only `.pdf`
+    drops documents without saying so."""
+    return sorted(
+        path for path in corpus_root.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".pdf"
+    )
 
 
 def ingest(

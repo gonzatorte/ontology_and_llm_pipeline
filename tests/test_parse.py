@@ -97,3 +97,16 @@ def test_line_break_hyphen_is_dropped_but_a_lexical_one_is_kept(tmp_path, config
     assert "Economic" in markdown
     assert "university-based" in markdown
     assert "universitybased" not in markdown
+
+
+def test_discovery_is_case_insensitive(tmp_path, config):
+    """A real corpus contains `.PDF`; matching only `.pdf` drops documents silently."""
+    from onto_pipeline.ingest import discover
+
+    corpus = tmp_path / "corpus"
+    (corpus / "a").mkdir(parents=True)
+    (corpus / "a" / "lower.pdf").write_bytes(b"%PDF-1.4")
+    (corpus / "a" / "UPPER.PDF").write_bytes(b"%PDF-1.4")
+    (corpus / "a" / "notes.txt").write_bytes(b"x")
+
+    assert [p.name for p in discover(corpus)] == ["UPPER.PDF", "lower.pdf"]
