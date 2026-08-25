@@ -452,6 +452,10 @@ uv run ruff check .
 
 Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
 
+Las mejoras a futuro y las decisiones tomadas con evidencia insuficiente están en
+[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), que además lleva la nota de coordinación entre las
+conversaciones que trabajan sobre este repo.
+
 ## Limitaciones conocidas
 
 - **El corpus y la semilla no se corresponden.** Medido sobre los 495.213 caracteres de los 10

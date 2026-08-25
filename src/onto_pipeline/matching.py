@@ -241,11 +241,10 @@ class Matcher:
         synonyms = synonyms or {}
         keys = keys or {}
         inferred_class = inferred_class or {}
-        decisions: list[Decision] = []
-
-        for left, right in self.candidate_pairs(mentions, synonyms=synonyms):
-            decisions.append(self._decide(left, right, synonyms, keys, inferred_class))
-        return decisions
+        return [
+            self._decide(left, right, synonyms, keys, inferred_class)
+            for left, right in self.candidate_pairs(mentions, synonyms=synonyms)
+        ]
 
     def candidate_pairs(
         self, mentions: Sequence[Mention], *, synonyms: dict[str, set[str]] | None = None
