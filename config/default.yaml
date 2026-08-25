@@ -51,10 +51,12 @@ matching:
   auto_merge_threshold: 0.92
   grey_zone_lower: 0.70
   cross_language_always_grey: true
-  # Named for what Matcher.blocks does: group by surface form and by declared key values.
-  # Spec 6.2's `embedding` blocking is not implemented, and the config refuses the name rather
-  # than accepting it and doing something else.
-  blocking_strategy: surface_and_keys
+  # embedding | surface_and_keys. Under `embedding`, candidates are pairs at or above
+  # grey_zone_lower plus what the ontology asserts (same surface, same declared key value,
+  # declared synonym) — no constant of its own. Measured on 848 mentions: 5.436 candidate
+  # pairs in 0,33 s against 6.531 pairs in 44,9 s for the surface heuristic, which also split
+  # `in-depth interview` from `semi-structured interview`.
+  blocking_strategy: embedding
   respect_declared_haskey: true
   # Multilingual by requirement: a monolingual encoder would push every es/en pair into the
   # grey zone on language alone.

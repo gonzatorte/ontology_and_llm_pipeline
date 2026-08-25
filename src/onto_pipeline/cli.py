@@ -66,6 +66,9 @@ StatusOption = typer.Option(
     "open", "--status", help="open | accepted | rejected | superseded | any."
 )
 JsonOption = typer.Option(False, "--json", help="Machine-readable output.")
+InferOption = typer.Option(
+    True, "--infer/--no-infer", help="Query the entailed graph, not only the asserted one."
+)
 CommentOption = typer.Option("", "--comment", help="Why, in your words.")
 IncludeHeldOutOption = typer.Option(
     False, "--include-held-out", help="Also process the retention set. Normally you do not."
@@ -477,6 +480,7 @@ def match_cmd(
         grey_zone_lower=config.matching.grey_zone_lower,
         cross_language_always_grey=config.matching.cross_language_always_grey,
         respect_declared_haskey=config.matching.respect_declared_haskey,
+        blocking_strategy=config.matching.blocking_strategy,
     )
     mentions = typing_store.mentions_from(rows)
 
@@ -915,8 +919,13 @@ def cq_eval(
     config_path: Path = ConfigOption,
     iteration: int = IterationOption,
     version: str | None = VersionOption,
+    infer: bool = InferOption,
 ) -> None:
-    """Run every accepted CQ against an ontology version and record the pass rate."""
+    """Run every accepted CQ against an ontology version and record the pass rate.
+
+    Queries the entailed graph by default: an inferential question asks what the reasoner
+    contributes, and SPARQL over the asserted triples alone cannot see it.
+    """
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     questions = cq.load(conn)
@@ -926,7 +935,35 @@ def cq_eval(
     versioning.install(conn)
     version_id = _resolve_version(conn, version)
     _, graph = versioning.load(conn, version_id)
-    console.print(f"evaluating against version [bold]{version_id}[/]")
+
+    # SPARQL reads triples, and an entailment is not a triple until something writes it down.
+    # The inferential type is a mandatory quota in spec 4.4 whose stated point is that the
+    # reasoner contributes; over the asserted graph alone such a question can never pass.
+    asserted = len(graph)
+    if infer:
+        from .reasoning import InconsistentOntology, Reasoners, ReasonerUnavailable
+
+        try:
+            reasoners = Reasoners(
+                config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+            )
+            graph = reasoners.inferred_graph(graph)
+            console.print(
+                f"version [bold]{version_id}[/] · {asserted} asserted triples, "
+                f"{len(graph)} with entailments"
+            )
+        except ReasonerUnavailable as exc:
+            console.print(
+                f"[yellow]reasoning unavailable[/] ({exc}). Inferential questions will "
+                "under-report; --no-infer silences this."
+            )
+        except InconsistentOntology as exc:
+            raise typer.BadParameter(str(exc)) from exc
+    else:
+        console.print(
+            f"version [bold]{version_id}[/] · asserted triples only, "
+            "so inferential questions will under-report"
+        )
 
     evaluation = cq.evaluate(graph, questions, iteration=iteration)
     cq.record(conn, evaluation)

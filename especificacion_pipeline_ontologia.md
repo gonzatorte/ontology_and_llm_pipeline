@@ -844,7 +844,7 @@ matching:
   auto_merge_threshold: 0.92
   grey_zone_lower: 0.70
   cross_language_always_grey: true
-  blocking_strategy: surface_and_keys   # embedding: diseñado, sin implementar
+  blocking_strategy: embedding          # embedding | surface_and_keys
   respect_declared_haskey: true
 
 # ─── Iteración ───────────────────────────────────────────

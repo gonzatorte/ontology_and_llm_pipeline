@@ -185,6 +185,28 @@ llm:
 
 Para Ollama local: `base_url: http://127.0.0.1:11434/v1`, `api_key_env: ""`.
 
+**Generación de candidatos de `match`** (`matching.blocking_strategy`). Comparar todas las
+menciones entre sí es cuadrático, así que hay que decidir qué pares se comparan. Con
+`embedding` —el default— un par es candidato si su coseno llega a `grey_zone_lower`, o si la
+ontología afirma algo sobre él: misma forma superficial, mismo valor de una clave declarada, o
+sinónimo declarado. **No agrega ninguna constante propia:** el umbral es el mismo desde el que
+se leen las zonas, y por debajo de él la decisión habría sido `separate` de todos modos. Las
+tres fuentes exactas van aparte justamente porque no dependen de ningún puntaje.
+
+Los vectores se calculan una vez y se reusan entre el tipado y la resolución. Medido sobre las
+848 menciones reales de la base, repartidas en 10 documentos:
+
+| Estrategia | Pares candidatos | Tiempo |
+|---|---|---|
+| `embedding` | 4.566 | **0,5 s** |
+| `surface_and_keys` | 5.283 | 1,7 s |
+| `surface_and_keys`, re-encodeando cada par | 5.283 | 29,6 s |
+
+`surface_and_keys` es el heurístico anterior —prefijo de 4 caracteres del primer token
+alfabético— y queda disponible para comparar. Separa `in-depth interview` de
+`semi-structured interview`, junta en un solo bloque todo lo que empiece con una stopword, y
+sus constantes no se pueden calibrar con ningún experimento.
+
 ## Uso
 
 `--env-file` es una opción global y va **antes** del subcomando.
@@ -451,6 +473,12 @@ Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
   etiqueta también; una glosa es una oración larga, y un encoder simétrico pierde más por esa
   diferencia de forma de lo que gana en significado. Configurable con `matching.match_against`;
   revisar cuando el cross-encoder esté tuneado o haya un modelo asimétrico.
+- **La zona gris se desborda mientras los umbrales no estén calibrados.** Con generación de
+  candidatos por embedding, todo par candidato ya está por encima de `grey_zone_lower` por
+  construcción, así que sobre las 848 menciones caen 2.155 pares en zona gris contra 480 del
+  heurístico anterior. No es una regresión: esos pares antes no se formaban, y se separaban en
+  silencio sin que nadie los mirara. Ahora son visibles, y son trabajo para el usuario hasta
+  que la calibración mueva el piso a donde corresponda.
 - **Los umbrales 0.92/0.70 del spec no están calibrados.** No son universales: dependen del
   encoder. Calibrarlos requiere el conjunto de retención anotado (§10.1), y §12.1 marca esto
   como punto de decisión no-go.

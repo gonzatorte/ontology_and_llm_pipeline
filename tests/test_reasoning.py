@@ -123,3 +123,48 @@ def test_an_undeclared_annotation_property_leaves_owl_dl(reasoners):
     report = reasoners.profile(reasoners.load(graph(undeclared)))
     assert report.violations["OWL2_DL"] > 0
     assert report.detected == "OWL2_FULL"
+
+
+ENTAILED = """
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix : <http://example.org/onto#> .
+:Technique a owl:Class .
+:Interview a owl:Class ; rdfs:subClassOf :Technique .
+:i1 a owl:NamedIndividual, :Interview .
+"""
+
+
+def test_an_entailment_is_not_a_triple_until_it_is_written_down(reasoners):
+    """Why the inferential CQ type could never pass: SPARQL reads triples, and "i1 is a
+    Technique" is entailed but not asserted (spec 4.4)."""
+    from onto_pipeline import cq
+
+    asserted = graph(ENTAILED)
+    question = cq.CompetencyQuestion(
+        id="cq_inf", question="is i1 a Technique?",
+        sparql="SELECT ?x WHERE { ?x a <http://example.org/onto#Technique> }",
+    )
+    assert cq.evaluate(asserted, [question]).failed == ["cq_inf"]
+
+    inferred = reasoners.inferred_graph(asserted)
+    assert cq.evaluate(inferred, [question]).passed == ["cq_inf"]
+    assert len(inferred) > len(asserted)
+
+
+def test_materializing_keeps_what_was_already_asserted(reasoners):
+    asserted = graph(ENTAILED)
+    inferred = reasoners.inferred_graph(asserted)
+    assert set(asserted) <= set(inferred)
+
+
+def test_an_inconsistent_ontology_is_refused_rather_than_materialized(reasoners):
+    """It entails everything, so the materialized graph would be enormous and say nothing."""
+    from onto_pipeline.reasoning import InconsistentOntology
+
+    inconsistent = graph(ENTAILED + """
+    :Subject a owl:Class ; owl:disjointWith :Technique .
+    :i1 a :Subject .
+    """)
+    with pytest.raises(InconsistentOntology, match="inconsistent"):
+        reasoners.inferred_graph(inconsistent)

@@ -43,6 +43,10 @@ class ReasonerUnavailable(RuntimeError):
     """The JVM or the OWL API jars are missing. `scripts/fetch-jars.sh` installs them."""
 
 
+class InconsistentOntology(RuntimeError):
+    """Everything is entailed, so materializing the inferences says nothing."""
+
+
 @dataclass
 class ProfileReport:
     """A0.0. Two uses: routing the reasoner (outside EL, ELK stops being a useful filter) and
@@ -222,6 +226,62 @@ class Reasoners:
                 iri: self.justify(ontology, iri) for iri in unsatisfiable
             }
         return result
+
+    def inferred_graph(self, graph: Graph) -> Graph:
+        """Asserted triples plus what HermiT entails from them.
+
+        SPARQL reads triples, and an entailment is not a triple until something writes it
+        down. Without this, a competency question of the inferential type — a mandatory quota
+        in spec 4.4, whose stated point is "que el razonador aporte" — can never pass: ask
+        whether an Interview is a Technique and the asserted graph says no while the reasoner
+        says yes.
+
+        Refuses on an inconsistent ontology, where everything is entailed and the materialized
+        graph would be both enormous and meaningless.
+        """
+        from org.semanticweb.HermiT import ReasonerFactory
+        from org.semanticweb.owlapi.formats import TurtleDocumentFormat
+        from org.semanticweb.owlapi.io import StringDocumentTarget
+        from org.semanticweb.owlapi.util import (
+            InferredClassAssertionAxiomGenerator,
+            InferredEquivalentClassAxiomGenerator,
+            InferredOntologyGenerator,
+            InferredPropertyAssertionGenerator,
+            InferredSubClassAxiomGenerator,
+        )
+
+        ontology = self.load(graph)
+        reasoner = ReasonerFactory().createReasoner(ontology, self._hermit_configuration())
+        try:
+            if not reasoner.isConsistent():
+                raise InconsistentOntology(
+                    "the ontology is inconsistent, so it entails everything; "
+                    "run `validate` and fix that before asking it questions"
+                )
+            from java.util import ArrayList
+
+            generators = ArrayList()
+            for generator in (
+                InferredClassAssertionAxiomGenerator(),
+                InferredSubClassAxiomGenerator(),
+                InferredEquivalentClassAxiomGenerator(),
+                InferredPropertyAssertionGenerator(),
+            ):
+                generators.add(generator)
+            target = self._manager.createOntology()
+            InferredOntologyGenerator(reasoner, generators).fillOntology(
+                self._manager.getOWLDataFactory(), target
+            )
+            document = StringDocumentTarget()
+            self._manager.saveOntology(target, TurtleDocumentFormat(), document)
+        finally:
+            reasoner.dispose()
+
+        materialized = Graph()
+        for triple in graph:
+            materialized.add(triple)
+        materialized.parse(data=str(document.toString()), format="turtle")
+        return materialized
 
     def justify(self, ontology, class_iri: str, limit: int = 3) -> list[list[str]]:
         """Minimal axiom sets that make a class unsatisfiable — Reiter's hitting-set tree over

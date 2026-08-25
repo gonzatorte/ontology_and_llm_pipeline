@@ -59,15 +59,15 @@ class Seed(BaseModel):
     label_divergence_threshold: float = 0.8
 
 
-# What `Matcher.blocks` actually implements. `embedding` (spec 6.2) is not among them.
-BLOCKING_STRATEGIES = frozenset({"surface_and_keys"})
+# What candidate generation implements. Both are real; `embedding` is spec 6.2's.
+BLOCKING_STRATEGIES = frozenset({"embedding", "surface_and_keys"})
 
 
 class Matching(BaseModel):
     auto_merge_threshold: float = 0.92
     grey_zone_lower: float = 0.70
     cross_language_always_grey: bool = True
-    blocking_strategy: str = "surface_and_keys"
+    blocking_strategy: str = "embedding"
     respect_declared_haskey: bool = True
     bi_encoder: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     cross_encoder: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
@@ -78,18 +78,16 @@ class Matching(BaseModel):
     @field_validator("blocking_strategy")
     @classmethod
     def _implemented_blocking(cls, value: str) -> str:
-        """Named for what it does, and it refuses what it does not do.
+        """Each value names what candidate generation actually does, and nothing else passes.
 
-        The spec's `embedding` blocking is not built: `Matcher.blocks` groups by surface form
-        and by declared key values. Accepting the name silently would be worse than not
-        offering it — the thresholds are about to be calibrated, and a pair the blocking never
-        formed is indistinguishable, in the numbers, from one the encoder scored too low.
+        The thresholds are calibrated against these numbers, and a pair that was never formed
+        is indistinguishable, in the metrics, from one the encoder scored too low — so a
+        strategy that does not exist must not be accepted silently.
         """
         if value not in BLOCKING_STRATEGIES:
             raise ValueError(
                 f"blocking_strategy {value!r} is not implemented; "
-                f"available: {', '.join(sorted(BLOCKING_STRATEGIES))}. "
-                "'embedding' is spec 6.2's blocking and has no implementation yet."
+                f"available: {', '.join(sorted(BLOCKING_STRATEGIES))}."
             )
         return value
 

@@ -162,22 +162,56 @@ def test_intra_document_pairs_are_not_compared(matcher):
     ]) == []
 
 
-def test_a_declared_key_also_outranks_the_blocking(matcher):
-    """Blocking on surface form alone would silently overrule the key: differently written
-    mentions of one entity never meet, so the key that identifies them is never asked."""
-    blocks = matcher.blocks([
+def compared(matcher, mentions, **kwargs):
+    return sorted(
+        sorted((left.id, right.id)) for left, right in matcher.candidate_pairs(mentions, **kwargs)
+    )
+
+
+def test_a_declared_key_also_outranks_candidate_generation(matcher):
+    """A key that identifies two differently written mentions is never asked if the two never
+    meet, so the key has to reach candidate generation, not only the decision."""
+    pairs = compared(matcher, [
         mention("m1", "Genome Canada", "d1", key_values={"p:regNo": "A-1"}),
         mention("m2", "Genome Cda.", "d2", key_values={"p:regNo": "A-1"}),
     ])
-    assert any(sorted(m.id for m in block) == ["m1", "m2"] for block in blocks)
+    assert pairs == [["m1", "m2"]], "no encoder puts these two together"
 
 
-def test_blocking_keeps_unrelated_mentions_from_being_compared(matcher):
-    blocks = matcher.blocks([
+def test_unrelated_mentions_are_not_compared(matcher):
+    pairs = compared(matcher, [
         mention("m1", "Interview", "d1"), mention("m2", "Interviewing", "d2"),
         mention("m3", "Commercialization", "d3"),
     ])
-    assert [sorted(m.id for m in block) for block in blocks] == [["m1", "m2"]]
+    assert pairs == [["m1", "m2"]]
+
+
+def test_the_same_surface_is_a_candidate_without_consulting_the_encoder(matcher):
+    """`identical_proper_name` decides on exact text; its pairs must not depend on a score."""
+    pairs = compared(matcher, [
+        mention("m1", "Genome Canada", "d1"), mention("m2", "Genome Canada", "d2"),
+    ])
+    assert pairs == [["m1", "m2"]], "the stand-in encoder scores these at zero"
+
+
+def test_a_declared_synonym_reaches_candidate_generation(matcher):
+    """`GT` and `grounded theory` are the same concept by assertion and would not survive a
+    cosine cut."""
+    pairs = compared(
+        matcher,
+        [mention("m1", "GT", "d1"), mention("m2", "grounded theory", "d2")],
+        synonyms={"gt": {"grounded theory"}, "grounded theory": {"gt"}},
+    )
+    assert pairs == [["m1", "m2"]]
+
+
+def test_the_surface_strategy_stays_available_and_blocks_as_it_did():
+    matcher = Matcher(KeywordEncoder(), blocking_strategy=matching.SURFACE_AND_KEYS)
+    pairs = compared(matcher, [
+        mention("m1", "in-depth interview", "d1"),
+        mention("m2", "semi-structured interview", "d2"),
+    ])
+    assert pairs == [], "the heuristic this replaces splits these two"
 
 
 def test_grey_zone_pairs_become_unresolved_duplicates(matcher):
@@ -221,15 +255,15 @@ def test_a_target_with_no_gloss_falls_back_to_the_label_whatever_the_setting():
 
 
 def test_the_config_refuses_a_blocking_strategy_that_is_not_built():
-    """The thresholds are calibrated against these numbers: a pair the blocking never formed
-    must not be silently indistinguishable from one the encoder scored too low."""
+    """The thresholds are calibrated against these numbers: a pair that was never formed must
+    not be silently indistinguishable from one the encoder scored too low."""
     from pydantic import ValidationError
 
     from onto_pipeline.config import Matching
 
-    assert Matching().blocking_strategy == "surface_and_keys"
+    assert Matching().blocking_strategy == matching.EMBEDDING
     with pytest.raises(ValidationError, match="not implemented"):
-        Matching(blocking_strategy="embedding")
+        Matching(blocking_strategy="fuzzy")
 
 
 def test_declared_synonyms_are_indexed_in_both_directions():

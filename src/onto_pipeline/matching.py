@@ -44,6 +44,17 @@ MERGE = "merge"
 ASK = "ask"
 SEPARATE = "separate"
 
+SURFACE_AND_KEYS = "surface_and_keys"
+EMBEDDING = "embedding"
+
+# The similarity matrix is materialized in row chunks, so peak memory is chunk x n floats
+# rather than n squared.
+_CHUNK = 512
+
+
+class NumpyUnavailable(RuntimeError):
+    """`blocking_strategy: embedding` needs numpy: `uv sync --extra matching`."""
+
 _GENERIC_RE = re.compile(r"^(the|this|that|el|la|los|las|un|una|est[ae])\b", re.IGNORECASE)
 
 
@@ -144,6 +155,7 @@ class Matcher:
         grey_zone_lower: float = 0.70,
         cross_language_always_grey: bool = True,
         respect_declared_haskey: bool = True,
+        blocking_strategy: str = EMBEDDING,
     ) -> None:
         self.encoder = encoder
         self.reranker = reranker
@@ -151,6 +163,20 @@ class Matcher:
         self.grey_zone_lower = grey_zone_lower
         self.cross_language_always_grey = cross_language_always_grey
         self.respect_declared_haskey = respect_declared_haskey
+        self.blocking_strategy = blocking_strategy
+        # Encoding is O(mentions); comparing is O(pairs). Caching the vectors keeps it that
+        # way — without it every pair re-encodes both of its texts, which measured 6.9 ms per
+        # pair against 0.38 ms per mention encoded once in batch.
+        self._vectors: dict[str, list[float]] = {}
+
+    def vectors_for(self, texts: Sequence[str]) -> list[list[float]]:
+        """Normalized vectors, encoding in one batch only what is not cached yet."""
+        missing = [text for text in dict.fromkeys(texts) if text not in self._vectors]
+        if missing:
+            encoded = self.encoder.encode(missing)
+            for text, vector in zip(missing, encoded, strict=True):
+                self._vectors[text] = normalize(vector)
+        return [self._vectors[text] for text in texts]
 
     def type_mentions(
         self, mentions: Sequence[Mention], targets: Sequence[Target], *, top_k: int = 5
@@ -159,8 +185,8 @@ class Matcher:
         if not targets:
             return [Typing(m.id, None, 0.0, DISCARDED) for m in mentions]
 
-        target_vectors = [normalize(v) for v in self.encoder.encode([t.text for t in targets])]
-        mention_vectors = [normalize(v) for v in self.encoder.encode([m.text for m in mentions])]
+        target_vectors = self.vectors_for([t.text for t in targets])
+        mention_vectors = self.vectors_for([m.text for m in mentions])
 
         typings = []
         for mention, vector in zip(mentions, mention_vectors, strict=True):
@@ -217,43 +243,110 @@ class Matcher:
         inferred_class = inferred_class or {}
         decisions: list[Decision] = []
 
-        seen: set[tuple[str, str]] = set()
-        for block in self.blocks(mentions):
-            for index, left in enumerate(block):
-                for right in block[index + 1:]:
-                    if left.document_id == right.document_id:
-                        continue
-                    pair = tuple(sorted((left.id, right.id)))
-                    if pair in seen:
-                        continue  # blocks overlap when a mention carries key values
-                    seen.add(pair)
-                    decisions.append(
-                        self._decide(left, right, synonyms, keys, inferred_class)
-                    )
+        for left, right in self.candidate_pairs(mentions, synonyms=synonyms):
+            decisions.append(self._decide(left, right, synonyms, keys, inferred_class))
         return decisions
 
-    def blocks(self, mentions: Sequence[Mention]) -> list[list[Mention]]:
-        """Thousands of mentions make exhaustive comparison unworkable; only pairs inside a
-        block are compared."""
-        grouped: dict[str, list[Mention]] = {}
-        for mention in mentions:
-            for key in self._blocking_keys(mention):
-                grouped.setdefault(key, []).append(mention)
-        return [block for block in grouped.values() if len(block) > 1]
+    def candidate_pairs(
+        self, mentions: Sequence[Mention], *, synonyms: dict[str, set[str]] | None = None
+    ) -> list[tuple[Mention, Mention]]:
+        """Which pairs are worth deciding on at all.
 
-    @staticmethod
-    def _blocking_keys(mention: Mention) -> list[str]:
-        """Surface form, plus one key per declared key value.
+        Under `embedding` the candidates come from three sources, unioned, none of which is a
+        tuned constant:
 
-        Blocking on surface form alone would let it silently overrule a declared key: two
-        mentions of one entity written differently never land in the same block, so the key
-        that says they are identical never gets asked. A declared key outranks similarity,
-        which means it has to outrank the blocking too.
+            neighbours   cosine at or above `grey_zone_lower`. The same number the zones are
+                         read from, so nothing is pruned that would have been decided
+                         differently: below it `_decide` returns SEPARATE anyway.
+            declared key two mentions carrying the same value of a declared key. The ontology
+                         stating what identity means for that class outranks similarity, so it
+                         has to outrank candidate generation too.
+            declared     two surfaces the ontology declares equivalent. `GT` and `grounded
+            synonym      theory` are the same concept by assertion and would not survive a
+                         cosine cut.
+
+        The surface strategy it replaces blocked on the first four characters of the
+        alphabetically first token — a constant that no experiment can calibrate, that split
+        `in-depth interview` from `semi-structured interview`, and that put every mention
+        whose first token was a stopword into one bucket.
         """
-        tokens = sorted(re.findall(r"[^\W\d_]+", mention.text.lower()))
-        keys = [tokens[0][:4] if tokens else ""]
-        keys.extend(f"key:{prop}={value}" for prop, value in sorted(mention.key_values.items()))
-        return keys
+        synonyms = synonyms or {}
+        if self.blocking_strategy == SURFACE_AND_KEYS:
+            indexed = self._surface_pairs(mentions)
+        else:
+            indexed = self._neighbour_pairs(mentions) | self._asserted_pairs(mentions, synonyms)
+        return [
+            (mentions[left], mentions[right])
+            for left, right in sorted(indexed)
+            if mentions[left].document_id != mentions[right].document_id
+        ]
+
+    def _neighbour_pairs(self, mentions: Sequence[Mention]) -> set[tuple[int, int]]:
+        """Every pair at or above the grey-zone floor, from the vectors typing already
+        computed. The matrix is built in row chunks: peak memory is chunk x n, not n x n."""
+        if len(mentions) < 2:
+            return set()
+        try:
+            import numpy as np
+        except ImportError as exc:  # pragma: no cover - depends on the install
+            raise NumpyUnavailable(NumpyUnavailable.__doc__) from exc
+
+        vectors = np.asarray(self.vectors_for([m.text for m in mentions]), dtype="float32")
+        pairs: set[tuple[int, int]] = set()
+        for start in range(0, len(mentions), _CHUNK):
+            block = vectors[start:start + _CHUNK] @ vectors.T
+            rows, columns = np.nonzero(block >= self.grey_zone_lower)
+            for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
+                left = start + row
+                if left < column:
+                    pairs.add((left, column))
+        return pairs
+
+    def _asserted_pairs(
+        self, mentions: Sequence[Mention], synonyms: dict[str, set[str]]
+    ) -> set[tuple[int, int]]:
+        """Candidates that hold by identity or by assertion, which no similarity cut may drop.
+
+        Three exact sources, no threshold among them: the same surface form written twice, the
+        same value of a declared key, and two surfaces the ontology declares equivalent. The
+        first matters more than it looks — `identical_proper_name` and
+        `generic_phrase_cross_document` both decide on exact text, and leaving their pairs to
+        the encoder would make two rules that need no model depend on one.
+        """
+        by_key: dict[str, list[int]] = {}
+        by_surface: dict[str, list[int]] = {}
+        for index, mention in enumerate(mentions):
+            by_surface.setdefault(_normalized(mention.text), []).append(index)
+            for prop, value in mention.key_values.items():
+                by_key.setdefault(f"{prop}={value}", []).append(index)
+
+        pairs: set[tuple[int, int]] = set()
+        for group in by_key.values():
+            pairs.update(_combinations(group))
+        for group in by_surface.values():
+            pairs.update(_combinations(group))
+        for surface, group in by_surface.items():
+            for equivalent in synonyms.get(surface, ()):  # declared, so no threshold applies
+                for left in group:
+                    for right in by_surface.get(equivalent, ()):
+                        if left != right:
+                            pairs.add((min(left, right), max(left, right)))
+        return pairs
+
+    def _surface_pairs(self, mentions: Sequence[Mention]) -> set[tuple[int, int]]:
+        """The heuristic this replaces, kept behind `blocking_strategy: surface_and_keys`."""
+        grouped: dict[str, list[int]] = {}
+        for index, mention in enumerate(mentions):
+            tokens = sorted(re.findall(r"[^\W\d_]+", mention.text.lower()))
+            keys = [tokens[0][:4] if tokens else ""]
+            keys.extend(f"key:{prop}={value}"
+                        for prop, value in sorted(mention.key_values.items()))
+            for key in keys:
+                grouped.setdefault(key, []).append(index)
+        pairs: set[tuple[int, int]] = set()
+        for group in grouped.values():
+            pairs.update(_combinations(group))
+        return pairs
 
     def _decide(
         self,
@@ -320,8 +413,13 @@ class Matcher:
     def _similarity(self, left: str, right: str) -> float:
         if self.reranker is not None:
             return self.reranker.score([(left, right)])[0]
-        vectors = [normalize(v) for v in self.encoder.encode([left, right])]
+        vectors = self.vectors_for([left, right])
         return dot(vectors[0], vectors[1])
+
+
+def _combinations(group: Sequence[int]) -> set[tuple[int, int]]:
+    return {(left, right) for position, left in enumerate(group) for right in group[position + 1:]
+            if left != right}
 
 
 def synonym_index(targets: Sequence[Target]) -> dict[str, set[str]]:
