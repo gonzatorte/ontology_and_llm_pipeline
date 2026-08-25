@@ -32,6 +32,12 @@ boilerplate:
   normalize_before_compare: [digits, ips, dates]
   max_block_chars: 200   # running heads are short; a long recurring paragraph is body text
 
+# ─── Seed normalization (A0) ─────────────────────────────
+seed:
+  base_iri: https://ontology.local/id/   # opaque IRIs; the original is kept as provenance
+  label_divergence_threshold: 0.8        # below it, a label pair is flagged, not assumed
+                                         # to be a translation
+
 # ─── Matching and entity resolution ──────────────────────
 matching:
   auto_merge_threshold: 0.92

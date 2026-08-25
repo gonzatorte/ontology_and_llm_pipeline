@@ -5,6 +5,7 @@ description = "LLM-assisted ontology enrichment pipeline (see especificacion_pip
 requires-python = ">=3.10"
 dependencies = [
     "pymupdf>=1.24.0",
+    "rdflib>=7.0.0",
     "pydantic>=2.7.0",
     "pyyaml>=6.0.1",
     "rich>=13.7.1",

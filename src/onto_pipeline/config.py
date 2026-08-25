@@ -44,6 +44,11 @@ class Boilerplate(BaseModel):
     max_block_chars: int = 200
 
 
+class Seed(BaseModel):
+    base_iri: str = "https://ontology.local/id/"
+    label_divergence_threshold: float = 0.8
+
+
 class Matching(BaseModel):
     auto_merge_threshold: float = 0.92
     grey_zone_lower: float = 0.70
@@ -105,6 +110,7 @@ class Config(BaseModel):
     reasoner: Reasoner = Reasoner()
     upper_ontology: str = "none"
     parser: Parser = Parser()
+    seed: Seed = Seed()
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import typer
@@ -13,6 +14,7 @@ from .config import Config
 from .db import connect
 from .ingest import STAGE, discover, ingest
 from .report import build_report
+from .seed import gloss_contexts, normalize_seed
 from .telemetry import Ledger
 
 app = typer.Typer(add_completion=False, help="LLM-assisted ontology enrichment pipeline.")
@@ -81,6 +83,69 @@ def report(
     for identifier in ids:
         target = build_report(config, conn, identifier)
         console.print(f"[green]wrote[/] {target}")
+
+
+@app.command("normalize-seed")
+def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
+    """A0: opaque IRIs, derived labels, typo detection, gloss contexts."""
+    config = Config.load(config_path)
+    seed = normalize_seed(
+        config.paths.seed_ontology,
+        config.seed.base_iri,
+        divergence_threshold=config.seed.label_divergence_threshold,
+    )
+
+    ontology_dir = config.paths.work_dir / "ontology"
+    ontology_dir.mkdir(parents=True, exist_ok=True)
+    target = ontology_dir / "seed_normalized.ttl"
+    seed.graph.serialize(target, format="turtle")
+
+    contexts = gloss_contexts(seed)
+
+    def entry(entity) -> dict:
+        return {
+            "iri": entity.iri,
+            "original_iri": entity.original_iri,
+            "reason": entity.divergence_reason,
+            "labels": [
+                {"text": label.text, "language": label.language, "source": label.source}
+                for label in entity.labels
+            ],
+        }
+
+    review = {
+        "divergent_labels": [
+            entry(entity) for entity in seed.entities
+            if entity.divergence_reason == "same_language_mismatch"
+        ],
+        "pending_semantic_check": [
+            entry(entity) for entity in seed.entities
+            if entity.divergence_reason == "cross_language_unverified"
+        ],
+        "typos": [asdict(finding) for finding in seed.typos],
+    }
+    review_path = config.paths.work_dir / "review" / "seed_review.json"
+    review_path.parent.mkdir(parents=True, exist_ok=True)
+    review_path.write_text(json.dumps(review, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    kinds: dict[str, int] = {}
+    for entity in seed.entities:
+        kinds[entity.kind] = kinds.get(entity.kind, 0) + 1
+    summary = Table("what", "count")
+    for kind, count in sorted(kinds.items()):
+        summary.add_row(kind, str(count))
+    summary.add_row("divergent label pairs", str(len(review["divergent_labels"])))
+    summary.add_row("pending semantic check", str(len(review["pending_semantic_check"])))
+    summary.add_row("typo candidates", str(len(seed.typos)))
+    summary.add_row("classes awaiting a gloss", str(len(contexts)))
+    console.print(summary)
+    console.print(f"[green]wrote[/] {target}\n[green]wrote[/] {review_path}")
+
+    if config.llm.provider == "none":
+        console.print(
+            f"[yellow]A0.4 skipped[/]: {len(contexts)} glosses need generation and "
+            "llm.provider is 'none'. Set a provider in the config to run it."
+        )
 
 
 @app.command()
