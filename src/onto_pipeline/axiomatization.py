@@ -273,6 +273,28 @@ def apply(graph: Graph, axioms: list[Axiom]) -> Graph:
     return extended
 
 
+def load(conn: sqlite3.Connection, version_id: str) -> list[Axiom]:
+    """The axioms proposed against a version, as they were assembled.
+
+    Branching reads them back rather than re-running the model: the judgements cost money and
+    the branch is a decision about axioms that already exist, not a second opinion on them.
+    """
+    install(conn)
+    return [
+        Axiom(
+            subject_iri=row["subject_iri"], predicate=row["predicate"],
+            object_iri=row["object_iri"], literal=row["literal"],
+            language="en" if row["literal"] else None,
+            provenance=row["provenance"], support=json.loads(row["support"] or "[]"),
+            note=row["note"] or "",
+        )
+        for row in conn.execute(
+            "SELECT * FROM proposed_axioms WHERE version_id = ? ORDER BY subject_iri, predicate",
+            (version_id,),
+        )
+    ]
+
+
 def persist(conn: sqlite3.Connection, version_id: str, axioms: list[Axiom]) -> None:
     install(conn)
     conn.execute("DELETE FROM proposed_axioms WHERE version_id = ?", (version_id,))

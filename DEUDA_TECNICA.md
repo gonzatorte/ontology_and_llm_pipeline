@@ -195,6 +195,31 @@ movió (18,0% contra 17,3% en 0,80): sólo 546 de 8.723 menciones cambiaron de l
 cifra anterior era del orden correcto por accidente, no porque el holdout no importara.
 
 
+### 8b. El catálogo de patrones de modelado tiene dos entradas
+
+`branch` enumera los ejes de compromiso de modelado en vez de pedírselos a un modelo, que es lo
+correcto y lo que el spec exige. El costo es que **un eje que el código no reconoce no se
+ofrece**: hoy detecta `attribute_as_class` y `division_criterion`, y deja catalogado sin
+detector `reify_vs_direct_property`. Ese último necesita extracción de propiedades, que el spec
+pone fuera de v1, así que la deuda no es escribir el detector sino recordar que el catálogo es
+el techo de lo que el sistema puede preguntar.
+
+Dos parámetros nuevos sin calibrar. `min_group: 2` decide desde cuántas subclases un patrón es
+una decisión y no una clase; se eligió por argumento, no por medición. Y
+`min_criterion_separation: 0.10` es el único número del eje de criterio de división —el corte
+en sí se elige por padre, precisamente para no tener un umbral de similitud más— pero ese 0,10
+sale de seis criterios escritos a mano, donde el par que sí era un corte quedó en 0,38 y el
+ruido cruzado en 0,25. Es la misma clase de evidencia insuficiente que esta sección existe para
+marcar, y se mide igual que los umbrales del matcher: contra un par de calibración, viendo
+cuántos ejes espurios aparecen.
+
+Falta también lo que el spec pide después de elegir: **la regeneración del ABox no se dispara
+sola** al aplicar una rama (`regenerate` existe y hay que correrlo a mano), y el `cq_delta` de
+§8.2 queda en blanco porque las CQ no se re-corren contra el estado que la rama produciría.
+Ninguna de las dos es difícil; las dos hacen que el puntaje de la rama sea menos informativo de
+lo que el spec pretende.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.

@@ -16,6 +16,7 @@ from . import (
     annotate,
     annotation,
     axiomatization,
+    branching,
     bridging,
     calibration,
     coreference,
@@ -84,6 +85,10 @@ ApplyOption = typer.Option(
 ForceRegenOption = typer.Option(
     False, "--force", help="Write the ABox again even if the rules did not change."
 )
+ChooseOption = typer.Option(
+    None, "--choose", help="Apply this branch. Its siblings are recorded as rejected."
+)
+WhyOption = typer.Option("", "--why", help="Why this branch, in your words. Kept with it.")
 PairOption = typer.Argument(..., help="Calibration pair: a directory under calibration_root.")
 MatchAgainstOption = typer.Option(
     [], "--match-against", "-m", help="Repeatable: label | gloss | label_and_gloss."
@@ -712,6 +717,298 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("branch")
+def branch_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    choose: str | None = ChooseOption,
+    why: str = WhyOption,
+    apply_changes: bool = ApplyOption,
+) -> None:
+    """Find the decision axes in this iteration's proposed axioms, and put them to the user.
+
+    Nothing here asks a model for alternatives — the spec's one prohibition for this stage,
+    because a model asked for three produces three correlated ones. The axes come from the
+    reasoner, which finds the logical conflicts, and from a fixed catalogue of modelling
+    commitments, which no reasoner can find because both sides are consistent.
+
+    The usual outcome is that there is no axis, and then this applies everything and says so.
+    """
+    from .reasoning import Reasoners, ReasonerUnavailable
+
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    axioms = axiomatization.load(conn, version_id)
+    if not axioms:
+        raise typer.BadParameter(
+            f"no proposed axioms against {version_id}; run axiomatize first"
+        )
+    by_id = {axiom.id: axiom for axiom in axioms}
+
+    if choose is not None:
+        _apply_branch(config, conn, version_id, graph, by_id, choose, why, apply_changes)
+        return
+
+    labels = versioning.label_index(graph)
+    proposals = {row["id"]: row for row in induction.load(conn, version_id)}
+    situation = _situation(config, proposals, axioms, labels)
+
+    try:
+        reasoners = Reasoners(
+            config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+        )
+        hermit = reasoners.hermit(reasoners.load(axiomatization.apply(graph, axioms)))
+        conflicts, pre_existing = branching.conflict_sets(axioms, hermit.justifications)
+    except ReasonerUnavailable as exc:
+        # A modelling axis is not a logical one: the catalogue still applies, and saying so is
+        # more useful than refusing the whole command.
+        console.print(f"[yellow]no reasoner[/] ({exc}); logical axes not looked for")
+        conflicts, pre_existing = [], []
+
+    axes = branching.logical_axes(conflicts, axioms, labels)
+    axes += branching.modelling_axes(
+        situation,
+        similarity=_criterion_similarity(config),
+        min_group=config.branching.min_group,
+        min_separation=config.branching.min_criterion_separation,
+    )
+    plan = branching.plan(
+        axes, axioms, max_branches=config.branching.max_branches,
+        separate_independent_axes=config.branching.present_independent_axes_separately,
+    )
+    for class_iri in pre_existing:
+        console.print(
+            f"[red]pre-existing[/] {versioning.short_name(class_iri, labels)} is unsatisfiable "
+            "without any of this iteration's axioms; that is a defect, not a branch"
+        )
+
+    if plan.automatic:
+        console.print(
+            f"[green]no decision axis[/] over {len(axioms)} proposed axioms: they are "
+            "compatible and the catalogue recognizes no commitment among them."
+        )
+        if not config.branching.auto_apply_when_no_axis:
+            console.print("[dim]branching.auto_apply_when_no_axis is off; nothing applied[/]")
+            return
+        console.print("[dim]applying all of them — the usual path, per spec 6.6[/]")
+        _commit_axioms(
+            config, conn, version_id, graph, axioms, apply_changes,
+            note=f"{len(axioms)} axioms applied automatically: no decision axis",
+        )
+        return
+
+    support = {axiom.id: axiom.support for axiom in axioms}
+    orphan_total = len({mention for axiom in axioms for mention in axiom.support})
+    entities = len({axiom.subject_iri for axiom in axioms})
+    tally = branching.history(conn)
+    for decision in plan.decisions:
+        for branch in decision.branches:
+            branch.score = branching.score(
+                branch, support=support, orphan_total=orphan_total, entities=entities,
+                history=tally,
+            )
+            kept = [by_id[axiom_id] for axiom_id in branch.add_axioms]
+            branch.state_hash = versioning.state_hash(axiomatization.apply(graph, kept))
+            seen = versioning.find_by_hash(conn, branch.state_hash)
+            if seen is not None:
+                branch.note = f"returns to {seen.id}"
+        decision.branches = branching.rank(
+            decision.branches, limit=config.branching.max_branches
+        )
+    branching.persist(conn, version_id, plan.decisions)
+
+    for decision in plan.decisions:
+        console.print()
+        for axis in decision.axes:
+            console.print(f"[bold]{axis.kind} axis[/] {axis.id}")
+            console.print(f"  {axis.question}")
+            for option in axis.options:
+                console.print(f"    [cyan]{option.label}[/] — {option.why}")
+        if decision.coupled:
+            console.print(
+                "[dim]  these axes share axioms, so they are one question: a choice on one "
+                "changes what the other is choosing between[/]"
+            )
+        table = Table("branch", "choice", "coverage", "reorg", "abox", "affinity", "note")
+        for branch in decision.branches:
+            table.add_row(
+                branch.id,
+                _choice_labels(decision, branch),
+                f"{branch.score.coverage:.0%}",
+                str(branch.score.reorg_cost),
+                str(branch.score.abox_regen_cost),
+                "—" if branch.score.historical_affinity is None
+                else f"{branch.score.historical_affinity:.2f}",
+                branch.note,
+            )
+        console.print(table)
+    console.print(
+        "\n[dim]affinity is empty until something has been decided before — the cold start of "
+        "spec 11, reported as absent rather than as zero.[/]"
+    )
+    console.print("Choose one with `onto-pipeline branch --choose <branch> --why '...'`.")
+
+
+def _choice_labels(decision, branch) -> str:
+    """The option's own words, not `axis=option_id`: the axis is printed above the table, and
+    an id truncated by the terminal is one the user cannot act on."""
+    by_axis = {axis.id: axis for axis in decision.axes}
+    return " / ".join(
+        next(
+            (option.label for option in by_axis[axis_id].options if option.id == option_id),
+            option_id,
+        )
+        for axis_id, option_id in sorted(branch.choices.items())
+    )
+
+
+def _situation(config, proposals: dict, axioms, labels: dict[str, str]):
+    """What the catalogue's detectors read: each proposal, and the parent it would hang from.
+
+    The minted IRI is recomputed rather than stored, because `mint_iri` is a function of the
+    proposal — the same input gives the same IRI, which is what makes a re-run stable.
+    """
+    minted = {
+        proposal_id: axiomatization.mint_iri(
+            config.seed.base_iri, row["label"], proposal_id
+        )
+        for proposal_id, row in proposals.items()
+    }
+    parent_by_iri = {
+        axiom.subject_iri: axiom.object_iri
+        for axiom in axioms if axiom.predicate == "subClassOf" and axiom.object_iri
+    }
+    asserted = {iri for iri in minted.values() if iri in parent_by_iri}
+    return branching.Situation(
+        proposals={pid: dict(row) for pid, row in proposals.items()},
+        parent_of={
+            pid: parent_by_iri[iri] for pid, iri in minted.items() if iri in asserted
+        },
+        minted={pid: iri for pid, iri in minted.items() if iri in asserted},
+        axioms=axioms,
+        labels=labels,
+    )
+
+
+def _criterion_similarity(config):
+    """The division-criterion detector needs to know when two declared criteria are the same
+    cut. Returns None when the encoder is not installed: losing that axis is acceptable,
+    guessing at it is not."""
+    from .embeddings import EncoderUnavailable, SentenceTransformerEncoder
+    from .matching import dot
+
+    try:
+        encoder = SentenceTransformerEncoder(config.matching.bi_encoder, config.matching.device)
+    except EncoderUnavailable:
+        console.print("[yellow]no encoder[/]: the division-criterion axis is not looked for")
+        return None
+
+    cache: dict[str, list[float]] = {}
+
+    def similarity(left: str, right: str) -> float:
+        missing = [text for text in (left, right) if text not in cache]
+        if missing:
+            cache.update(zip(missing, encoder.encode(missing), strict=True))
+        return dot(cache[left], cache[right])
+
+    return similarity
+
+
+def _apply_branch(config, conn, version_id, graph, by_id, branch_id, why, apply_changes) -> None:
+    """Commit the state a branch names, and only then settle the decision.
+
+    In that order on purpose: the reasoner still gets to reject the branch, and a decision
+    recorded for a state that was never applied would say the user chose something the
+    ontology never contained.
+    """
+    row = branching.find(conn, branch_id)
+    if row is None:
+        raise typer.BadParameter(f"no branch {branch_id!r}; run `branch` to see them")
+
+    chosen = [by_id[axiom_id] for axiom_id in json.loads(row["add_axioms"]) if axiom_id in by_id]
+    console.print(
+        f"branch {branch_id}: {len(chosen)} axioms kept, {len(by_id) - len(chosen)} given up"
+    )
+    committed = _commit_axioms(
+        config, conn, version_id, graph, chosen, apply_changes,
+        note=f"branch {branch_id}: {why}" if why else f"branch {branch_id}",
+        branch_id=branch_id,
+    )
+    if not committed:
+        console.print("[yellow]decision not recorded[/]: nothing was applied")
+        return
+    branching.settle(conn, branch_id, note=why)
+    console.print(
+        f"[green]chose[/] {branch_id}. Its siblings are recorded as rejected — that record is "
+        "what a later iteration reads so it does not propose the same thing again."
+    )
+
+
+def _commit_axioms(
+    config, conn, version_id, graph, axioms, apply_changes, *, note, branch_id=None
+) -> bool:
+    """The validation chain, then a version. Identical to what `axiomatize` does directly —
+    a branch changes which axioms are applied, never whether the reasoner gets to reject
+    them."""
+    from .reasoning import REJECTED, Reasoners, ReasonerUnavailable
+
+    candidate = axiomatization.apply(graph, axioms)
+    try:
+        reasoners = Reasoners(
+            config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+        )
+    except ReasonerUnavailable as exc:
+        raise typer.BadParameter(
+            f"{exc}. Applying without the reasoner would skip the filter that makes this safe."
+        ) from exc
+
+    ontology = reasoners.load(candidate)
+    elk = reasoners.elk(ontology, coverage_threshold=config.reasoner.elk_coverage_threshold)
+    hermit = reasoners.hermit(ontology)
+    metrics = structural.check(candidate)
+
+    verdict = Table("filter", "result", "detail")
+    verdict.add_row("ELK", elk.verdict, elk.note[:52])
+    verdict.add_row("HermiT", "consistent" if hermit.consistent else REJECTED,
+                    f"{len(hermit.unsatisfiable)} unsatisfiable")
+    verdict.add_row("structural", REJECTED if metrics.rejected else "clean",
+                    f"depth {metrics.depth} · {len(metrics.findings)} finding(s)")
+    console.print(verdict)
+
+    if elk.verdict == REJECTED or not hermit.consistent or hermit.unsatisfiable:
+        console.print("[red]not applied[/]: the reasoner rejected it")
+        return False
+    if metrics.rejected and not apply_changes:
+        for finding in metrics.findings[:8]:
+            console.print(f"  [yellow]{finding.check}[/] {finding.subject} — {finding.detail}")
+        console.print("[yellow]not applied[/]: structural findings. `--apply` overrides.")
+        return False
+
+    hash_value = versioning.state_hash(candidate)
+    seen = versioning.find_by_hash(conn, hash_value)
+    if seen is not None:
+        console.print(
+            f"[yellow]loop[/]: this state is {seen.id}, already in the DAG. Returning is "
+            "allowed, but explicitly — nothing was committed."
+        )
+        return False
+
+    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    committed = versioning.commit(
+        conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
+        branch_id=branch_id, note=note,
+    )
+    console.print(
+        f"[green]committed[/] {committed.id} (parent {version_id}) · "
+        f"{len(graph)} -> {len(candidate)} triples"
+    )
+    _publish_diff(config, conn, committed.id)
+    return True
 
 
 @app.command("induce")

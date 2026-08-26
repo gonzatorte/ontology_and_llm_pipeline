@@ -148,6 +148,23 @@ matching:
                                    # only tuned on accumulated accept/reject labels (6.3).
   device: null                     # null lets torch choose; "cuda" or "cpu" to force
 
+# ─── Ramas (§6.6) ────────────────────────────────────────
+# El multi-rama es el camino excepcional, no el default: preguntar en cada iteración sin
+# conflicto real es exactamente el trabajo manual que el pipeline existe para evitar (D21).
+# Ningún eje sale de un modelo — la única prohibición explícita del spec para esta etapa es
+# pedirle al LLM "dame 3 alternativas". Salen del razonador y de un catálogo enumerado.
+branching:
+  max_branches: 5                    # techo práctico del spec: pasadas cinco no se comparan
+  present_independent_axes_separately: true   # k ejes binarios son k preguntas, no 2^k ramas
+  auto_apply_when_no_axis: true
+  min_group: 2                       # una subclase calificada es una clase; varias, un eje
+  # El eje de criterio de división no tiene umbral de similitud: el corte se elige por padre,
+  # porque cuán parecidos se leen dos criterios depende de cómo los escribieron, no de una
+  # constante. Esto es cuánto más nítido tiene que ser ese corte que las similitudes que
+  # rompe. Sin calibrar; medido sólo sobre seis criterios escritos a mano, donde el par que
+  # sí era un corte estaba en 0,38 y el ruido cruzado en 0,25.
+  min_criterion_separation: 0.10
+
 # ─── Mapping rules: mention layer -> ABox ────────────────
 # La política global. Las excepciones por caso viven en `review_items`, no acá: §6.4 les da
 # alcance por caso y §6.8 recomputa el ABox entero, así que no pueden vivir dentro del código

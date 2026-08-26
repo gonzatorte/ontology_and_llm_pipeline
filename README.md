@@ -59,10 +59,11 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | Banco de calibración contra corpus publicado | listo (`calibrate`) |
 | B2b puenteo por conocimiento del mundo | listo (`bridge`) |
 | B3 inducción de clases | listo (`induce`) |
-| B4 axiomatización · B4b enriquecimiento de glosas | **no implementado** |
+| B4 axiomatización | listo (`axiomatize`) |
+| B4b enriquecimiento de glosas | **no implementado** |
 | B5 filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
 | B5 filtros 3–6 (SHACL, OntoClean, OOPS!, evidencia) | **no implementado** |
-| B6 construcción de ramas | **no implementado** |
+| B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
@@ -336,7 +337,54 @@ Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403
 cubren el 70% de las huérfanas; bajarlo a 0,30 son 582 preguntas y el 98%. El umbral no está
 calibrado, como todos los demás.
 
-### 4. Validación (A0.0 + B5)
+### 4. Axiomatización y ramas (B4 + B6)
+
+```bash
+uv run onto-pipeline --env-file opencode.env axiomatize   # propuestas -> axiomas
+uv run onto-pipeline branch                               # ¿hay algo que decidir?
+uv run onto-pipeline branch --choose b_fceba3e2 --why "el medio es el corte"
+```
+
+`axiomatize` le hace al modelo **una sola pregunta atómica** por propuesta —¿es un tipo de esa
+clase, un ejemplo de esa clase, o ninguna?— y el código escribe el OWL. Un modelo que sólo
+responde eso no puede confundir subsunción con instanciación, porque nunca escribe el axioma;
+esa confusión es el primer sesgo que lista §6.1. "Ejemplo de" **rechaza** la propuesta en vez de
+colgarla: no era una clase. "Ninguna" la deja raíz, porque un padre forzado es peor que ninguno.
+
+`branch` busca qué hay que decidir entre esos axiomas. **A ningún modelo se le piden
+alternativas** — es la única prohibición explícita del spec para esta etapa, porque pedir tres
+devuelve tres correlacionadas. Los ejes salen de dos lados y nada más:
+
+- **El razonador.** Una justificación de una clase insatisfacible, restringida a los axiomas de
+  esta iteración, es un conjunto de conflicto mínimo; las salidas son sus hitting sets mínimos
+  (diagnóstico de Reiter). Si la justificación no toca ningún axioma propuesto, la ontología ya
+  estaba rota antes: eso se reporta como defecto, no como rama.
+- **Un catálogo enumerado de compromisos de modelado**, que el razonador *no* puede encontrar
+  porque los dos lados son consistentes. Hoy tiene dos entradas con detector mecánico:
+  `attribute_as_class` (varias subclases que son el padre calificado por un modificador:
+  ¿`Semi-Structured Interview` es una clase, o `schedule` es una dimensión de `Interview`?) y
+  `division_criterion` (un padre partido por dos criterios a la vez, §8.2). Una tercera queda
+  catalogada y sin detector a propósito —reificar vs. propiedad directa— para que el hueco se
+  vea en vez de insinuarse.
+
+Lo normal es que no haya ningún eje: entonces aplica todo y lo dice. **El multi-rama es el
+camino excepcional.** Preguntar en cada iteración sin conflicto real es exactamente el trabajo
+manual que el pipeline existe para evitar (D21).
+
+Los ejes que no comparten axiomas se presentan **por separado**: k ejes binarios son k
+preguntas, no 2^k ramas. Sólo los acoplados se expanden en ramas completas, con techo de cinco.
+
+Cada rama trae su puntaje —cobertura de huérfanas, costo de reorganización, costo de
+regeneración del ABox— y el hash del estado que produciría, así que una rama que vuelve a una
+versión ya visitada te lo avisa antes de elegirla. La afinidad histórica llega vacía hasta que
+haya algo decidido: es el cold start de §11, reportado como ausente y no como cero.
+
+Elegir una rama es lo que **graba los rechazos**. Lo aceptado ya está en la ontología; lo
+rechazado no está en ningún otro lado, y es lo que una iteración posterior lee para no volver a
+proponer lo mismo (§6.7). Se graba después de aplicar, no antes: el razonador todavía puede
+rechazar la rama, y una decisión registrada sobre un estado que nunca se aplicó sería mentira.
+
+### 5. Validación (A0.0 + B5)
 
 ```bash
 uv run onto-pipeline validate                    # última versión
@@ -349,7 +397,7 @@ Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 encontró nada, pero puede haber ignorado el axioma culpable), nunca `OK`. Si la cobertura EL
 cae por debajo del umbral, devuelve `SKIPPED`.
 
-### 5. Competency questions
+### 6. Competency questions
 
 ```bash
 uv run onto-pipeline cq import examples/competency_questions.json
@@ -360,7 +408,7 @@ Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además
 `eval` corre todo contra una versión del DAG y registra la tasa de aprobación, que es el
 criterio de parada primario.
 
-### 6. Regeneración del ABox
+### 7. Regeneración del ABox
 
 ```bash
 uv run onto-pipeline regenerate                  # última versión
@@ -387,7 +435,7 @@ conviene saber al leer la salida:
 La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
 con las mismas reglas no hace nada y lo dice.
 
-### 7. Inspección
+### 8. Inspección
 
 ```bash
 uv run onto-pipeline report                 # T1: HTML por documento
@@ -415,7 +463,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 8. Conjunto de retención
+### 9. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -479,7 +527,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 9. Calibración contra un corpus publicado
+### 10. Calibración contra un corpus publicado
 
 El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
 cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por

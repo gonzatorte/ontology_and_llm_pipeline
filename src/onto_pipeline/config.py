@@ -162,6 +162,12 @@ class Branching(BaseModel):
     max_branches: int = 5
     present_independent_axes_separately: bool = True
     auto_apply_when_no_axis: bool = True
+    # How many proposals under one parent it takes before a modelling pattern is a decision
+    # rather than a class. One qualified subclass is a class; several are a commitment.
+    min_group: int = 2
+    # The division-criterion axis has no similarity threshold — the cut is chosen per parent.
+    # This is how much clearer that cut has to be than the similarities it breaks.
+    min_criterion_separation: float = 0.10
 
 
 class StageModel(BaseModel):
