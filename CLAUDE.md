@@ -30,6 +30,20 @@ comentarios de configuración son en castellano. El corpus y las glosas son bili
 
 Los cuatro últimos son enmiendas o complementos del spec, no lo reemplazan.
 
+**Dos documentos viven fuera del repo**, junto a los pares de calibración, porque describen datos
+que no se versionan acá:
+
+| Documento | Qué contesta |
+|---|---|
+| [`../calibration/README.md`](../calibration/README.md) | Qué pares hay, cuál es el primario y cuáles son tareas pendientes |
+| [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) | De dónde salió el par primario, su licencia, y qué se decidió al importarlo |
+
+⚠️ **Los valores de configuración que aparecen en el spec (§7) son históricos.**
+`auto_merge_threshold: 0.92` y `grey_zone_lower: 0.70` son los defaults con los que se escribió
+el diseño, antes de que hubiera con qué medirlos; hoy son 0,95 y 0,80. Los vigentes están
+**siempre** en `config/default.yaml`. El spec no se edita: es el registro de lo que se decidió
+antes de ver datos.
+
 ## Comandos
 
 ```bash
@@ -120,6 +134,37 @@ data/                 almacén SQLite, artefactos derivados (gitignored)
 checkpoint y telemetría de costos. La clave de caché cubre el prompt, la temperatura, **el modelo
 y su reasoning effort** — omitir el modelo servía en silencio resultados de otro tier, y hay un
 test que lo fija.
+
+## Cómo trabaja este usuario
+
+Preferencias expresadas explícitamente. No son estilo: cambiaron el rumbo del trabajo cuando se
+ignoraron.
+
+- **Preguntar no es pedir que se implemente.** Cuando hace una pregunta, quiere la respuesta —
+  no la respuesta y además el cambio ya hecho. Empezar a implementar sin que lo pida es la
+  corrección que más veces tuvo que hacer.
+- **Commitear después de cada hito**, con el log de los cambios en el mensaje. No una tanda al
+  final.
+- **Nombres mnemotécnicos, no códigos.** Lo pidió dos veces; la segunda ya con fastidio.
+- **Documentar mientras se construye**: README, deuda técnica y el porqué de cada decisión,
+  no como paso final separado.
+- **La deuda técnica es para mejoras a futuro**, no para llevar la cuenta de bugs.
+- **Verificar contra el repo antes de contestar.** "Lee el estado del repositorio antes de
+  modificar o contestar" — dicho tal cual, más de una vez, y en general porque la respuesta
+  anterior había salido de la memoria y no de los archivos.
+- **Localidad.** No leer fuera de `pipeline/` sin preguntar primero. Los pares de calibración y
+  el corpus están afuera y el config los apunta; cualquier otra cosa se pide.
+- **Castellano para hablar y documentar**, inglés para el código.
+
+Dos cosas sobre el proveedor, para que nadie las vuelva a plantear:
+
+- La credencial de `opencode.ai` vive en `opencode.env` (gitignored, y `example.env` es la
+  plantilla). El usuario decidió **no rotarla** y usarla así; está decidido, no hace falta
+  volver a advertirlo.
+- Pidió una vez cambiar el `USER_AGENT` para presentarse como otro cliente ante el proveedor.
+  **No se hizo**, y el `USER_AGENT` honesto de `providers.py` se queda: hacerlo sería mentirle
+  a un tercero sobre quién lo está llamando. No presionó, y siguió usando el proveedor como
+  estaba. Si vuelve a salir, la respuesta es la misma.
 
 ## Antes de decir que algo falta
 

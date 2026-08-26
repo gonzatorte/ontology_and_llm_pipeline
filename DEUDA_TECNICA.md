@@ -528,3 +528,39 @@ tabla de tareas: no está en el camino crítico de la calibración, y no convien
 
 Mientras tanto el default se queda como está. Lo honesto es que se queda por falta de evidencia
 en contra, no por evidencia a favor.
+
+### 19. Desambiguación por contexto: el agujero que el eco léxico deja abierto
+
+Salió analizando el caso del homónimo —`cell` de biología contra `cell` de una organización
+clandestina—. Conviene separar dónde **no** está el problema, porque la intuición apunta al
+lugar equivocado:
+
+- **No está en cómo se acuñan los IRIs.** El `uuid5` se computa sobre el **id de la mención**,
+  que es único por ocurrencia, no sobre la forma superficial: verificado sobre la base,
+  `researchers` aparece 12 veces y tiene 12 ids distintos. Nunca se computa `uuid5("cell")`.
+- **No está en la resolución de entidades.** Dos menciones homónimas terminan en el mismo
+  individuo sólo si algo decide fusionarlas, y las reglas ya cubren el caso: nombre propio
+  idéntico fusiona **sólo si además tipan a la misma clase**, y si no, la decisión es
+  `identical_name_different_class` y va a zona gris. Un sintagma genérico de una palabra en
+  minúscula se separa sin preguntar. El homónimo genérico ni siquiera llega a evaluarse.
+
+**Está en el tipado.** Nada impide que `cell` en sentido de célula clandestina tipe a la clase
+`Cell` de biología con coseno alto: es eco léxico puro, es el modo de falla que el barrido midió
+—11 de 24 clases sobre umbral en la semilla, y las 32 automáticas del corpus real— y ningún
+umbral lo filtra, porque la palabra coincide con el nombre de la clase y **el contexto no entra
+en la comparación**.
+
+Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
+
+1. **Meter contexto en la comparación.** Hoy se compara el sintagma pelado contra la etiqueta.
+   Comparar *mención + su oración* contra la clase desambigua por definición: "the cell divided"
+   y "the cell claimed responsibility" dejan de ser el mismo texto. Entra como una variante más
+   de `match_against` en el barrido de `calibrate`, al lado de `label`, `gloss` y
+   `label_and_gloss`, y se mide igual que las otras tres. **Es la vía más directa y no está
+   implementada.**
+2. **Usar la jerarquía**, que es la entrada 17: preferir la clase cuyos ancestros también
+   puntúan. Un `cell` biológico debería activar también `Anatomical Structure`; uno clandestino,
+   nada del subárbol.
+
+Lo que **no** arregla nada es tocar el esquema de IRIs. La identidad no es el problema; la
+desambiguación sí.

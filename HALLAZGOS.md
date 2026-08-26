@@ -14,6 +14,26 @@ Tres documentos vecinos y qué contesta cada uno, para no duplicarlos acá:
 población es una anécdota, y este proyecto ya se equivocó dos veces por sacar conclusiones de
 n=10 (ver *Conclusiones que hubo que retirar*).
 
+**Los valores de configuración del spec (§7) son históricos.** `auto_merge_threshold: 0.92` y
+`grey_zone_lower: 0.70` son los defaults con los que se escribió el diseño, antes de que hubiera
+con qué medirlos. Los valores vigentes están en `config/default.yaml` y el porqué en 1.1. El spec
+no se editó: es el registro de lo que se decidió antes de ver datos, y reescribirlo borraría
+justamente la diferencia que este documento existe para mostrar.
+
+**Sobre la procedencia.** Este repositorio lo escribieron tres sesiones en paralelo, y los
+hallazgos vienen de las tres. Todo está commiteado bajo un solo autor, así que la atribución no
+se lee del historial:
+
+| Sesión | De qué se ocupó | Dónde quedó |
+|---|---|---|
+| `f0449040` (la que escribe) | Fase B completa, cadena B5, criterios de parada, calibración con holdout | 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 y todo §2 |
+| `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) y `plan_cambio_corpus_calibracion.md` |
+| `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `plan_reglas_de_mapeo.md`, deuda 19, y 1.3 |
+
+El modo de falla de trabajar así —una edición anclada a texto que falla abierta cuando otra
+sesión movió el contexto— está en la sección de coordinación de
+[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), con lo que hay que hacer para evitarlo.
+
 ---
 
 ## 1. Mediciones
@@ -148,6 +168,21 @@ Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del p
 848 menciones extraídas, 1.725 tipadas contra `v2`, **219 en zona gris** y 53 items de revisión
 abiertos. La zona gris es a la vez el trabajo pendiente del usuario y el insumo que falta para
 LoRA (§6.3): hoy hay **una** etiqueta acumulada.
+
+### 1.10 Eco léxico, y dónde está de verdad el problema del homónimo
+
+**El eco léxico es el modo de falla que ningún umbral filtra.** Sobre la semilla, 24 de 34 clases
+superan 0,70 y **11 de esas 24 son eco léxico**: la mención es la palabra corriente que da nombre
+a la clase, no una instanciación. Sobre el corpus real, de 1.725 menciones tipadas contra `v2`,
+las **32 automáticas son todas eco léxico** — `question` 0.998, `information` 0.998,
+`support` 0.993, `subject` 0.992.
+
+Verificado al analizar el caso del homónimo (`cell` de biología contra `cell` de una
+organización clandestina): **el riesgo no está donde parece**. El `uuid5` de un individuo se
+computa sobre el id de la mención, único por ocurrencia —`researchers` aparece 12 veces y tiene
+12 ids distintos—, y la resolución de entidades ya manda el caso peligroso a zona gris. El
+agujero está en el **tipado**, y la vía más directa para cerrarlo —meter la oración de la mención
+en la comparación— está sin implementar. Detalle completo en la deuda 19.
 
 ---
 
