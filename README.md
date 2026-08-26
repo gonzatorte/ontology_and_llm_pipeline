@@ -20,8 +20,8 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | A1 | **classify** | Decide por página: born-digital, escaneada o incierta |
 | A2 | **parse** | Extrae bloques con procedencia y arma el Markdown |
 | — | **chunk** | Agrupa bloques en unidades de extracción sin partir tablas |
-| A3 | **propose-cq** | Genera competency questions desde el corpus |
-| A4 | **import-cq** | Carga las competency questions que escribís vos |
+| A3 | **cq propose** | Genera competency questions desde el corpus |
+| A4 | **cq import** | Carga las competency questions que escribís vos |
 | B1 | **extract** | Saca menciones de concepto de cada chunk |
 | B1b | **corefer** | Agrupa las menciones que hablan del mismo individuo |
 | B2 | **match** · **grey** | Tipa cada mención contra una clase, y resuelve entidades |
@@ -53,7 +53,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | A0.4 glosas | listo (requiere proveedor LLM) |
 | A1 clasificación por página | listo |
 | A2 parseo e ingesta | listo, sólo ruta born-digital |
-| A3 generación de CQ | **no implementado** |
+| A3 generación de CQ | listo (`cq propose`) |
 | A4 CQ del usuario | listo |
 | Chunking estructura-consciente | listo |
 | B1 extracción de candidatos | listo |
@@ -610,16 +610,44 @@ Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 encontró nada, pero puede haber ignorado el axioma culpable), nunca `OK`. Si la cobertura EL
 cae por debajo del umbral, devuelve `SKIPPED`.
 
-### 8. Competency questions
+### 8. Competency questions (A3 + A4)
 
 ```bash
-uv run onto-pipeline cq import examples/competency_questions.json
+uv run onto-pipeline cq import examples/competency_questions.json   # A4: las tuyas, primero
+uv run onto-pipeline --env-file opencode.env cq propose             # A3: desde el corpus
+uv run onto-pipeline cq list --status proposed
+uv run onto-pipeline cq accept cq_ab12cd34ef cq_9f8e7d6c5b
 uv run onto-pipeline cq eval --iteration 3
 ```
 
-Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además necesita cita.
-`eval` corre todo contra una versión del DAG y registra la tasa de aprobación, que es el
-criterio de parada primario.
+Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además necesita cita
+con documento y página. `eval` corre todo contra una versión del DAG y registra la tasa de
+aprobación, que es el criterio de parada primario.
+
+**Advertencia de circularidad, primero.** Las CQ generadas miden completitud **respecto al
+corpus**, no respecto al dominio. Es la misma limitación que la saturación de novedad y no se
+arregla desde adentro: la mitigación es A4, las que escribís vos **sin mirar** las generadas. Por
+eso `cq import` va antes en la lista de arriba.
+
+`cq propose` hace los cuatro pasos de §4.4 y tres son mecánicos:
+
+1. **Muestreo estratificado**, no el corpus entero. Definiciones, tablas, enumeraciones,
+   restricciones y procedimientos, 10–15 pasajes por estrato. Los estratos son lo que hace
+   posibles los tipos de pregunta: un pasaje que dice "no puede" es de donde sale una pregunta
+   restrictiva, y es invisible en un muestreo aleatorio de párrafos. El muestreo es determinista
+   con semilla, no "los primeros N" — los primeros bloques de un corpus son los abstracts, y un
+   muestreo de abstracts produce preguntas sobre abstracts.
+2. **Generación por tipo con cuota**, un prompt por categoría. Los tipos **inferencial** (cuyo
+   punto declarado es que aporte el razonador) y **negativo** (que hace explícito el mundo
+   abierto) son los que más rinden y los que un modelo nunca escribe solo. Si quedan por debajo
+   de la cuota **se reporta y no se rellena**: taparlo con preguntas definicionales escondería
+   justo lo que la cuota existe para forzar.
+3. **Filtrado mecánico antes de que las lea nadie**: duplicados, las que responde una sola
+   tripleta, las cuyo SPARQL no parsea —si no es consulta no sirve de criterio de parada— y las
+   que no citan pasaje. La SPARQL se parsea *antes* de juzgar su forma: contar patrones en algo
+   que no es una consulta no mide nada.
+4. **Validación tuya**, sobre lo que sobrevivió. Es **trabajo de una sola vez**, no por
+   iteración.
 
 ### 9. Propiedades funcionales (§6.8)
 

@@ -263,7 +263,7 @@ declara. El comando dice cuál de los dos tests usó, precisamente para no repor
 instrumento como la ausencia del hallazgo.
 
 
-### 8e. La cadena B5 tiene seis de siete filtros, y el que falta es el caro
+### 8e. La cadena B5 está completa, y su eslabón flojo es de dónde salen las etiquetas
 
 **OntoClean (filtro 4) está, y su punto débil es de dónde salen las etiquetas.** Las cuatro
 restricciones son mecánicas y no tienen deuda; el insumo sí. Con ontología superior las
@@ -331,6 +331,26 @@ siempre sugiere `regenerate`, que es conservador pero ruidoso) y si las glosas c
 último `match`, que es lo que cierra el bucle de §4.3.
 
 
+### 8h. Las CQ generadas heredan el sesgo del corpus, y eso no se arregla acá
+
+Es la advertencia del propio spec y conviene tenerla escrita como deuda y no sólo como nota: las
+CQ de A3 miden completitud **respecto al corpus**. Si el corpus no habla de algo, no va a haber
+una CQ que lo pida, y la tasa de aprobación va a subir sin que la ontología mejore en el dominio.
+La mitigación es A4 —las CQ que el usuario escribe sin mirar las generadas, 20–30% del total— y
+hoy **no hay ninguna escrita**: `examples/competency_questions.json` tiene cinco de ejemplo. Sin
+ese 20–30%, el criterio de parada primario está midiendo el corpus contra sí mismo.
+
+Dos huecos concretos en la etapa:
+
+- **La regeneración de consultas bajo reorganización (D1) no está.** El spec elige "regenerar la
+  consulta cuando cambian las clases involucradas", y `cq.sparql_regeneration: on_class_change`
+  está en el config sin nada que lo lea. Hoy una CQ cuya clase se dividió en una iteración pasa a
+  fallar por una razón que no es la que el criterio quiere medir.
+- **La deduplicación cae a texto normalizado sin encoder.** Dos preguntas que difieren en una
+  palabra sobreviven, lo que es costo de revisión y no un criterio de parada equivocado — pero
+  conviene saberlo antes de leer 60 candidatas.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
@@ -359,12 +379,13 @@ mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
 
 ### 11. Mundo abierto: lo que falta
 
-- **Propiedades funcionales (§6.8)**: no implementado, y es donde el spec dice que la evidencia
-  del ABox es inválida *en principio* bajo OWA. El riesgo que nombra es silencioso: una
-  funcional declarada por error hace que el razonador infiera `owl:sameAs` y fusione entidades
-  distintas sin lanzar ninguna inconsistencia.
-- **`refuted` / `NegativePropertyAssertion` (§6.4)**: el estado existe en el esquema, nada lo
-  escribe, y todavía no hay ABox donde poner la aserción negativa.
+- **Propiedades funcionales (§6.8)**: la etapa está (`functional`) y no tiene propiedades que
+  mirar — ver 8f. Lo que sí quedó resuelto es hacer visible el riesgo silencioso: `--declare`
+  corre el razonador y muestra qué individuos se fusionarían antes de commitear nada.
+- **`NegativePropertyAssertion` (§6.4)**: `refuted` ya se escribe (`mark --mark refuted`) y saca
+  la aserción del ABox, que es lo que el spec pide. Lo que sigue sin existir es la aserción
+  negativa explícita, y con razón: bajo OWA sólo corresponde cuando **se sabe** que algo es
+  falso, no cuando hay duda, y no hay propiedades donde ponerla todavía.
 - **CQ negativas**: `cq_a4_05` en los ejemplos pregunta por completitud del grafo con
   `FILTER NOT EXISTS`, que es mundo cerrado. Sirve como diagnóstico del artefacto, pero §4.4
   define el tipo negativo como "mundo abierto explícito". Mal precedente para quien escriba CQ
@@ -391,17 +412,20 @@ apoyarse en el `/Lang` declarado del PDF.
 Tres cosas implementadas y probadas que nada invoca. No están rotas: están desconectadas, y
 cada una es o bien un cable que falta o bien código a borrar.
 
-- **`versioning.nearest_state`** — detección de loops parciales (§6.8): la rama vuelve *casi* al
-  estado anterior, mismo compromiso de modelado con IRIs distintos, y el hash exacto no lo ve.
-  Distancia de Jaccard sobre los conjuntos de axiomas normalizados. Falta el umbral en el config
-  y el llamador, que es B6 al presentar una rama. Antes de B6 no hay dónde enchufarlo.
-- **`iteration.mode | trigger | batch_size | max_iterations`** — `mode` elige entre re-correr
-  la extracción sobre todo el corpus o sólo sobre lo nuevo (D14, default global); `trigger` y
-  `batch_size`, cuándo se dispara una iteración; `max_iterations`, el corte duro de §10.3.
-  Los cuatro describen un loop que hoy no existe: las etapas se corren a mano, una por comando.
-  Se consumen cuando exista el orquestador, no antes.
-- **`branching.*`** — `max_branches`, `present_independent_axes_separately`,
-  `auto_apply_when_no_axis`. Configuran B6, que no está implementado.
+- **`versioning.nearest_state`** — detección de loops *parciales* (§6.8): la rama vuelve *casi*
+  al estado anterior, mismo compromiso de modelado con IRIs distintos, y el hash exacto no lo ve.
+  Ahora sí hay dónde enchufarlo: `branch` computa el hash de cada rama y avisa cuando es un
+  retorno exacto, pero usa `find_by_hash` y no esto. Falta el umbral en el config y una línea en
+  el llamador.
+- **`iteration.trigger | batch_size`** — cuándo se dispara una iteración y de a cuántos
+  documentos. Describen un loop automático que sigue sin existir: `next` dice qué corresponde y
+  las etapas se corren a mano, una por comando (ver 8g). `max_iterations` **sí** se consume
+  ahora, como criterio duro de `stop`.
+- **`llm.B6_branching`** — `branch` no llama a ningún modelo, y no puede: la única prohibición
+  explícita del spec para esa etapa es pedirle alternativas a un LLM. La clave quedó de cuando
+  se pensaba que haría falta. Es candidata a borrar, no a cablear.
+- **`cq.sparql_regeneration`** — la política D1 de regenerar consultas cuando cambian las clases
+  involucradas. Nada la lee todavía; ver 8h.
 
 Lo que hay que evitar es que crezcan en silencio: una clave de config que nadie lee afirma algo
 falso sobre lo que el sistema hace. `matching.blocking_strategy` fue el caso —decía `embedding`

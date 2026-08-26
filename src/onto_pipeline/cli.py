@@ -24,6 +24,7 @@ from . import (
     conflicts,
     coreference,
     cq,
+    cq_generation,
     enrichment,
     extraction,
     functional,
@@ -101,6 +102,14 @@ MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention 
 ExportOption = typer.Option(
     None, "--export", help="Write the misextractions to this JSONL, for the evaluation set."
 )
+PerStratumOption = typer.Option(
+    12, "--per-stratum", help="Passages sampled per stratum. The spec says 10-15."
+)
+SeedOption = typer.Option(0, "--seed", help="Sampling seed; the sample is deterministic.")
+CqStatusOption = typer.Option(
+    "proposed", "--status", help="proposed | accepted | discarded."
+)
+DiscardOption = typer.Option(False, "--discard", help="Discard instead of accepting.")
 ToOption = typer.Option(
     None, "--to", help="The class the mention really is. Omit with --none to orphan it."
 )
@@ -1567,9 +1576,12 @@ def branch_cmd(
         conflicts, pre_existing = [], []
 
     axes = branching.logical_axes(conflicts, axioms, labels)
+    similarity = _text_similarity(config)
+    if similarity is None:
+        console.print("[dim]  the division-criterion axis is one of them[/]")
     axes += branching.modelling_axes(
         situation,
-        similarity=_criterion_similarity(config),
+        similarity=similarity,
         min_group=config.branching.min_group,
         min_separation=config.branching.min_criterion_separation,
     )
@@ -1691,17 +1703,24 @@ def _situation(config, proposals: dict, axioms, labels: dict[str, str]):
     )
 
 
-def _criterion_similarity(config):
-    """The division-criterion detector needs to know when two declared criteria are the same
-    cut. Returns None when the encoder is not installed: losing that axis is acceptable,
-    guessing at it is not."""
+def _text_similarity(config):
+    """Cosine similarity between two short texts, from the bi-encoder already configured.
+
+    Two callers, both of which prefer to lose a capability over guessing at it: the
+    division-criterion axis, which needs to know when two declared criteria name the same cut,
+    and A3's deduplication. Returns None when the encoder is not installed, and each caller
+    says what it does without one.
+    """
     from .embeddings import EncoderUnavailable, SentenceTransformerEncoder
     from .matching import dot
 
     try:
         encoder = SentenceTransformerEncoder(config.matching.bi_encoder, config.matching.device)
     except EncoderUnavailable:
-        console.print("[yellow]no encoder[/]: the division-criterion axis is not looked for")
+        console.print(
+            "[yellow]no encoder[/] (`uv sync --extra matching`): the checks that need one are "
+            "skipped, and the command says which"
+        )
         return None
 
     cache: dict[str, list[float]] = {}
@@ -2688,6 +2707,144 @@ def cq_import(
     conn = connect(config.paths.work_dir)
     questions = cq.read_file(path)
     console.print(f"[green]stored[/] {cq.add(conn, questions)} competency questions")
+
+
+@cq_app.command("propose")
+def cq_propose(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    per_stratum: int = PerStratumOption,
+    seed: int = SeedOption,
+) -> None:
+    """A3: generate competency questions from the corpus, filtered before you read them.
+
+    **They measure completeness with respect to the corpus, not to the domain.** That is the
+    same limitation as novelty saturation and it cannot be fixed from inside; the mitigation is
+    A4 — the questions you write without looking at these.
+
+    Sampling is stratified because the strata are what make the question types possible: a
+    passage saying "must not" is where a restrictive question comes from, and it is invisible
+    in a random sample of paragraphs. Generation is one prompt per type with a quota, because
+    the inferential and negative types are the ones a model never writes on its own and the
+    ones the spec says pay best.
+
+    What survives the mechanical filter is `proposed`. Accepting is yours, and it is one-time
+    work rather than per-iteration work.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    blocks = _corpus_blocks(conn)
+    if not blocks:
+        raise typer.BadParameter("no parsed blocks; run ingest first")
+    strata = cq_generation.sample(blocks, per_stratum=per_stratum, seed=seed)
+
+    table = Table("stratum", "passages")
+    for name, passages in sorted(strata.items()):
+        table.add_row(name, str(len(passages)))
+    console.print(table)
+    missing = set(cq_generation.STRATA) | {cq_generation.TABLE_STRATUM} - set(strata)
+    if missing:
+        console.print(
+            f"[yellow]no passage found for[/] {', '.join(sorted(missing))} — the question "
+            "types those strata support cannot be grounded in this corpus"
+        )
+
+    labels = [
+        target.label for target in typing_store.targets_from(graph, "label")
+    ]
+    quota = config.cq.type_quota or {name: 10 for name in cq.TYPES}
+    pool = [item for passages in strata.values() for item in passages]
+
+    payloads = [
+        (cq_type, cq_generation.payload(cq_type, pool, labels, count))
+        for cq_type, count in sorted(quota.items()) if count
+    ]
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, cq_generation.STAGE)
+    with console.status(f"propose-cq · {len(payloads)} types"):
+        result = llm.run(
+            Ledger(conn, config.execution), model, cq_generation.PROMPT, stage,
+            payloads, cq_generation.parse,
+        )
+
+    answers = {
+        cq_type: answer["questions"] for cq_type, answer in result.outputs.items()
+    }
+    existing = [q.question for q in cq.load(conn, status=cq.ACCEPTED)]
+    existing += [q.question for q in cq.load(conn, status=cq_generation.PROPOSED)]
+    similarity = _text_similarity(config)
+    if similarity is None:
+        console.print(
+            "[dim]  near-duplicate detection is one of them; the text fallback lets two "
+            "questions differing by a word through, which is a review cost[/]"
+        )
+    filtered = cq_generation.screen(
+        answers, {cq_type: pool for cq_type in answers}, existing, similarity=similarity,
+    )
+    cq.add(conn, filtered.kept)
+
+    summary = Table("what", "count")
+    summary.add_row("questions generated", str(sum(len(v) for v in answers.values())))
+    summary.add_row("kept", str(len(filtered.kept)))
+    summary.add_row("dropped by the filter", str(len(filtered.dropped)))
+    summary.add_row("failed", str(len(result.failures)))
+    console.print(summary)
+    for question, why in filtered.dropped[:8]:
+        console.print(f"  [yellow]dropped[/] {question[:60]} — {why}")
+
+    short = cq_generation.shortfall(filtered.kept, quota)
+    if short:
+        console.print(
+            "[yellow]below quota[/]: "
+            + ", ".join(f"{name} needs {count} more" for name, count in sorted(short.items()))
+            + ". Reported, never topped up with another type — the inferential and negative "
+            "quotas exist because a model does not write those on its own."
+        )
+    console.print(
+        "\n[dim]These measure completeness against the corpus, not the domain. Write your own "
+        "(A4) before reading them, or that limitation goes unmitigated.[/]"
+    )
+    console.print("Review them with `onto-pipeline cq list --status proposed`.")
+
+
+@cq_app.command("list")
+def cq_list(
+    config_path: Path = ConfigOption,
+    status: str = CqStatusOption,
+    limit: int | None = LimitOption,
+) -> None:
+    """The questions in the store, by status."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    questions = cq.load(conn, status=status)
+
+    table = Table("id", "type", "lang", "question", "cited")
+    for question in questions[: limit or 40]:
+        table.add_row(
+            question.id, question.cq_type, question.language, question.question[:60],
+            f"{(question.citation or {}).get('document_id', '—')[:18]}"
+            f" p.{(question.citation or {}).get('page', '?')}",
+        )
+    console.print(table)
+    console.print(f"{len(questions)} with status {status}")
+
+
+@cq_app.command("accept")
+def cq_accept(
+    ids: list[str],
+    config_path: Path = ConfigOption,
+    discard: bool = DiscardOption,
+) -> None:
+    """Accept (or `--discard`) proposed questions. The third action of A3's review,
+    reformulating, is an edit and goes back through `cq import`."""
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    decision = cq.DISCARDED if discard else cq.ACCEPTED
+    changed = cq.decide(conn, ids, decision)
+    console.print(f"[green]{decision}[/] {changed} question(s)")
 
 
 @cq_app.command("eval")

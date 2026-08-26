@@ -9,8 +9,8 @@ The primary stopping rule is CQ pass rate >= target with no rise over two iterat
 makes it the primary criterion is not the number: a failing CQ says *what* is missing, which
 feeds the next iteration's prompt. No other criterion has that property.
 
-A3 generation needs a model and is not wired. The store, the evaluation and A4 import are
-deterministic and are here.
+A3 generation lives in `cq_generation.py`, which needs a model. The store, the evaluation and
+A4 import are deterministic and are here.
 """
 
 from __future__ import annotations
@@ -30,6 +30,9 @@ USER = "user"
 
 ACCEPTED = "accepted"
 DISCARDED = "discarded"
+# A3's output before anyone has looked at it. The mechanical filter has already run; what is
+# left is the three-action review the spec calls one-time work, not per-iteration work.
+PROPOSED = "proposed"
 
 TYPES = (
     "definitional",
@@ -48,7 +51,7 @@ CREATE TABLE IF NOT EXISTS competency_questions (
   cq_type      TEXT,
   origin       TEXT NOT NULL,   -- generated (A3) | user (A4)
   sparql       TEXT NOT NULL,
-  status       TEXT NOT NULL,   -- accepted | discarded
+  status       TEXT NOT NULL,   -- proposed (A3, unreviewed) | accepted | discarded
   citation     TEXT,            -- JSON {document_id, page, quote}; A3 requires one
   created_at   TEXT
 );
@@ -171,6 +174,20 @@ def load(conn: sqlite3.Connection, *, status: str = ACCEPTED) -> list[Competency
             "SELECT * FROM competency_questions WHERE status = ? ORDER BY id", (status,)
         )
     ]
+
+
+def decide(conn: sqlite3.Connection, ids: list[str], status: str) -> int:
+    """Accept or discard proposed questions. The third action, reformulating, is an edit and
+    goes through `import` like any question the user writes."""
+    if status not in (ACCEPTED, DISCARDED):
+        raise ValueError(f"a question is accepted or discarded, not {status!r}")
+    install(conn)
+    cursor = conn.executemany(
+        "UPDATE competency_questions SET status = ? WHERE id = ?",
+        [(status, item) for item in ids],
+    )
+    conn.commit()
+    return cursor.rowcount
 
 
 def read_file(path: Path) -> list[CompetencyQuestion]:
