@@ -37,6 +37,13 @@ _KINDS = {
     OWL.NamedIndividual: INDIVIDUAL,
 }
 
+# Every annotation property the pipeline may write, declared in one place. Writing one that is
+# not here silently leaves OWL 2 DL, which is how `scopeNote` slipped in with axiomatization:
+# the defect does not surface as an error, it surfaces as ELK quietly being skipped.
+DECLARED_ANNOTATIONS = (
+    SKOS.prefLabel, SKOS.altLabel, SKOS.definition, SKOS.historyNote, SKOS.scopeNote,
+)
+
 # uuid5, not uuid4: normalizing the same seed twice has to produce the same ontology, or every
 # downstream cache key moves with it.
 _IRI_NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
@@ -137,9 +144,9 @@ def _rewrite(graph: Graph, mapping: dict[URIRef, str]) -> Graph:
     for original, opaque in mapping.items():
         rewritten.add((URIRef(opaque), SKOS.historyNote, Literal(str(original))))
 
-    # OWL 2 DL requires every annotation property to be declared. Without this the seed
+    # OWL 2 DL requires every annotation property to be declared. Without this the ontology
     # leaves the DL profile, ELK's coverage collapses and it is skipped as a filter (spec 9.2).
-    for annotation in (SKOS.prefLabel, SKOS.altLabel, SKOS.definition, SKOS.historyNote):
+    for annotation in DECLARED_ANNOTATIONS:
         rewritten.add((annotation, RDF.type, OWL.AnnotationProperty))
     return rewritten
 

@@ -15,6 +15,7 @@ from rich.table import Table
 from . import (
     annotate,
     annotation,
+    axiomatization,
     bridging,
     calibration,
     coreference,
@@ -76,6 +77,9 @@ InferOption = typer.Option(
 CommentOption = typer.Option("", "--comment", help="Why, in your words.")
 IncludeHeldOutOption = typer.Option(
     False, "--include-held-out", help="Also process the retention set. Normally you do not."
+)
+ApplyOption = typer.Option(
+    False, "--apply", help="Commit even with structural findings, which are warnings."
 )
 ForceRegenOption = typer.Option(
     False, "--force", help="Write the ABox again even if the rules did not change."
@@ -560,6 +564,154 @@ def bridge_cmd(
     )
     for identifier, error in list(result.failures.items())[:5]:
         console.print(f"  [red]{identifier}[/]: {error}")
+
+
+@app.command("axiomatize")
+def axiomatize_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    apply_changes: bool = ApplyOption,
+) -> None:
+    """Turn proposed classes into axioms, validate them, and commit a new version.
+
+    The model is asked one atomic question per proposal — a kind of, an example of, or
+    neither — and the code writes the OWL. Direct application, no branches: that is the
+    milestone the spec's build sequence puts before branching exists.
+    """
+    from .reasoning import REJECTED, Reasoners, ReasonerUnavailable
+
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    proposals = induction.load(conn, version_id)
+    if not proposals:
+        raise typer.BadParameter(f"no proposed classes against {version_id}; run induce first")
+
+    targets = typing_store.targets_from(graph, "label")
+    label_to_iri = {target.label: target.iri for target in targets}
+    by_iri = {target.iri: target for target in targets}
+    support = {
+        proposal["id"]: [
+            row["mention_id"]
+            for row in conn.execute(
+                "SELECT mention_id FROM proposed_class_mentions WHERE proposed_id = ?",
+                (proposal["id"],),
+            )
+        ]
+        for proposal in proposals
+    }
+
+    # Several candidates with their definitions, not the single runner-up the matcher
+    # suggested: on real data that one is often unrelated, and a forced parent is worse
+    # than none.
+    payloads = []
+    for proposal in proposals:
+        nearest = by_iri.get(proposal["nearest_iri"] or "")
+        candidates = [{"label": nearest.label, "gloss": nearest.gloss}] if nearest else []
+        for target in targets:
+            if len(candidates) >= config.axiomatization.n_candidates:
+                break
+            if nearest is None or target.iri != nearest.iri:
+                candidates.append({"label": target.label, "gloss": target.gloss})
+        phrases = [
+            row["surface_text"]
+            for row in conn.execute(
+                "SELECT DISTINCT m.surface_text FROM proposed_class_mentions p "
+                "JOIN mentions m ON m.id = p.mention_id WHERE p.proposed_id = ? LIMIT 12",
+                (proposal["id"],),
+            )
+        ]
+        payloads.append((proposal["id"], axiomatization.payload(proposal, candidates, phrases)))
+
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, axiomatization.STAGE)
+    with console.status(f"axiomatize · {len(proposals)} proposals"):
+        result = llm.run(
+            Ledger(conn, config.execution), model, axiomatization.PROMPT, stage,
+            payloads, axiomatization.parse,
+        )
+
+    judgements = {
+        proposal_id: axiomatization.Judgement(**answer)
+        for proposal_id, answer in result.outputs.items()
+    }
+    assembly = axiomatization.assemble(
+        proposals, judgements, base_iri=config.seed.base_iri,
+        label_to_iri=label_to_iri, support=support,
+    )
+    axiomatization.persist(conn, version_id, assembly.axioms)
+
+    tally: dict[str, int] = {}
+    for judgement in judgements.values():
+        tally[judgement.relation] = tally.get(judgement.relation, 0) + 1
+    table = Table("what", "count")
+    table.add_row("proposals judged", str(len(judgements)))
+    for relation, count in sorted(tally.items()):
+        table.add_row(f"  {relation}", str(count))
+    table.add_row("classes to mint", str(len(assembly.minted)))
+    table.add_row("axioms assembled", str(len(assembly.axioms)))
+    table.add_row("proposals refused", str(len(assembly.rejected)))
+    console.print(table)
+    for proposal_id, why in list(assembly.rejected.items())[:5]:
+        console.print(f"  [yellow]refused[/] {proposal_id}: {why}")
+
+    if not assembly.axioms:
+        console.print("nothing to apply")
+        return
+
+    candidate_graph = axiomatization.apply(graph, assembly.axioms)
+    try:
+        reasoners = Reasoners(
+            config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+        )
+    except ReasonerUnavailable as exc:
+        raise typer.BadParameter(
+            f"{exc}. Applying without the reasoner would skip the filter that makes this safe."
+        ) from exc
+
+    ontology = reasoners.load(candidate_graph)
+    elk = reasoners.elk(ontology, coverage_threshold=config.reasoner.elk_coverage_threshold)
+    hermit = reasoners.hermit(ontology)
+    metrics = structural.check(candidate_graph)
+
+    verdict = Table("filter", "result", "detail")
+    verdict.add_row("ELK", elk.verdict, elk.note[:52])
+    verdict.add_row("HermiT", "consistent" if hermit.consistent else REJECTED,
+                    f"{len(hermit.unsatisfiable)} unsatisfiable")
+    verdict.add_row("structural", REJECTED if metrics.rejected else "clean",
+                    f"depth {metrics.depth} · {len(metrics.findings)} finding(s)")
+    console.print(verdict)
+
+    blocked = elk.verdict == REJECTED or not hermit.consistent or hermit.unsatisfiable
+    if blocked:
+        for iri, justifications in hermit.justifications.items():
+            console.print(f"[red]unsatisfiable[/] {iri}")
+            for axiom in (justifications[0] if justifications else []):
+                console.print(f"    {axiom}")
+        console.print("[red]not applied[/]: the reasoner rejected it")
+        return
+    if metrics.rejected:
+        for finding in metrics.findings[:8]:
+            console.print(f"  [yellow]{finding.check}[/] {finding.subject} — {finding.detail}")
+        console.print(
+            "[yellow]not applied[/]: structural findings. Fix them or run with --apply to "
+            "override, which the spec allows only because these are warnings about shape."
+        )
+        if not apply_changes:
+            return
+
+    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    committed = versioning.commit(
+        conn, candidate_graph, version_id=next_id, parent_id=version_id, iteration=1,
+        note=f"{len(assembly.minted)} induced classes, applied directly",
+    )
+    console.print(
+        f"[green]committed[/] {committed.id} (parent {version_id}) · "
+        f"{len(graph)} -> {len(candidate_graph)} triples"
+    )
+    _publish_diff(config, conn, committed.id)
 
 
 @app.command("induce")

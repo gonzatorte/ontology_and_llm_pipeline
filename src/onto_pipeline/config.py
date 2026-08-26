@@ -78,6 +78,12 @@ class Induction(BaseModel):
     max_phrases_in_prompt: int = 30
 
 
+class Axiomatization(BaseModel):
+    # Several candidates with their definitions, not the matcher's single runner-up: on real
+    # data that one is often unrelated, and the parent has to be re-decided here.
+    n_candidates: int = 6
+
+
 class Seed(BaseModel):
     base_iri: str = "https://ontology.local/id/"
     label_divergence_threshold: float = 0.8
@@ -205,6 +211,7 @@ class Config(BaseModel):
     extraction: Extraction = Extraction()
     bridging: Bridging = Bridging()
     induction: Induction = Induction()
+    axiomatization: Axiomatization = Axiomatization()
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()
