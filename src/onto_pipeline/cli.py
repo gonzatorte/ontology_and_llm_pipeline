@@ -19,6 +19,7 @@ from . import (
     branching,
     bridging,
     calibration,
+    conflicts,
     coreference,
     cq,
     enrichment,
@@ -85,6 +86,13 @@ ApplyOption = typer.Option(
 )
 ForceRegenOption = typer.Option(
     False, "--force", help="Write the ABox again even if the rules did not change."
+)
+MarkOption = typer.Option(
+    ..., "--mark", help="refuted (the document is wrong) | misextracted (B1 read it wrong)."
+)
+MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention ids to mark.")
+ExportOption = typer.Option(
+    None, "--export", help="Write the misextractions to this JSONL, for the evaluation set."
 )
 DryRunOption = typer.Option(
     False, "--dry-run", help="Show what would be asked about, and ask nothing."
@@ -721,6 +729,137 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("conflicts")
+def conflicts_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    limit: int | None = LimitOption,
+) -> None:
+    """Entities two documents typed differently (spec 6.4).
+
+    The volume filter is the point: a conflict the reasoner would not break on is notarized
+    without asking, because deciding case by case is the manual review this exists to avoid.
+    Only the ones that make a class incompatible reach `review`, and there will be few.
+
+    A pair of classes that collides again and again is not many cases — it is one question
+    about the TBox, and it is reported as such.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+    labels = versioning.label_index(graph)
+
+    rules = mapping.rules_from_config(config.mapping, config.seed.base_iri)
+    rows, typings = mapping.load_inputs(conn, version_id)
+    if not rows:
+        raise typer.BadParameter("no mentions; run extract first")
+
+    groups = {
+        anchor: [
+            {"id": row.id, "document_id": row.document_id, "surface_text": row.surface_text}
+            for row in members
+        ]
+        for anchor, members in mapping.anchors(rows, rules).items()
+    }
+    found = conflicts.detect(
+        groups, typings, accepted_zones=rules.type_from, above=conflicts.ancestors(graph),
+    )
+    incompatible, source = _incompatibilities(config, graph, conflicts.candidate_pairs(found))
+    conflicts.classify(found, incompatible)
+
+    breaking = [item for item in found if item.breaks_reasoner]
+    items = conflicts.findings(
+        found, labels, pattern_threshold=config.mapping.conflict_pattern_threshold
+    )
+    report = review.sync(
+        conn, items, version_id=version_id,
+        kinds=[conflicts.FACTUAL_CONFLICT, conflicts.CONFLICT_PATTERN],
+    )
+
+    table = Table("what", "count", "note")
+    table.add_row("entities", str(len(groups)), f"from {len(rows)} mentions")
+    table.add_row("in conflict", str(len(found)), "typed to more than one class")
+    table.add_row(f"  {rules.conflict_policy}d silently", str(len(found) - len(breaking)),
+                  "no incompatibility, so no question")
+    table.add_row("  sent to review", str(len(breaking)), f"incompatible per {source}")
+    table.add_row("patterns", str(sum(1 for i in items if i.kind == conflicts.CONFLICT_PATTERN)),
+                  "a recurring pair is a TBox question")
+    table.add_row("review items added", str(report.added), f"{report.already_known} known")
+    console.print(table)
+
+    for item in items[: limit or 10]:
+        console.print(f"  [yellow]{item.kind}[/] {item.summary}")
+    if found and not breaking:
+        console.print(
+            f"[dim]The {len(found)} disagreements are kept with their provenance and flagged "
+            f"`{mapping.NOTARIZED}` in the ABox. Notarizing is the silent default because it "
+            "is the only policy that destroys no information.[/]"
+        )
+
+
+@app.command("mark")
+def mark_cmd(
+    mentions: list[str] = MentionsOption,
+    mark: str = MarkOption,
+    config_path: Path = ConfigOption,
+    comment: str = CommentOption,
+    export: Path | None = ExportOption,
+) -> None:
+    """Mark an assertion false. `refuted` and `misextracted` are opposite signals (spec 6.4).
+
+    `refuted`: the document asserts it and it is not true. The assertion leaves the ABox.
+
+    `misextracted`: the document never said it and the extractor misread. That is a B1 bug, it
+    also leaves the ABox, and it goes to the evaluation set — free extraction-error labels
+    nobody had to annotate on purpose. Mixing the two loses them.
+
+    Under the open-world assumption these are not the same as asserting the negation: silence
+    is not knowledge. Nothing is written into the ontology as a negative assertion here.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    try:
+        marked = conflicts.mark(conn, mentions, mark, comment)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    console.print(f"[green]marked[/] {marked} mention(s) as {mark}")
+    console.print(
+        "[dim]The mapping rules changed, so the ABox is stale: run `regenerate` to apply "
+        "it.[/]"
+    )
+    if export is not None:
+        export.parent.mkdir(parents=True, exist_ok=True)
+        export.write_text(conflicts.export_misextractions(conn) + "\n", encoding="utf-8")
+        console.print(f"[green]wrote[/] {export}")
+
+
+def _incompatibilities(config, graph, pairs):
+    """What the TBox calls incompatible, from the reasoner when one is available.
+
+    The asserted-and-inherited disjointness is a lower bound: two classes can be unsatisfiable
+    together for reasons no `owl:disjointWith` states. Falling back to it is fine as long as
+    the answer says which test was used — reporting "no conflict" from the weaker one would be
+    reporting the absence of the instrument as the absence of the finding.
+    """
+    from .reasoning import InconsistentOntology, Reasoners, ReasonerUnavailable
+
+    asserted = conflicts.asserted_incompatibilities(graph)
+    if not pairs:
+        return asserted, "asserted disjointness"
+    try:
+        reasoners = Reasoners(
+            config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+        )
+        return asserted | reasoners.incompatible_pairs(graph, pairs), "the reasoner"
+    except ReasonerUnavailable as exc:
+        console.print(f"[yellow]no reasoner[/] ({exc}); using asserted disjointness only")
+    except InconsistentOntology as exc:
+        console.print(f"[red]{exc}[/]; using asserted disjointness only")
+    return asserted, "asserted disjointness"
 
 
 @app.command("enrich")
@@ -1904,7 +2043,12 @@ def regenerate_cmd(
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     version_id = _resolve_version(conn, version)
-    rules = mapping.rules_from_config(config.mapping, config.seed.base_iri)
+    # The falsity marks travel as per-case exceptions, so a refutation reaches the rules hash.
+    # A decision that changed no rule would be a decision this stage never notices: it is
+    # idempotent over (state, rules) by design.
+    rules = mapping.rules_from_config(config.mapping, config.seed.base_iri).with_exceptions(
+        conflicts.as_exceptions(conn)
+    )
 
     rows, typings = mapping.load_inputs(conn, version_id)
     if not rows:
@@ -1918,7 +2062,8 @@ def regenerate_cmd(
         )
         return
 
-    result = mapping.regenerate(rows, typings, rules)
+    _, tbox = versioning.load(conn, version_id)
+    result = mapping.regenerate(rows, typings, rules, conflicts.ancestors(tbox))
     target = config.paths.work_dir / "ontology" / f"{version_id}.abox.trig"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(result.dataset.serialize(format="trig"), encoding="utf-8")
@@ -1929,6 +2074,8 @@ def regenerate_cmd(
     table.add_row("untyped", str(result.n_untyped), "orphans, or typed in a rejected zone")
     table.add_row("possible duplicates", str(result.n_unresolved),
                   "out of the functional-property support count")
+    table.add_row("type conflicts", str(result.n_conflicts), f"policy {rules.conflict_policy}")
+    table.add_row("excluded by a mark", str(result.n_excluded), "refuted or misextracted")
     table.add_row("quads", str(result.n_triples), rules.provenance)
     console.print(table)
     console.print(

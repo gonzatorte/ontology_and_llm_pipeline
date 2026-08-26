@@ -160,6 +160,10 @@ class Mapping(BaseModel):
     provenance: str = "named_graph"          # named_graph | flat
     conflict_policy: str = "notarize"        # notarize | force | refute
     duplicate_policy: str = "separate"       # separate | merge
+    # From how many entities a class pair colliding stops being cases and becomes one question
+    # about the TBox (6.4). Contextualizing a property changes the shape of every query over
+    # it, the CQs' SPARQL included, so that question belongs to branching and not here.
+    conflict_pattern_threshold: int = 3
 
 
 class CompetencyQuestions(BaseModel):

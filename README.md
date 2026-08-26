@@ -26,6 +26,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | B1b | **corefer** | Agrupa las menciones que hablan del mismo individuo |
 | B2 | **match** | Tipa cada mención contra una clase, y resuelve entidades |
 | B2b | **bridge** | Conecta huérfanas con la semilla por conocimiento del mundo |
+| 6.4 | **conflicts** · **mark** | Documentos que se contradicen; notarizar, forzar, refutar |
 | B3 | **induce** | Convierte huérfanas en clases nuevas |
 | B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
 | B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
@@ -65,6 +66,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B5 filtros 3–6 (SHACL, OntoClean, OOPS!, evidencia) | **no implementado** |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
+| Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
 
@@ -426,7 +428,59 @@ Sobre el par actual el resultado es cero pasajes para las 34 clases de la semill
 exactamente lo que predice el desajuste temático documentado más abajo: no es una falla de la
 etapa, es la etapa reportando que el corpus no define nada de lo que la semilla nombra.
 
-### 5. Validación (A0.0 + B5)
+### 5. Conflictos fácticos (§6.4)
+
+```bash
+uv run onto-pipeline conflicts                       # ¿quién se contradice con quién?
+uv run onto-pipeline mark -m m123 --mark refuted --comment "el paper se equivoca"
+uv run onto-pipeline mark -m m456 --mark misextracted --export data/eval/b1-errors.jsonl
+uv run onto-pipeline regenerate                      # recién ahí el ABox lo refleja
+```
+
+Distintos de los compromisos de modelado de `branch`: acá el documento 12 afirma X y el 47
+afirma ¬X. Como el ABox deriva de la capa de menciones, lo que un documento afirma sobre una
+entidad es su tipo, así que el desacuerdo es una entidad tipada a dos clases por documentos
+distintos.
+
+**El filtro de volumen es el diseño.** Decidir caso por caso es la revisión manual que el
+pipeline existe para evitar (D5), así que la división es mecánica:
+
+| El conflicto… | Destino |
+|---|---|
+| no rompe al razonador | **notarizado sin preguntar** — ambos hechos, con su procedencia, y una marca `notarizedTypeConflict` para que el desacuerdo siga siendo encontrable |
+| rompe al razonador | llega a `review`, y van a ser pocos |
+
+Notarizar es el default silencioso porque es la única política que no destruye información. Las
+otras dos existen y son por caso: `force` (gana una fuente; sin excepción nombrada gana la clase
+mejor atestiguada, empate por IRI para que la salida sea reproducible) y `refute`.
+
+**La subsunción no es desacuerdo.** Una entidad tipada a `Interview` y a `Technique`, siendo la
+primera un tipo de la segunda, es un hecho dicho a dos niveles de detalle. Sin ese filtro el
+reporte se llena de la jerarquía discutiendo consigo misma — medido sobre el caso de prueba: 4
+conflictos aparentes, 1 real.
+
+**Un conflicto es un caso; un patrón es una pregunta sobre la TBox.** Si el mismo par de clases
+choca sobre `conflict_pattern_threshold` entidades o más, eso no son N casitos: o las dos clases
+se están usando para lo mismo, o la propiedad necesita contextualizarse. Y contextualizar cambia
+la forma de todas las consultas sobre esa propiedad, incluidas las SPARQL de las CQ, así que es
+un eje de `branch` y nunca una decisión por caso.
+
+**`refuted` y `misextracted` no son lo mismo y no hay que mezclarlos.** Parecen iguales en una
+interfaz y son señales opuestas:
+
+- `refuted`: el documento lo afirma y no es cierto. La aserción sale del ABox.
+- `misextracted`: el documento nunca dijo eso, el extractor leyó mal. **Es un bug de B1**, sale
+  igual del ABox, y además va al conjunto de evaluación con `--export`. Son etiquetas de error
+  de extracción que nadie anotó a propósito: la única fuente gratuita que el sistema tiene.
+
+Las marcas viajan como excepciones de las reglas de mapeo, así que entran al `rules_hash`: una
+decisión que no cambiara ninguna regla sería una decisión que el ABox nunca nota, porque
+`regenerate` es idempotente sobre (estado, reglas).
+
+Bajo mundo abierto, no asertar X y asertar ¬X son cosas distintas: la primera es silencio, la
+segunda es conocimiento. Marcar algo falso **no** escribe una aserción negativa en la ontología.
+
+### 6. Validación (A0.0 + B5)
 
 ```bash
 uv run onto-pipeline validate                    # última versión
@@ -439,7 +493,7 @@ Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 encontró nada, pero puede haber ignorado el axioma culpable), nunca `OK`. Si la cobertura EL
 cae por debajo del umbral, devuelve `SKIPPED`.
 
-### 6. Competency questions
+### 7. Competency questions
 
 ```bash
 uv run onto-pipeline cq import examples/competency_questions.json
@@ -450,7 +504,7 @@ Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además
 `eval` corre todo contra una versión del DAG y registra la tasa de aprobación, que es el
 criterio de parada primario.
 
-### 7. Regeneración del ABox
+### 8. Regeneración del ABox
 
 ```bash
 uv run onto-pipeline regenerate                  # última versión
@@ -477,7 +531,7 @@ conviene saber al leer la salida:
 La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
 con las mismas reglas no hace nada y lo dice.
 
-### 8. Inspección
+### 9. Inspección
 
 ```bash
 uv run onto-pipeline report                 # T1: HTML por documento
@@ -505,7 +559,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 9. Conjunto de retención
+### 10. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -569,7 +623,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 10. Calibración contra un corpus publicado
+### 11. Calibración contra un corpus publicado
 
 El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
 cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por

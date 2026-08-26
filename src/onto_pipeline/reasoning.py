@@ -25,6 +25,7 @@ Hence REJECTED / INCONCLUSIVE, never OK.
 from __future__ import annotations
 
 import glob
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -282,6 +283,43 @@ class Reasoners:
             materialized.add(triple)
         materialized.parse(data=str(document.toString()), format="turtle")
         return materialized
+
+    def incompatible_pairs(
+        self, graph: Graph, pairs: Sequence[tuple[str, str]]
+    ) -> set[frozenset[str]]:
+        """Which of these class pairs cannot both hold of one individual.
+
+        Asked pair by pair rather than by enumerating the ontology's disjointness: what makes
+        two classes incompatible is often not an `owl:disjointWith` at all but a combination
+        of restrictions, and only the reasoner sees that. Bounded by the caller — the pairs
+        that actually collided in the data are a handful, while every pair of classes is
+        quadratic and unnecessary.
+        """
+        from org.semanticweb.HermiT import ReasonerFactory
+        from org.semanticweb.owlapi.model import IRI
+
+        ontology = self.load(graph)
+        factory = self._manager.getOWLDataFactory()
+        reasoner = ReasonerFactory().createReasoner(ontology, self._hermit_configuration())
+        incompatible: set[frozenset[str]] = set()
+        try:
+            if not reasoner.isConsistent():
+                # Everything is unsatisfiable, so every pair would come back incompatible.
+                # That is not a finding about the pairs; it is a finding about the ontology.
+                raise InconsistentOntology(
+                    "the ontology is inconsistent, so every pair reads as incompatible; "
+                    "run `validate` and fix that first"
+                )
+            for first, second in pairs:
+                expression = factory.getOWLObjectIntersectionOf(
+                    factory.getOWLClass(IRI.create(first)),
+                    factory.getOWLClass(IRI.create(second)),
+                )
+                if not reasoner.isSatisfiable(expression):
+                    incompatible.add(frozenset((first, second)))
+        finally:
+            reasoner.dispose()
+        return incompatible
 
     def justify(self, ontology, class_iri: str, limit: int = 3) -> list[list[str]]:
         """Minimal axiom sets that make a class unsatisfiable — Reiter's hitting-set tree over

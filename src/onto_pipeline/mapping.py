@@ -58,6 +58,11 @@ REFUTE = "refute"
 SEPARATE = "separate"
 MERGE = "merge"
 
+# Falsity marks, carried in as per-case exceptions so they reach the rules hash — a decision
+# that changed no rule would be a decision the ABox never notices. Named here rather than
+# imported from `conflicts` so regeneration keeps depending on nothing but its arguments.
+FALSITY_MARKS = frozenset({"refuted", "misextracted"})
+
 # Same namespace as the seed normalizer's, so an individual's IRI and a class's are minted by
 # one scheme. uuid5, never uuid4: regeneration has to be reproducible.
 _IRI_NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
@@ -70,6 +75,11 @@ SPAN_START = URIRef(ONTO + "spanStart")
 SPAN_END = URIRef(ONTO + "spanEnd")
 UNRESOLVED = URIRef(ONTO + "possibleDuplicateUnresolved")
 DOCUMENT = URIRef(ONTO + "document")
+# Notarizing keeps both facts *and* the disagreement. Without a flag the result is
+# indistinguishable from an entity that simply belongs to two classes, and the whole point of
+# the policy is that the conflict stays findable (6.4).
+NOTARIZED = URIRef(ONTO + "notarizedTypeConflict")
+REFUTED_TYPES = URIRef(ONTO + "refutedTypeConflict")
 
 
 class UnknownPolicy(ValueError):
@@ -169,6 +179,8 @@ class Regeneration:
     n_typed: int = 0
     n_untyped: int = 0
     n_unresolved: int = 0
+    n_conflicts: int = 0
+    n_excluded: int = 0      # mentions a falsity mark kept out of the ABox (6.4)
 
     @property
     def n_triples(self) -> int:
@@ -201,17 +213,26 @@ def regenerate(
     rows: list[MentionRow],
     typings: dict[str, tuple[str | None, str]],
     rules: MappingRules,
+    above: dict[str, set[str]] | None = None,
 ) -> Regeneration:
     """The mention layer plus one version's typings, as an ABox.
 
     `typings` maps a mention id to (class IRI, zone). A mention typed in a zone the rules do
     not accept is emitted as an untyped individual rather than dropped: it exists, it has
     provenance, and what is missing is only its class.
+
+    `above` is the subclass closure, used only to tell a disagreement from a hierarchy: two
+    documents typing one entity at two levels of the same branch agree.
     """
     dataset = Dataset()
     default = dataset.graph(URIRef(ONTO + "abox"))
     result = Regeneration(dataset=dataset, rules_hash=rules.rules_hash())
     accepted = set(rules.type_from)
+
+    exceptions = dict(rules.exceptions)
+    kept = [row for row in rows if exceptions.get(f"mention:{row.id}") not in FALSITY_MARKS]
+    result.n_excluded = len(rows) - len(kept)
+    rows = kept
 
     for anchor, members in sorted(anchors(rows, rules).items()):
         individual = individual_iri(anchor, rules.base_iri)
@@ -219,12 +240,24 @@ def regenerate(
         default.add((individual, RDF.type, OWL.NamedIndividual))
         default.add((individual, RDFS.label, Literal(members[0].surface_text)))
 
-        classes = {
-            iri for member in members
-            for iri, zone in [typings.get(member.id, (None, ""))]
-            if iri and zone in accepted
-        }
-        for iri in sorted(classes):
+        by_class: dict[str, int] = {}
+        for member in members:
+            iri, zone = typings.get(member.id, (None, ""))
+            if iri and zone in accepted:
+                by_class[iri] = by_class.get(iri, 0) + 1
+
+        classes = sorted(by_class)
+        # A superclass of another class in the same set is entailed, not a second opinion.
+        # Passed in rather than derived: this stage reads the TBox through its arguments or
+        # not at all, and it never calls a reasoner.
+        disagreeing = [
+            iri for iri in classes
+            if not any(other != iri and iri in (above or {}).get(other, ()) for other in classes)
+        ]
+        if len(disagreeing) > 1:
+            result.n_conflicts += 1
+            classes = _settle(disagreeing, by_class, anchor, rules, default, individual)
+        for iri in classes:
             default.add((individual, RDF.type, URIRef(iri)))
         result.n_typed += bool(classes)
         result.n_untyped += not classes
@@ -251,6 +284,33 @@ def regenerate(
                                                         datatype=XSD.integer)))
                 target.add((mention, SPAN_END, Literal(member.span_end, datatype=XSD.integer)))
     return result
+
+
+def _settle(
+    classes: list[str], support: dict[str, int], anchor: str, rules: MappingRules,
+    graph, individual: URIRef,
+) -> list[str]:
+    """Two documents typed one entity two ways. Which facts survive, per 6.4's policies.
+
+    `notarize` is the silent default because it is the only one that destroys no information:
+    both types stay, the provenance already says which document contributed each, and a flag
+    keeps the disagreement findable instead of letting it read as an entity that simply
+    belongs to two classes.
+    """
+    override = dict(rules.exceptions).get(f"entity:{anchor}", "")
+    if override.startswith("force:"):
+        chosen = override.split(":", 1)[1]
+        return [chosen] if chosen in classes else classes
+
+    if rules.conflict_policy == FORCE:
+        # No per-case winner was named, so the best defensible global rule: the class the most
+        # mentions support, ties broken by IRI so the output stays reproducible.
+        return [max(classes, key=lambda iri: (support[iri], iri))]
+    if rules.conflict_policy == REFUTE:
+        graph.add((individual, REFUTED_TYPES, Literal(True)))
+        return []
+    graph.add((individual, NOTARIZED, Literal(True)))
+    return classes
 
 
 def load_inputs(

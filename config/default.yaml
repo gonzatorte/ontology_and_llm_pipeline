@@ -187,6 +187,11 @@ mapping:
                                # no destruye información, y es el default silencioso del spec.
   duplicate_policy: separate   # separate | merge. Separados y marcados, fuera del conteo de
                                # soporte funcional (§6.8).
+  # A partir de cuántas entidades un par de clases que choca deja de ser casos y pasa a ser
+  # UNA pregunta sobre la TBox (§6.4). Contextualizar una propiedad cambia la forma de todas
+  # las consultas sobre ella, incluidas las SPARQL de las CQ, así que esa pregunta es un eje
+  # de `branch` y no una decisión por caso acá. Sin calibrar.
+  conflict_pattern_threshold: 3
 
 # ─── Iteration ───────────────────────────────────────────
 iteration:

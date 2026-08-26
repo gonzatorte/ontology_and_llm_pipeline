@@ -238,6 +238,31 @@ manual. Y el control de circularidad hoy sólo se consulta (`circular`); no desc
 menciones de ninguna métrica de cobertura, que es para lo que el spec lo pide.
 
 
+### 8d. Los conflictos fácticos ven un solo tipo de aserción
+
+`conflicts` detecta el desacuerdo que este pipeline puede tener hoy: dos documentos que tipan a
+la misma entidad a dos clases. Es el único porque el ABox sólo contiene tipos y procedencia —
+**no hay extracción de propiedades**, así que "el documento 12 dice que X ocurrió en 2019 y el 47
+dice 2021" no es representable y por lo tanto tampoco detectable. Cuando existan propiedades,
+`detect` necesita una segunda familia de conflictos y `_settle` una política por propiedad, no
+sólo por entidad.
+
+Dos cosas que hoy quedan a mano:
+
+- **La contextualización no está implementada.** Es la cuarta política de §6.4, la única de nivel
+  TBox, y es cara y global. `conflicts` reporta el patrón que la dispara y dice que pertenece a
+  `branch`, pero el catálogo de `branch` no tiene todavía un eje `contextualize:<propiedad>` —
+  ver 8b. Es el enganche natural entre las dos etapas y está sin hacer.
+- **`conflict_pattern_threshold: 3` no está calibrado.** Sale de un argumento, no de una medición,
+  y como todos los demás umbrales del proyecto habría que verlo contra un par de calibración.
+
+Y una limitación del instrumento: cuando el razonador no está disponible, la incompatibilidad se
+calcula sólo con la disjointness asertada más su herencia, que es una **cota inferior**. Dos
+clases pueden ser incompatibles por una combinación de restricciones que ningún `owl:disjointWith`
+declara. El comando dice cuál de los dos tests usó, precisamente para no reportar la ausencia del
+instrumento como la ausencia del hallazgo.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
