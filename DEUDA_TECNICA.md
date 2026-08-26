@@ -345,10 +345,14 @@ caso de aplicación válido, pero no sirve como instrumento de calibración.
 ### 10. Sesión interactiva
 
 El spec tiene cinco puntos donde decide el usuario —elegir rama (§6.6), zona gris del matcher
-(§6.2), propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas (§4.3)— y
-ninguno tiene interfaz. La mitad del camino ya está: los hallazgos de A0 viven en
-`review_items` con estado y decisiones que sobreviven a re-correr. Falta lo mismo para la zona
-gris de B2 (219 menciones esperando) y una interfaz encima.
+(§6.2), propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas (§4.3)— y los
+cinco tienen ahora por dónde contestarse: `branch --choose`, `grey answer`, `functional
+--declare`, `cq`, `review resolve`. Las decisiones sobreviven a re-correr en los cinco casos.
+
+Lo que falta es **una interfaz encima**, no la maquinaria. Contestar 219 pares de zona gris de a
+uno por CLI es correcto y es tedioso; el anotador de navegador del conjunto de retención ya
+demuestra que la forma existe, y aplicarla acá es trabajo conocido. Y falta que `next` pueda
+ejecutar la etapa siguiente además de nombrarla — ver 8g.
 
 Cuando exista, `review_items` también es donde viven las excepciones por caso de las reglas de
 mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).

@@ -24,7 +24,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | A4 | **import-cq** | Carga las competency questions que escribís vos |
 | B1 | **extract** | Saca menciones de concepto de cada chunk |
 | B1b | **corefer** | Agrupa las menciones que hablan del mismo individuo |
-| B2 | **match** | Tipa cada mención contra una clase, y resuelve entidades |
+| B2 | **match** · **grey** | Tipa cada mención contra una clase, y resuelve entidades |
 | B2b | **bridge** | Conecta huérfanas con la semilla por conocimiento del mundo |
 | 6.4 | **conflicts** · **mark** | Documentos que se contradicen; notarizar, forzar, refutar |
 | 6.8 | **functional** | Candidatas a propiedad funcional, y qué fusionaría declararlas |
@@ -59,6 +59,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B1 extracción de candidatos | listo |
 | B1b correferencia intra-documento | listo |
 | B2 matching y resolución de entidades | cableado y calibrado contra CRAFT (ver Calibración) |
+| Zona gris: cola, respuestas y etiquetas | listo (`grey`) |
 | Conjunto de retención: hold-out, anotador, exportador | listo |
 | Banco de calibración contra corpus publicado | listo (`calibrate`) |
 | B2b puenteo por conocimiento del mundo | listo (`bridge`) |
@@ -368,6 +369,31 @@ OntoClean, y te llegan marcados como lo que son.
 Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403 preguntas que
 cubren el 70% de las huérfanas; bajarlo a 0,30 son 582 preguntas y el 98%. El umbral no está
 calibrado, como todos los demás.
+
+#### La zona gris (§6.2)
+
+```bash
+uv run onto-pipeline grey list                                   # lo que espera respuesta
+uv run onto-pipeline grey answer <mención> --to https://…/id/xyz
+uv run onto-pipeline grey answer <mención> --none                # ninguna de estas
+uv run onto-pipeline grey labels --export data/labels.jsonl
+```
+
+La política conservadora de §6.2 **no tipa** estos pares y nada aguas abajo los trata como
+tipados: esperan una respuesta en vez de que un umbral los decida, que es exactamente para lo que
+existe la zona.
+
+`--none` es una respuesta de verdad y a menudo la correcta: la mención queda huérfana y llega a
+inducción, que es donde va un concepto genuinamente nuevo.
+
+**Las respuestas sobreviven al próximo `match`.** Viven en su propia tabla, no en
+`mention_typing` —que el matcher reescribe entera cada corrida— porque volver a preguntar lo
+mismo todas las veces es cómo un sistema entrena a alguien a dejar de contestar.
+
+Y son, sin ninguna épica, **las etiquetas accept/reject que §6.3 quiere** para tunear el
+re-ranker. Nadie las anota a propósito: salen de alguien haciendo su trabajo, y son la única
+señal de entrenamiento que este diseño produce. El cross-encoder de fábrica midió separación
+−0,50; eso es el argumento para necesitarlas, no contra re-rankear.
 
 ### 5. Axiomatización, enriquecimiento y ramas (B4 + B4b + B6)
 

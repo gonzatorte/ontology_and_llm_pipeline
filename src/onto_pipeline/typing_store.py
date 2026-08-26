@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF, SKOS
 
-from .matching import GREY, Decision, Mention, Target
+from .matching import AUTO, DISCARDED, GREY, Decision, Mention, Target
 
 POSSIBLE_DUPLICATE = "possible_duplicate_unresolved"
 
@@ -34,7 +35,24 @@ CREATE TABLE IF NOT EXISTS mention_typing (
   PRIMARY KEY (mention_id, version_id)
 );
 CREATE INDEX IF NOT EXISTS idx_typing_version ON mention_typing(version_id, zone);
+
+-- Grey-zone answers. Kept apart from `mention_typing` because that table is rewritten every
+-- time the matcher runs, and an answer that a re-match erased would be an answer the user gave
+-- twice. They are also, unglamorously, the accept/reject labels spec 6.3 wants for tuning the
+-- re-ranker: the only source of them this design ever has.
+CREATE TABLE IF NOT EXISTS grey_decisions (
+  mention_id  TEXT PRIMARY KEY,
+  iri         TEXT,             -- NULL means "none of these": the mention is an orphan
+  offered     TEXT,             -- what the matcher had proposed, for the training set
+  score       REAL,
+  why         TEXT,
+  created_at  TEXT
+);
 """
+
+ACCEPTED = "accepted"
+REJECTED = "rejected"
+RETYPED = "retyped"
 
 
 @dataclass
@@ -104,17 +122,25 @@ def mentions_from(rows: list[dict]) -> list[Mention]:
 
 
 def persist_typings(conn: sqlite3.Connection, version_id: str, typings) -> OrphanSplit:
+    """Store one run's typings, with the grey-zone answers already applied.
+
+    Applied here rather than left to a consumer: a decision the user made has to survive the
+    next `match`, and the alternative is asking the same question every run — which is how a
+    system trains someone to stop answering.
+    """
     install(conn)
+    answers = decisions(conn)
     split = OrphanSplit()
     rows = []
     for typing in typings:
-        rows.append(
-            (typing.mention_id, version_id, typing.iri, typing.score, typing.zone,
-             typing.runner_up)
-        )
-        if typing.iri is None:
+        iri, score, zone = typing.iri, typing.score, typing.zone
+        if zone == GREY and typing.mention_id in answers:
+            iri = answers[typing.mention_id]
+            zone = AUTO if iri else DISCARDED
+        rows.append((typing.mention_id, version_id, iri, score, zone, typing.runner_up))
+        if iri is None:
             split.orphan += 1
-        elif typing.zone == GREY:
+        elif zone == GREY:
             split.grey += 1
         else:
             split.typed += 1
@@ -127,6 +153,62 @@ def persist_typings(conn: sqlite3.Connection, version_id: str, typings) -> Orpha
     )
     conn.commit()
     return split
+
+
+def answer(
+    conn: sqlite3.Connection, mention_id: str, iri: str | None, *,
+    offered: str | None = None, score: float | None = None, why: str = "",
+) -> None:
+    """Record one grey-zone answer. `iri=None` is "none of these", which is a real answer."""
+    install(conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO grey_decisions (mention_id, iri, offered, score, why, "
+        "created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (mention_id, iri, offered, score, why,
+         datetime.now(timezone.utc).isoformat(timespec="seconds")),
+    )
+    conn.commit()
+
+
+def decisions(conn: sqlite3.Connection) -> dict[str, str | None]:
+    install(conn)
+    return {
+        row["mention_id"]: row["iri"]
+        for row in conn.execute("SELECT mention_id, iri FROM grey_decisions")
+    }
+
+
+def labels(conn: sqlite3.Connection) -> list[dict]:
+    """The accept/reject labels, as the re-ranker would need them (spec 6.3).
+
+    A row per answer: the mention's text, the class that was offered, its score, and whether
+    the user took it. This is the only place such labels ever come from — nobody annotates them
+    on purpose, they are a by-product of someone doing their work.
+    """
+    install(conn)
+    return [
+        dict(row) | {"accepted": bool(row["iri"] and row["iri"] == row["offered"])}
+        for row in conn.execute(
+            "SELECT g.mention_id, m.surface_text, m.document_id, g.offered, g.iri, g.score, "
+            "g.why FROM grey_decisions g JOIN mentions m ON m.id = g.mention_id "
+            "ORDER BY g.created_at"
+        )
+    ]
+
+
+def pending(conn: sqlite3.Connection, version_id: str, limit: int = 0) -> list[dict]:
+    """Grey-zone typings nobody has answered yet, best score first."""
+    install(conn)
+    query = (
+        "SELECT t.mention_id, t.iri, t.score, t.runner_up, m.surface_text, m.document_id, "
+        "m.page FROM mention_typing t JOIN mentions m ON m.id = t.mention_id "
+        "LEFT JOIN grey_decisions g ON g.mention_id = t.mention_id "
+        "WHERE t.version_id = ? AND t.zone = ? AND g.mention_id IS NULL "
+        "ORDER BY t.score DESC"
+    )
+    if limit:
+        query += f" LIMIT {int(limit)}"
+    return [dict(row) for row in conn.execute(query, (version_id, GREY))]
 
 
 def entities_from(decisions: list[Decision]) -> dict[str, str]:

@@ -123,7 +123,7 @@ def survey(conn: sqlite3.Connection, version_id: str, *, has_provider: bool) -> 
               f"{grouped} of {mentions} mentions grouped", "no mentions: run extract"),
         stage("match", "onto-pipeline match", bool(typed), bool(mentions),
               f"{typed} mentions typed against {version_id}", "no mentions: run extract"),
-        stage("grey zone", "onto-pipeline review", not grey, bool(typed),
+        stage("grey zone", "onto-pipeline grey list", not grey, bool(typed),
               f"{grey} mentions are in the grey zone and nothing types them until they are "
               "answered", "nothing typed yet: run match", decision=bool(grey)),
         stage("bridge", f"onto-pipeline bridge{llm_note}", bool(bridged), bool(orphans),

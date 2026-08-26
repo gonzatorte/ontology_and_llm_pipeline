@@ -101,6 +101,15 @@ MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention 
 ExportOption = typer.Option(
     None, "--export", help="Write the misextractions to this JSONL, for the evaluation set."
 )
+ToOption = typer.Option(
+    None, "--to", help="The class the mention really is. Omit with --none to orphan it."
+)
+NoneOfTheseOption = typer.Option(
+    False, "--none", help="None of the candidates. A real answer, not a refusal."
+)
+ExportLabelsOption = typer.Option(
+    None, "--export", help="Write the accept/reject labels to this JSONL (spec 6.3)."
+)
 CurveOption = typer.Option(
     False, "--curve", help="Print the accumulation curve document by document."
 )
@@ -762,6 +771,123 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+grey_app = typer.Typer(help="The matcher's grey zone: the pairs it will not decide alone.")
+app.add_typer(grey_app, name="grey")
+
+
+@grey_app.command("list")
+def grey_list(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    limit: int | None = LimitOption,
+    as_json: bool = JsonOption,
+) -> None:
+    """Grey-zone pairs still unanswered (spec 6.2).
+
+    The conservative policy of 6.2 does not type these, and nothing downstream treats them as
+    typed. They wait here rather than being decided by a threshold, which is the whole reason
+    the zone exists.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+    labels = versioning.label_index(graph)
+
+    rows = typing_store.pending(conn, version_id, limit or 0)
+    if as_json:
+        print(json.dumps(rows, ensure_ascii=False))
+        return
+
+    table = Table("mention", "phrase", "candidate", "score", "runner-up", "document")
+    for row in rows:
+        table.add_row(
+            row["mention_id"], row["surface_text"][:32],
+            versioning.short_name(row["iri"] or "", labels) if row["iri"] else "—",
+            f"{row['score']:.3f}",
+            versioning.short_name(row["runner_up"], labels) if row["runner_up"] else "—",
+            row["document_id"][:24],
+        )
+    console.print(table)
+    console.print(
+        f"{len(rows)} waiting. Answer one with `onto-pipeline grey answer <mention> "
+        f"--to <class>` or `--none`."
+    )
+
+
+@grey_app.command("answer")
+def grey_answer(
+    mention_id: str,
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    to: str | None = ToOption,
+    none_of_these: bool = NoneOfTheseOption,
+    comment: str = CommentOption,
+) -> None:
+    """Answer one grey-zone pair.
+
+    `--none` is a real answer and often the right one: the mention becomes an orphan and
+    reaches induction, which is where a genuinely new concept belongs. Answers survive the
+    next `match` — asking the same question every run is how a system trains someone to stop
+    answering.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+
+    row = conn.execute(
+        "SELECT iri, score FROM mention_typing WHERE mention_id = ? AND version_id = ?",
+        (mention_id, version_id),
+    ).fetchone()
+    if row is None:
+        raise typer.BadParameter(f"no typing for {mention_id!r} against {version_id}")
+    if to is None and not none_of_these:
+        raise typer.BadParameter("say `--to <class iri>` or `--none`")
+
+    chosen = None if none_of_these else to
+    typing_store.answer(
+        conn, mention_id, chosen, offered=row["iri"], score=row["score"], why=comment
+    )
+    console.print(
+        f"[green]recorded[/] {mention_id} → {chosen or 'orphan (none of these)'}. "
+        "Re-run `match` to apply it, or it applies itself on the next run."
+    )
+
+
+@grey_app.command("labels")
+def grey_labels(
+    config_path: Path = ConfigOption,
+    export: Path | None = ExportLabelsOption,
+) -> None:
+    """The accept/reject labels these answers have accumulated (spec 6.3).
+
+    Nobody annotates them on purpose: they are a by-product of someone doing their work, and
+    they are the only training signal this design ever produces for tuning the re-ranker. The
+    measured cross-encoder result — separation -0.50 out of the box — is the argument for
+    needing them, not against re-ranking.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    rows = typing_store.labels(conn)
+
+    accepted = sum(1 for row in rows if row["accepted"])
+    console.print(
+        f"[bold]{len(rows)}[/] labels · {accepted} accepted, {len(rows) - accepted} rejected"
+    )
+    if not rows:
+        console.print(
+            "[dim]Answer grey-zone pairs to accumulate them: `onto-pipeline grey list`[/]"
+        )
+        return
+    if export is not None:
+        export.parent.mkdir(parents=True, exist_ok=True)
+        export.write_text(
+            "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        console.print(f"[green]wrote[/] {export}")
 
 
 @app.command("next")
