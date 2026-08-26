@@ -54,6 +54,31 @@ Es exactamente el modo de falla más difícil de detectar, porque no produce nin
   Durante un rato esas líneas rompían 6 tests; era un estado intermedio, pero desde afuera no
   se podía saber.
 
+### Los transcripts tienen fecha de vencimiento
+
+Verificado: `cleanupPeriodDays` no está configurado, así que rige el default de **30 días**. Los
+transcripts de las sesiones son el único registro del razonamiento que no llegó al repositorio —
+por qué se descartó una alternativa, qué se midió y no se anotó, qué preguntó el usuario— y a los
+30 días no están más.
+
+La consecuencia práctica: **lo que importa se escribe en el repo antes de cerrar una sesión**, no
+se deja "por si hace falta mirar la conversación". Esta ronda de auditoría encontró un hallazgo
+sustantivo que sólo vivía en un transcript (el análisis del homónimo, hoy entrada 19) y estuvo a
+semanas de perderse. Si se prefiere la otra vía, hay que subir `cleanupPeriodDays` en
+`~/.claude/settings.json`, pero eso conserva el transcript, no lo vuelve encontrable.
+
+### Cómo leer el historial de sesiones, si hace falta
+
+Los transcripts están en `~/.claude-personal/projects/-home-gonzalo-workspace-propio-ontology-and-llm-pipeline/*.jsonl`,
+uno por sesión. Dos advertencias al auditarlos:
+
+- **Un fork comparte el principio con su origen.** `f0449040` y `b8c7e99c` arrancan con el mismo
+  timestamp y el mismo mensaje: son la misma conversación, bifurcada. Contarlas como dos sesiones
+  independientes lleva a buscar conflictos donde no hay más que una rama abandonada.
+- **La atribución no se lee del historial de git.** Los 44 commits tienen un solo autor y un solo
+  trailer de sesión, aunque el trabajo salió de tres. Quién decidió qué está en la tabla de
+  procedencia de [`HALLAZGOS.md`](HALLAZGOS.md), no en `git log`.
+
 ---
 
 ## Mejoras estructurales

@@ -30,6 +30,13 @@ se lee del historial:
 | `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) y `plan_cambio_corpus_calibracion.md` |
 | `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `plan_reglas_de_mapeo.md`, deuda 19, y 1.3 |
 
+Hay dos transcripts más y ninguno aporta decisiones: `b8c7e99c` es **la misma conversación que
+`f0449040`, bifurcada** —mismo timestamp inicial, mismo primer mensaje— y `7994cb22` es una
+consulta sobre el funcionamiento de Claude Code, sin contenido del proyecto. La única bifurcación
+real fue "crear enlaces simbólicos al corpus" contra "dejar todo como está", y el usuario eligió
+lo segundo en el mismo turno; no hay symlinks y las rutas externas se documentan en el config y
+el README.
+
 El modo de falla de trabajar así —una edición anclada a texto que falla abierta cuando otra
 sesión movió el contexto— está en la sección de coordinación de
 [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), con lo que hay que hacer para evitarlo.
