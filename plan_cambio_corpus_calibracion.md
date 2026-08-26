@@ -1,6 +1,8 @@
 # Plan: separar el corpus de calibración del corpus de aplicación
 
-Enmienda al §12 (secuencia de construcción) de `especificacion_pipeline_ontologia.md`.
+Enmienda al §12 (secuencia de construcción) de `especificacion_pipeline_ontologia.md`. Los
+resultados de los barridos que este plan hizo posibles están en
+[`HALLAZGOS.md`](HALLAZGOS.md) §1.1–1.2.
 
 ## Problema
 

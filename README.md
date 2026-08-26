@@ -4,6 +4,10 @@ Enriquecimiento ontológico asistido por LLM. La especificación de diseño es
 [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md); este README
 sólo explica cómo se usa lo que está construido y qué falta.
 
+Los otros tres documentos, por si buscás otra cosa: [`HALLAZGOS.md`](HALLAZGOS.md) —qué se midió
+y qué se decidió, con el n de cada número—, [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) —qué falta y
+qué conviene rehacer— y [`CLAUDE.md`](CLAUDE.md), el índice y los invariantes del proyecto.
+
 El sistema opera en inglés (prompts, esquemas, logs). El corpus y las glosas son bilingües
 es/en con etiqueta de idioma.
 

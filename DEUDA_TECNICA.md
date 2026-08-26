@@ -8,8 +8,9 @@ No es una lista de bugs: lo que está roto se arregla, no se documenta.
 > ya pasó con el 17—. Antes de numerar, mirá el último `###` que hay. Y al referenciar otra
 > entrada, mejor por título que por número, porque los números se corren.
 
-El estado de implementación por etapa está en el [README](README.md); acá va lo que no se ve
-mirando la tabla de estado.
+El estado de implementación por etapa está en el [README](README.md) y los números que
+sostienen cada decisión en [HALLAZGOS.md](HALLAZGOS.md); acá va lo que no se ve mirando ninguno
+de los dos.
 
 ---
 
