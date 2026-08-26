@@ -142,14 +142,21 @@ información gratis.
 Estas no son mejoras opcionales: son decisiones que hoy están apoyadas en muy poco y que
 condicionan todo lo que viene después.
 
-### 7. `matching.match_against` y `matching.use_cross_encoder` — RESUELTO en parte
+### 7. `matching.match_against` y `matching.use_cross_encoder` — RESUELTO
 
 **Medido sobre `craft-cl`**: 8.723 menciones gold contra 3.418 clases candidatas, no diez pares
 hechos a mano. `match_against: label` era correcto y por amplio margen — F1 **0,774** contra
 0,135 de etiqueta+glosa y 0,080 de glosa sola. La conclusión sacada con n=10 se sostuvo; la
 evidencia que la sostenía, no.
 
-Queda abierto `use_cross_encoder`: el barrido lo soporta (`--cross-encoder`) y no se corrió.
+`use_cross_encoder` queda cerrado en **off**, medido dos veces: separación -0,56 sobre el
+inventario completo y **-0,50** en la corrida con holdout, F1 0,127 contra 0,774. Negativa
+quiere decir que el top-1 correcto puntúa *más bajo* que el equivocado (mediana 0,100 contra
+0,258): no hay umbral que lo arregle, porque el que sube deja preferentemente los errores.
+
+Lo que sigue abierto no es el interruptor sino la mejora que lo reemplazaría: un re-ranker
+entrenado sobre los accept/reject acumulados de la zona gris (§6.3), que es un instrumento
+distinto de un re-ranker de IR genérico. Ver la entrada de LoRA más abajo.
 
 
 ### 8. Los umbrales — MEDIDOS, y el punto de operación no transfiere
@@ -165,10 +172,27 @@ espurio supere el umbral, así que el punto de operación se mueve con el tamañ
 cuánto. Esa curva es exactamente la tarea C5 del plan —179, 3.419 y ~40k clases— y hasta
 medirla, los valores de arriba son un punto de partida defendible, no un valor final.
 
-Un detalle de lectura que importa: en `craft-cl` **las huérfanas genuinas son cero por
-construcción** —toda clase gold está en la ontología—, así que ahí toda huérfana es falsa y la
-tasa no es comparable con la del par de aplicación. Para que lo sea hay que correr el barrido
-con `--holdout`, que retiene clases a propósito para fabricar huérfanas genuinas.
+**Las huérfanas genuinas ya no son cero.** El barrido con `--holdout 0.2` retiene 683 de las
+3.418 clases; las 546 menciones que quedan sin clase en el inventario son huérfanas genuinas
+con respuesta conocida. Dónde cae una de ellas, con los dos cortes configurados:
+
+| destino | menciones | |
+|---|---:|---|
+| fusionada en silencio contra una clase equivocada (≥0,95) | 15 | 2,7% |
+| zona gris 0,80–0,95: llega a revisión, recuperable | 398 | 72,9% |
+| huérfana (<0,80): llega a inducción, que es su destino | 133 | 24,4% |
+
+El error caro es el primero, y es marginal. Las dos zonas juntas atajan el 97,3% de los
+conceptos que la ontología no tiene: el diseño de tres zonas hace lo que promete, y quien
+decide bajar `grey_zone_lower` está eligiendo cuánta revisión hacer, no cuántos conceptos
+nuevos perder.
+
+Dos precauciones al leer esos números. El holdout achica el inventario a 2.736 clases, y con
+menos distractores la precisión sube —99,2% en 0,95, 87,4% en 0,80 sobre las menciones que el
+inventario sí cubría— así que los valores del inventario completo, que son los que quedaron en
+`config/default.yaml`, siguen siendo el caso más duro. Y la tasa de falsos huérfanos casi no se
+movió (18,0% contra 17,3% en 0,80): sólo 546 de 8.723 menciones cambiaron de lado, así que la
+cifra anterior era del orden correcto por accidente, no porque el holdout no importara.
 
 
 ### 9. El par corpus/semilla

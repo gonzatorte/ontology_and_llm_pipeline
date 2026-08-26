@@ -90,6 +90,20 @@ matching:
   # grey_zone_lower = por debajo se descarta como huérfana, que es el error que el spec dice
   # que más cuesta; se elige por debajo del pico de F1 para mandar la duda al usuario, que la
   # recupera, en vez de perderla.
+  # Barrido con `--holdout 0.2` (683 de 3.418 clases retenidas, determinista): las menciones de
+  # una clase retenida son huérfanas genuinas cuya respuesta correcta se conoce. 546 de las
+  # 8.723 menciones caen ahí, y es lo único que la corrida sin holdout no podía medir.
+  # Dónde cae una mención de un concepto que la ontología NO tiene, con estos dos cortes:
+  #   >= 0,95  fusionada en silencio contra una clase equivocada .....  15  (2,7%)
+  #   0,80-0,95 zona gris: llega a revisión, recuperable ............. 398 (72,9%)
+  #   <  0,80  huérfana: llega a inducción, que es su destino .......  133 (24,4%)
+  # Las dos zonas juntas atajan el 97,3%: el diseño de tres zonas hace lo que promete, y el
+  # error caro —fusionar en silencio un concepto nuevo contra uno viejo— es marginal.
+  # Precaución al comparar con la tabla de arriba: el holdout achica el inventario a 2.736
+  # clases, y con menos distractores la precisión sube (99,2% en 0,95, 87,4% en 0,80 sobre las
+  # menciones cubiertas). Los números que quedan arriba son los del inventario completo, que es
+  # el caso más duro. La tasa de falsos huérfanos casi no se mueve (18,0% vs 17,3% en 0,80),
+  # porque sólo 546 de 8.723 menciones cambiaron de lado.
   auto_merge_threshold: 0.95
   grey_zone_lower: 0.80
   # Nunca medido: los cuatro pares de calibración disponibles son en inglés. Ver deuda 17.
@@ -121,7 +135,10 @@ matching:
                                    # gloss is a sentence, and a symmetric encoder loses more on
                                    # that difference in shape than it gains in meaning.
                                    # Revisit with an asymmetric encoder, not with a threshold.
-  use_cross_encoder: false         # SETTLED OFF. Same run, re-ranking the bi-encoder's top-5:
+  # SETTLED OFF, y reconfirmado con holdout: separación -0,50, F1 0,127 contra 0,774 del
+  # bi-encoder, en su propio mejor umbral. No es que haga falta otro umbral; el orden que
+  # produce está anticorrelacionado con el correcto.
+  use_cross_encoder: false         # Same run, re-ranking the bi-encoder's top-5:
                                    # recall@1 falls from 6.090 to 2.220 and the separation goes
                                    # to -0,56 (right top-1 median 0,143, wrong 0,325). It both
                                    # ranks worse and scores the errors higher, and it squashes
