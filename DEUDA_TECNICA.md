@@ -340,6 +340,15 @@ La mitigación es A4 —las CQ que el usuario escribe sin mirar las generadas, 2
 hoy **no hay ninguna escrita**: `examples/competency_questions.json` tiene cinco de ejemplo. Sin
 ese 20–30%, el criterio de parada primario está midiendo el corpus contra sí mismo.
 
+**La cita se verifica que exista, no que sostenga.** El filtro comprueba que el número de pasaje
+citado sea uno de los que se le mostraron al modelo, y eso descarta las citas inventadas — pero
+no que el pasaje diga algo que justifique la pregunta. Observado en la primera corrida real: una
+pregunta inferencial correcta sobre `Interview ⊑ Technique ⊑ Methodological Strategy` citando un
+pasaje que anuncia las secciones del paper. La pregunta sirve; la cita no la sostiene. Verificar
+eso mecánicamente no es obvio —haría falta algo como el chequeo de solapamiento léxico entre
+pregunta y pasaje, con su propio umbral sin calibrar— así que por ahora es carga de la revisión
+humana del paso 4, y conviene que quien revise lo sepa.
+
 Dos huecos concretos en la etapa:
 
 - **La regeneración de consultas bajo reorganización (D1) no está.** El spec elige "regenerar la

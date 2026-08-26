@@ -2745,7 +2745,9 @@ def cq_propose(
     for name, passages in sorted(strata.items()):
         table.add_row(name, str(len(passages)))
     console.print(table)
-    missing = set(cq_generation.STRATA) | {cq_generation.TABLE_STRATUM} - set(strata)
+    # Parenthesized: `-` binds tighter than `|`, so without them this is every stratum plus
+    # tables-if-missing, and the message names strata that were in fact found.
+    missing = (set(cq_generation.STRATA) | {cq_generation.TABLE_STRATUM}) - set(strata)
     if missing:
         console.print(
             f"[yellow]no passage found for[/] {', '.join(sorted(missing))} — the question "
