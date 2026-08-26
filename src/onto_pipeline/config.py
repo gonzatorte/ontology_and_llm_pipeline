@@ -164,6 +164,10 @@ class Mapping(BaseModel):
     # about the TBox (6.4). Contextualizing a property changes the shape of every query over
     # it, the CQs' SPARQL included, so that question belongs to branching and not here.
     conflict_pattern_threshold: int = 3
+    # Below this many individuals, a functional-property candidate is not put to the user:
+    # the answer would rest on evidence too thin to be worth their attention, and asking
+    # anyway trains a person to say yes (6.8).
+    functional_min_individuals: int = 5
 
 
 class CompetencyQuestions(BaseModel):

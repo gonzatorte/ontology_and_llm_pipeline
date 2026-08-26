@@ -321,6 +321,37 @@ class Reasoners:
             reasoner.dispose()
         return incompatible
 
+    def merged_individuals(self, graph: Graph) -> list[list[str]]:
+        """Groups of individuals the reasoner says are the same thing.
+
+        The one way to make a functional property's consequence visible. Declaring a property
+        functional by mistake does not raise an inconsistency — it quietly entails `owl:sameAs`
+        and merges two entities, so the only way to see it coming is to ask who would merge.
+        """
+        from org.semanticweb.HermiT import ReasonerFactory
+
+        ontology = self.load(graph)
+        reasoner = ReasonerFactory().createReasoner(ontology, self._hermit_configuration())
+        groups: list[list[str]] = []
+        try:
+            if not reasoner.isConsistent():
+                return []       # everything is entailed; the answer would be meaningless
+            seen: set[str] = set()
+            for individual in ontology.getIndividualsInSignature():
+                name = str(individual.getIRI())
+                if name in seen:
+                    continue
+                same = sorted(
+                    str(other.getIRI())
+                    for other in reasoner.getSameIndividuals(individual).getEntities()
+                )
+                seen.update(same)
+                if len(same) > 1:
+                    groups.append(same)
+        finally:
+            reasoner.dispose()
+        return sorted(groups)
+
     def justify(self, ontology, class_iri: str, limit: int = 3) -> list[list[str]]:
         """Minimal axiom sets that make a class unsatisfiable — Reiter's hitting-set tree over
         a black-box explanation, with HermiT as the oracle. Never computed with ELK: a

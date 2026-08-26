@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 from rdflib import Dataset, Graph, URIRef
-from rdflib.namespace import RDFS
+from rdflib.namespace import OWL, RDF, RDFS
 from rich.console import Console
 from rich.table import Table
 
@@ -25,6 +25,7 @@ from . import (
     cq,
     enrichment,
     extraction,
+    functional,
     glosses,
     induction,
     llm,
@@ -96,6 +97,12 @@ MarkOption = typer.Option(
 MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention ids to mark.")
 ExportOption = typer.Option(
     None, "--export", help="Write the misextractions to this JSONL, for the evaluation set."
+)
+DeclareOption = typer.Option(
+    None, "--declare", help="Ask what declaring this property functional would merge."
+)
+YesOption = typer.Option(
+    False, "--yes", help="Commit the declaration after seeing what it merges."
 )
 RefreshOption = typer.Option(
     False, "--refresh", help="Ask again for what is already labelled."
@@ -749,6 +756,147 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("functional")
+def functional_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    declare: str | None = DeclareOption,
+    yes: bool = YesOption,
+    limit: int | None = LimitOption,
+) -> None:
+    """Survey the ABox for functional-property candidates, and ask (spec 6.8, D2).
+
+    Nothing here declares a property functional on its own. Detecting functionality from the
+    ABox is invalid in principle under the open-world assumption: every entity having one value
+    proves that no counterexample was seen, not that none exists.
+
+    The asymmetry is why it is asked rather than inferred. A property declared functional by
+    mistake makes the reasoner entail `owl:sameAs` and merge two distinct entities — and it
+    raises no inconsistency doing it. `--declare` shows exactly which individuals would merge
+    before anything is committed.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    abox_path = config.paths.work_dir / "ontology" / f"{version_id}.abox.trig"
+    if not abox_path.exists():
+        raise typer.BadParameter(
+            f"no ABox for {version_id}; run regenerate first — this reads the instance data, "
+            "not the TBox"
+        )
+    dataset = Dataset()
+    dataset.parse(str(abox_path), format="trig")
+    abox = mapping.flatten(dataset)
+
+    if declare is not None:
+        _declare_functional(config, conn, version_id, graph, abox, declare, yes)
+        return
+
+    supports = functional.survey(abox)
+    labels = versioning.label_index(graph)
+    items = functional.findings(
+        supports, labels, min_individuals=config.mapping.functional_min_individuals
+    )
+    report = review.sync(conn, items, version_id=version_id,
+                         kinds=[functional.FUNCTIONAL_CANDIDATE])
+
+    table = Table("property", "individuals", "distribution", "excluded", "verdict")
+    for support in supports[: limit or 15]:
+        table.add_row(
+            versioning.short_name(support.property_iri, labels),
+            str(support.individuals), support.rendered_distribution,
+            str(support.excluded),
+            "refuted" if support.refuted else "candidate",
+        )
+    console.print(table)
+    if not supports:
+        console.print(
+            "[yellow]no domain properties in the ABox[/]: this pipeline extracts types and "
+            "provenance, not properties, so there is nothing here to be functional yet."
+        )
+        return
+    console.print(
+        f"{report.added} question(s) added to review, {report.already_known} already there. "
+        f"A 'refuted' verdict is settled — a counterexample is knowledge. A 'candidate' one "
+        f"is not: it is the absence of a counterexample, which is silence."
+    )
+    console.print(
+        "See what one would merge before answering: "
+        "`onto-pipeline functional --declare <property>`"
+    )
+
+
+def _declare_functional(config, conn, version_id, graph, abox, property_iri, yes) -> None:
+    """Make the silent consequence loud, then commit only if told to."""
+    from .reasoning import Reasoners, ReasonerUnavailable
+
+    candidate = functional.declare(graph, property_iri)
+    combined = Graph()
+    for triple in candidate:
+        combined.add(triple)
+    for triple in abox:
+        combined.add(triple)
+
+    try:
+        reasoners = Reasoners(
+            config.paths.reasoner_lib, hermit_timeout_s=config.reasoner.hermit_timeout_s
+        )
+    except ReasonerUnavailable as exc:
+        raise typer.BadParameter(
+            f"{exc}. The whole point of this command is to show what the reasoner would merge."
+        ) from exc
+
+    before = reasoners.merged_individuals(_without_declaration(combined, property_iri))
+    after = reasoners.merged_individuals(combined)
+    new_merges = [group for group in after if group not in before]
+
+    labels = versioning.label_index(graph)
+    name = versioning.short_name(property_iri, labels)
+    if new_merges:
+        console.print(
+            f"[red]declaring {name} functional would merge {len(new_merges)} group(s) of "
+            f"individuals[/], and the reasoner would raise no inconsistency doing it:"
+        )
+        for group in new_merges[:10]:
+            console.print("  " + " = ".join(
+                versioning.short_name(iri, labels) for iri in group
+            ))
+    else:
+        console.print(f"[green]declaring {name} functional merges nothing[/] in the ABox today")
+    console.print(
+        "[dim]Today's ABox is not the argument. The question is whether the property is "
+        "functional in the domain; this only shows what the mistake would cost here.[/]"
+    )
+
+    if not yes:
+        console.print("Nothing committed. `--yes` commits the declaration.")
+        return
+    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    committed = versioning.commit(
+        conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
+        note=f"{name} declared functional (user decision, spec 6.8)",
+    )
+    console.print(f"[green]committed[/] {committed.id} (parent {version_id})")
+    _publish_diff(config, conn, committed.id)
+
+
+def _without_declaration(graph: Graph, property_iri: str) -> Graph:
+    """The same graph minus the declaration.
+
+    The baseline has to be measured, not assumed: an ontology can already entail merges for
+    other reasons, and reporting those as this property's doing would put the blame in the
+    wrong place.
+    """
+    declaration = (URIRef(property_iri), RDF.type, OWL.FunctionalProperty)
+    stripped = Graph()
+    for triple in graph:
+        if triple != declaration:
+            stripped.add(triple)
+    return stripped
 
 
 @app.command("metaproperties")

@@ -27,6 +27,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | B2 | **match** | Tipa cada mención contra una clase, y resuelve entidades |
 | B2b | **bridge** | Conecta huérfanas con la semilla por conocimiento del mundo |
 | 6.4 | **conflicts** · **mark** | Documentos que se contradicen; notarizar, forzar, refutar |
+| 6.8 | **functional** | Candidatas a propiedad funcional, y qué fusionaría declararlas |
 | B3 | **induce** | Convierte huérfanas en clases nuevas |
 | B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
 | B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
@@ -70,6 +71,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
+| Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
 
@@ -568,7 +570,48 @@ Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además
 `eval` corre todo contra una versión del DAG y registra la tasa de aprobación, que es el
 criterio de parada primario.
 
-### 8. Regeneración del ABox
+### 8. Propiedades funcionales (§6.8)
+
+```bash
+uv run onto-pipeline functional                                   # ¿qué candidatas hay?
+uv run onto-pipeline functional --declare https://…/id/bornIn     # ¿qué fusionaría?
+uv run onto-pipeline functional --declare https://…/id/bornIn --yes
+```
+
+`owl:FunctionalProperty` es cardinalidad máxima 1 con otro nombre, y es **la única categoría que
+el spec manda a decisión individual del usuario**, porque acá el conocimiento de dominio es
+irreemplazable.
+
+**Detectar funcionalidad desde el ABox es inválido en principio bajo mundo abierto.** Que cada
+entidad tenga un solo valor de X no prueba que X sea funcional; prueba que no se observó
+contraejemplo. Son afirmaciones distintas y el corpus sólo puede sostener la segunda. Una
+dirección sí es sólida y sale gratis: **un individuo con dos valores la refuta**. Un
+contraejemplo es conocimiento; su ausencia es silencio.
+
+La asimetría es lo peligroso. Declarar funcional por error hace que el razonador infiera
+`owl:sameAs` entre individuos distintos y los fusione, **sin lanzar ninguna inconsistencia**. Por
+eso `--declare` no declara: corre el razonador y muestra exactamente qué se fusionaría. Medido
+sobre el caso de prueba:
+
+```
+declaring born in functional would merge 1 group(s) of individuals, and the
+reasoner would raise no inconsistency doing it:
+  …oslo = …oslo_city
+```
+
+Recién con `--yes` se commitea. Y el ABox de hoy no es el argumento: la pregunta es si la
+propiedad es funcional en el dominio, y esto sólo muestra cuánto costaría el error acá.
+
+La pregunta lleva la **distribución**, no sólo la conclusión: "1 valor en 3 individuos" y "1
+valor en 400" son la misma señal cualitativa y decisiones opuestas. Y los individuos marcados
+`possible_duplicate_unresolved` quedan **fuera del conteo** (§6.2): dos duplicados con un valor
+cada uno se ven exactamente como confirmación de funcionalidad, que es la única forma en que este
+relevamiento podría fabricar su propia evidencia.
+
+Hoy no encuentra nada en el caso de aplicación, y con razón: el pipeline extrae tipos y
+procedencia, no propiedades. La etapa está lista para cuando las haya.
+
+### 9. Regeneración del ABox
 
 ```bash
 uv run onto-pipeline regenerate                  # última versión
@@ -595,7 +638,7 @@ conviene saber al leer la salida:
 La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
 con las mismas reglas no hace nada y lo dice.
 
-### 9. Inspección
+### 10. Inspección
 
 ```bash
 uv run onto-pipeline report                 # T1: HTML por documento
@@ -623,7 +666,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 10. Conjunto de retención
+### 11. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -687,7 +730,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 11. Calibración contra un corpus publicado
+### 12. Calibración contra un corpus publicado
 
 El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
 cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por

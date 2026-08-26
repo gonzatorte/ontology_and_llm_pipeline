@@ -192,6 +192,11 @@ mapping:
   # las consultas sobre ella, incluidas las SPARQL de las CQ, así que esa pregunta es un eje
   # de `branch` y no una decisión por caso acá. Sin calibrar.
   conflict_pattern_threshold: 3
+  # Por debajo de estos individuos no se pregunta si una propiedad es funcional (§6.8): la
+  # respuesta se apoyaría en evidencia demasiado flaca, y preguntar igual entrena a la persona
+  # a decir que sí. "1 valor en 3 individuos" y "1 valor en 400" son la misma señal cualitativa
+  # y decisiones opuestas — por eso la distribución va en la pregunta, no sólo la conclusión.
+  functional_min_individuals: 5
 
 # ─── Iteration ───────────────────────────────────────────
 iteration:

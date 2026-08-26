@@ -293,6 +293,25 @@ hoy siempre reporta SKIPPED en el caso de aplicación. Escribir el primer juego 
 obligatoria, cardinalidad de las etiquetas, individuos sin tipo— es trabajo pendiente y barato.
 
 
+### 8f. Las propiedades funcionales están listas y no tienen qué mirar
+
+La maquinaria de §6.8 está: relevamiento con la distribución, exclusión de duplicados sin
+resolver, pregunta al usuario, y `--declare` corriendo el razonador para mostrar qué se
+fusionaría antes de commitear nada. **Lo que falta es el insumo**: el ABox tiene tipos y
+procedencia, no propiedades de dominio, así que hoy el relevamiento devuelve vacío en el caso de
+aplicación. Extraer propiedades es una etapa nueva de B1 y el spec la deja fuera de v1; hasta que
+exista, ésta es una etapa correcta sin trabajo que hacer.
+
+Dos límites del relevamiento mismo, para cuando lo tenga:
+
+- **`functional_min_individuals: 5` no está calibrado**, como todos los demás. El spec dice que
+  "1 valor en 3 individuos" y "1 valor en 400" son decisiones opuestas, pero no dice dónde está
+  el corte, y no hay forma de medirlo sin propiedades reales.
+- **`--declare` mide el costo sobre el ABox de hoy**, que no es el argumento — la propiedad es o
+  no es funcional en el dominio. Lo que muestra es lo que la equivocación costaría *acá*, que es
+  útil y no es lo mismo. El comando lo dice, pero conviene tenerlo presente al leerlo.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
