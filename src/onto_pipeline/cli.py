@@ -21,6 +21,7 @@ from . import (
     calibration,
     coreference,
     cq,
+    enrichment,
     extraction,
     glosses,
     induction,
@@ -84,6 +85,9 @@ ApplyOption = typer.Option(
 )
 ForceRegenOption = typer.Option(
     False, "--force", help="Write the ABox again even if the rules did not change."
+)
+DryRunOption = typer.Option(
+    False, "--dry-run", help="Show what would be asked about, and ask nothing."
 )
 ChooseOption = typer.Option(
     None, "--choose", help="Apply this branch. Its siblings are recorded as rejected."
@@ -717,6 +721,186 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("enrich")
+def enrich_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    limit: int | None = LimitOption,
+    dry_run: bool = DryRunOption,
+) -> None:
+    """Improve the glosses from definitional passages in the corpus, and harvest synonyms.
+
+    The passages are found mechanically, by definitional cue — "X is a", "we define X as",
+    "also known as". Only then is a model asked, and only about the passages it is shown.
+
+    Every enrichment records which documents contributed to it. A later match of a mention from
+    a contributing document against that class is not independent evidence of coverage; the
+    `circular` command is what makes those countable (spec 4.3).
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    targets = typing_store.targets_from(graph, "label")
+    if not targets:
+        raise typer.BadParameter(f"{version_id} has no labelled classes")
+    known = {target.label.lower() for target in targets}
+    known |= {alt.lower() for target in targets for alt in target.alt_labels}
+
+    blocks = _corpus_blocks(conn)
+    if not blocks:
+        raise typer.BadParameter("no parsed blocks; run ingest first")
+
+    found: dict[str, list[enrichment.Passage]] = {}
+    for target in targets:
+        surfaces = [target.label, *target.alt_labels]
+        passages = enrichment.passages_for(
+            blocks, surfaces, limit=config.enrichment.max_passages,
+            max_chars=config.enrichment.max_passage_chars,
+        )
+        if len(passages) >= config.enrichment.min_passages:
+            found[target.iri] = passages
+
+    by_iri = {target.iri: target for target in targets}
+    console.print(
+        f"[green]passages[/] {sum(len(items) for items in found.values())} definitional "
+        f"across {len(found)} of {len(targets)} classes, from {len(blocks)} blocks"
+    )
+    if not found:
+        console.print(
+            "[yellow]nothing to enrich[/]: no passage in the corpus defines a class of this "
+            "ontology. On a corpus and a seed about different things, that is the expected "
+            "answer, not a failure."
+        )
+        return
+    if dry_run:
+        table = Table("class", "passages", "documents", "cues")
+        for iri, passages in list(found.items())[: limit or 20]:
+            table.add_row(
+                by_iri[iri].label, str(len(passages)),
+                str(len({item.document_id for item in passages})),
+                ", ".join(sorted({item.cue for item in passages})),
+            )
+        console.print(table)
+        return
+
+    selected = list(found.items())[:limit] if limit else list(found.items())
+    payloads = [
+        (iri, enrichment.payload(by_iri[iri].label, by_iri[iri].gloss, passages))
+        for iri, passages in selected
+    ]
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, enrichment.STAGE)
+    with console.status(f"enrich · {len(payloads)} classes"):
+        result = llm.run(
+            Ledger(conn, config.execution), model, enrichment.PROMPT, stage,
+            payloads, enrichment.parse,
+        )
+
+    enrichments = [
+        enrichment.verified(answer, found[iri], known=known, iri=iri)
+        for iri, answer in result.outputs.items()
+    ]
+    changed = [item for item in enrichments if not item.empty]
+    enrichment.persist(conn, version_id, changed, passages=found)
+
+    table = Table("what", "count")
+    table.add_row("classes asked", str(len(payloads)))
+    table.add_row("  definitions rewritten", str(sum(1 for i in changed if i.definition)))
+    table.add_row("  synonyms kept", str(sum(len(i.alt_labels) for i in changed)))
+    table.add_row("  synonyms dropped as unattested", str(sum(len(i.dropped) for i in changed)))
+    table.add_row("  unchanged", str(len(enrichments) - len(changed)))
+    table.add_row("failed", str(len(result.failures)))
+    console.print(table)
+    for item in changed[:8]:
+        names = f" + {', '.join(item.alt_labels)}" if item.alt_labels else ""
+        console.print(f"  [green]{by_iri[item.iri].label}[/]{names} — {item.why[:80]}")
+    for iri, error in list(result.failures.items())[:5]:
+        console.print(f"  [red]{by_iri.get(iri).label if iri in by_iri else iri}[/]: {error}")
+
+    if not changed:
+        console.print("nothing changed; no version committed")
+        return
+
+    enriched = enrichment.apply(graph, changed)
+    # Annotation-only, so the logical state is the parent's: a re-glossing is not a new state
+    # to reason about (6.8), while the gloss itself is versioned and travels in the DAG (4.3).
+    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    committed = versioning.commit(
+        conn, enriched, version_id=next_id, parent_id=version_id, iteration=1,
+        note=f"glosses enriched from the corpus ({len(changed)} classes; same logical state)",
+    )
+    console.print(f"[green]committed[/] {committed.id} (parent {version_id})")
+    _publish_diff(config, conn, committed.id)
+
+    orphans = conn.execute(
+        "SELECT COUNT(*) AS n FROM mention_typing WHERE version_id = ? AND iri IS NULL",
+        (version_id,),
+    ).fetchone()
+    if orphans and orphans["n"]:
+        console.print(
+            f"\n[yellow]{orphans['n']} orphan mentions[/] were typed against {version_id}. "
+            f"The synonyms just added are what closes the loop, so re-run "
+            f"`match --version {committed.id}` to give them another chance (spec 4.3)."
+        )
+
+
+@app.command("circular")
+def circular_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    limit: int | None = LimitOption,
+) -> None:
+    """Matches whose own document helped write the class they matched (spec 4.3).
+
+    Not errors, and not thrown away. They are the ones that must not be counted as independent
+    evidence of coverage: the class was described using that document, so the match is partly
+    the pipeline recognizing its own writing.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+    labels = versioning.label_index(graph)
+
+    flagged = enrichment.circular_matches(conn, version_id)
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM mention_typing WHERE version_id = ? AND iri IS NOT NULL",
+        (version_id,),
+    ).fetchone()["n"]
+    console.print(
+        f"[bold]{len(flagged)}[/] of {total} typed mentions against {version_id} are "
+        f"circular ({len(flagged) / total:.1%})" if total
+        else f"no typed mentions against {version_id}"
+    )
+    if not flagged:
+        return
+    table = Table("mention", "class", "document", "score", "zone")
+    for row in flagged[: limit or 20]:
+        table.add_row(
+            row["surface_text"][:40], versioning.short_name(row["iri"], labels),
+            row["document_id"][:30], f"{row['score']:.3f}", row["zone"],
+        )
+    console.print(table)
+
+
+def _corpus_blocks(conn) -> list[dict]:
+    """Body blocks of every document the process may read.
+
+    Held-out documents are excluded here as everywhere: a gloss written from the retention set
+    would make the retention set measure the pipeline against its own material.
+    """
+    return [
+        dict(row) for row in conn.execute(
+            "SELECT b.id, b.document_id, b.page, b.text FROM blocks b "
+            "JOIN documents d ON d.id = b.document_id "
+            "WHERE d.held_out = 0 AND b.is_boilerplate = 0 AND b.block_type != 'figure' "
+            "ORDER BY b.document_id, b.page, b.ordinal"
+        )
+    ]
 
 
 @app.command("branch")

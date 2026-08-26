@@ -220,6 +220,24 @@ Ninguna de las dos es difícil; las dos hacen que el puntaje de la rama sea meno
 lo que el spec pretende.
 
 
+### 8c. El enriquecimiento de glosas depende de un catálogo de señales, y del par
+
+`enrich` encuentra los pasajes definitorios por patrón —doce señales enumeradas, en inglés y
+español— y ese catálogo es el techo de lo que la etapa puede ver. Una definición escrita como
+"llamamos X a…" o con la señal en una nota al pie no la encuentra. La mejora natural no es
+agregar patrones de a uno sino medir el recall del filtro contra un corpus con definiciones
+anotadas; hasta entonces, cuántos pasajes se pierden es desconocido, no cero.
+
+Verificado sobre el corpus real: 1.000 bloques utilizables, y "open science" da 5 pasajes en 3
+documentos con las señales `is a` y `means`. Sobre las 34 clases de la semilla da **cero**, que
+es el desajuste temático de la entrada 9 y no una falla del filtro.
+
+Falta lo que cierra el bucle: **`match` no se re-ejecuta solo sobre las huérfanas cuando las
+glosas cambian**, como pide §4.3. `enrich` avisa y deja el comando escrito, pero el disparo es
+manual. Y el control de circularidad hoy sólo se consulta (`circular`); no descuenta esas
+menciones de ninguna métrica de cobertura, que es para lo que el spec lo pide.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.

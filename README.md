@@ -60,7 +60,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B2b puenteo por conocimiento del mundo | listo (`bridge`) |
 | B3 inducción de clases | listo (`induce`) |
 | B4 axiomatización | listo (`axiomatize`) |
-| B4b enriquecimiento de glosas | **no implementado** |
+| B4b enriquecimiento de glosas | listo (`enrich`, `circular`) |
 | B5 filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
 | B5 filtros 3–6 (SHACL, OntoClean, OOPS!, evidencia) | **no implementado** |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
@@ -337,7 +337,7 @@ Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403
 cubren el 70% de las huérfanas; bajarlo a 0,30 son 582 preguntas y el 98%. El umbral no está
 calibrado, como todos los demás.
 
-### 4. Axiomatización y ramas (B4 + B6)
+### 4. Axiomatización, enriquecimiento y ramas (B4 + B4b + B6)
 
 ```bash
 uv run onto-pipeline --env-file opencode.env axiomatize   # propuestas -> axiomas
@@ -383,6 +383,48 @@ Elegir una rama es lo que **graba los rechazos**. Lo aceptado ya está en la ont
 rechazado no está en ningún otro lado, y es lo que una iteración posterior lee para no volver a
 proponer lo mismo (§6.7). Se graba después de aplicar, no antes: el razonador todavía puede
 rechazar la rama, y una decisión registrada sobre un estado que nunca se aplicó sería mentira.
+
+#### Enriquecimiento de glosas (B4b)
+
+```bash
+uv run onto-pipeline enrich --dry-run                     # qué pasajes hay, sin preguntar nada
+uv run onto-pipeline --env-file opencode.env enrich       # mejorar glosas y cosechar sinónimos
+uv run onto-pipeline circular                             # los matches que no cuentan como evidencia
+```
+
+La glosa no es un valor fijo de A0: se arranca desde el vecindario estructural y cada iteración
+la mejora con lo que el corpus efectivamente dice. Eso cierra el bucle autocorrectivo de §4.3
+—mejor glosa → mejor matching → menos falsos huérfanos— y una mención huérfana en la iteración 3
+puede tiparse bien en la 8.
+
+**Los pasajes se encuentran mecánicamente**, por señal definitoria: "X is a", "we define X as",
+"X refers to", "también llamado". No se le pregunta a un modelo cuáles párrafos son
+definitorios, porque un corpus tiene muchos más párrafos que presupuesto tiene pedidos, y un
+filtro que cuesta un pedido por párrafo no es un filtro. Recién los pasajes que pasan el filtro
+llegan al modelo, y sólo se le pregunta por ellos.
+
+Dos cosas propias de este pipeline cambian cómo corre ese bucle, y conviene decirlas:
+
+- El matcher resultó mejor contra **etiquetas** que contra glosas, al revés de la premisa del
+  spec. Así que lo que realimenta al matching es el `skos:altLabel` que la etapa cosecha, no la
+  `skos:definition` que reescribe. La definición sigue importando —es lo que el prompt de
+  axiomatización muestra como significado de un candidato, y es lo que lee una persona— pero el
+  bucle pasa por los sinónimos.
+- Un sinónimo que no aparece literalmente en los pasajes **se descarta**, igual que `coref`
+  verifica que todo id agrupado exista y `bridge` que la clase nombrada esté en la ontología. Un
+  sinónimo salido del conocimiento del modelo puede incluso ser correcto, pero quedaría grabado
+  con una procedencia que no se cumple — y el control de circularidad se apoya en que esa
+  procedencia diga la verdad.
+
+**Control de circularidad (§4.3).** Cada enriquecimiento registra qué documentos contribuyeron.
+Si después una mención de uno de esos documentos matchea contra esa clase, ese match no es
+evidencia independiente: la clase se describió usando ese documento, así que el match es en
+parte el pipeline reconociendo su propia escritura. `circular` los cuenta. No son errores y no
+se tiran; son los que no hay que sumar como cobertura.
+
+Sobre el par actual el resultado es cero pasajes para las 34 clases de la semilla, que es
+exactamente lo que predice el desajuste temático documentado más abajo: no es una falla de la
+etapa, es la etapa reportando que el corpus no define nada de lo que la semilla nombra.
 
 ### 5. Validación (A0.0 + B5)
 

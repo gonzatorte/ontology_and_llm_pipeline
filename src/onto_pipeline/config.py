@@ -78,6 +78,17 @@ class Induction(BaseModel):
     max_phrases_in_prompt: int = 30
 
 
+class Enrichment(BaseModel):
+    """B4b — gloss enrichment from definitional passages (spec 6.5, 4.3)."""
+
+    # Passages per class, spread across documents before going deep: five from one paper
+    # describe that paper's usage, and the circularity control is about that difference.
+    max_passages: int = 6
+    max_passage_chars: int = 1200
+    # Skip a class with nothing to work from rather than asking the model to invent one.
+    min_passages: int = 1
+
+
 class Axiomatization(BaseModel):
     # Several candidates with their definitions, not the matcher's single runner-up: on real
     # data that one is often unrelated, and the parent has to be re-decided here.
@@ -195,6 +206,7 @@ class Llm(BaseModel):
     B2b_bridging: StageModel = StageModel(tier="large", temperature=0.3)
     B3_naming: StageModel = StageModel(tier="large", temperature=0.3)
     B4_axiomatization: StageModel = StageModel(tier="large", temperature=0.7)
+    B4b_enrichment: StageModel = StageModel(tier="medium", temperature=0.3)
     B6_branching: StageModel = StageModel(tier="large", temperature=0.3)
     regeneration_retry: StageModel = StageModel(tier="large", temperature=0.7)
 
@@ -218,6 +230,7 @@ class Config(BaseModel):
     bridging: Bridging = Bridging()
     induction: Induction = Induction()
     axiomatization: Axiomatization = Axiomatization()
+    enrichment: Enrichment = Enrichment()
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()

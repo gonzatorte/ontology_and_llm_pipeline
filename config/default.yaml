@@ -148,6 +148,15 @@ matching:
                                    # only tuned on accumulated accept/reject labels (6.3).
   device: null                     # null lets torch choose; "cuda" or "cpu" to force
 
+# Enriquecimiento de glosas desde el corpus (§6.5 B4b, §4.3). Los pasajes se encuentran por
+# señal definitoria —"X es un", "X se define como", "también llamado"— y no preguntándole a un
+# modelo cuáles son definitorios: un corpus tiene muchos más párrafos que presupuesto tiene
+# pedidos, y un filtro que cuesta un pedido por párrafo no es un filtro.
+enrichment:
+  max_passages: 6          # por clase, repartidos entre documentos antes de profundizar
+  max_passage_chars: 1200
+  min_passages: 1          # sin pasajes no se pregunta; inventar una glosa no es enriquecer
+
 # ─── Ramas (§6.6) ────────────────────────────────────────
 # El multi-rama es el camino excepcional, no el default: preguntar en cada iteración sin
 # conflicto real es exactamente el trabajo manual que el pipeline existe para evitar (D21).
@@ -237,6 +246,7 @@ llm:
   B2b_bridging:       {tier: large,  temperature: 0.3}
   B3_naming:          {tier: large,  temperature: 0.3}
   B4_axiomatization:  {tier: large,  temperature: 0.7}
+  B4b_enrichment:     {tier: medium, temperature: 0.3}
   B6_branching:       {tier: large,  temperature: 0.3}
   regeneration_retry: {tier: large,  temperature: 0.7}
 
