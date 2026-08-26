@@ -8,7 +8,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 import typer
-from rdflib import Dataset, Graph
+from rdflib import Dataset, Graph, URIRef
+from rdflib.namespace import RDFS
 from rich.console import Console
 from rich.table import Table
 
@@ -29,6 +30,7 @@ from . import (
     llm,
     mapping,
     matching,
+    ontoclean,
     review,
     structural,
     typing_store,
@@ -94,6 +96,9 @@ MarkOption = typer.Option(
 MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention ids to mark.")
 ExportOption = typer.Option(
     None, "--export", help="Write the misextractions to this JSONL, for the evaluation set."
+)
+RefreshOption = typer.Option(
+    False, "--refresh", help="Ask again for what is already labelled."
 )
 DryRunOption = typer.Option(
     False, "--dry-run", help="Show what would be asked about, and ask nothing."
@@ -703,13 +708,20 @@ def axiomatize_cmd(
     verdict.add_row("ELK", elk.verdict, elk.note[:52])
     verdict.add_row("HermiT", "consistent" if hermit.consistent else REJECTED,
                     f"{len(hermit.unsatisfiable)} unsatisfiable")
+    clean = _ontoclean(conn, version_id, candidate_graph)
     smells = validation.pitfalls(candidate_graph)
+    verdict.add_row("OntoClean", clean.decision, clean.note[:52])
     verdict.add_row("pitfalls", smells.decision, smells.note[:52])
     verdict.add_row("structural", REJECTED if metrics.rejected else "clean",
                     f"depth {metrics.depth} · {len(metrics.findings)} finding(s)")
     console.print(verdict)
+    for finding in clean.findings[:6]:
+        console.print(f"  [red]OntoClean[/] {finding}")
 
-    blocked = elk.verdict == REJECTED or not hermit.consistent or hermit.unsatisfiable
+    blocked = (
+        elk.verdict == REJECTED or not hermit.consistent or hermit.unsatisfiable
+        or clean.rejected
+    )
     if blocked:
         for iri, justifications in hermit.justifications.items():
             console.print(f"[red]unsatisfiable[/] {iri}")
@@ -737,6 +749,74 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("metaproperties")
+def metaproperties_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    limit: int | None = LimitOption,
+    refresh: bool = RefreshOption,
+) -> None:
+    """Label each class for OntoClean, so B5's filter 4 has something to check.
+
+    The model is asked four plain questions — can one stop being this? can two of them be told
+    apart? is each one a whole? does each need something else to exist? — and never asked for
+    OntoClean's notation. Asking in jargon gets an answer about the jargon.
+
+    Labels carry across versions on purpose: a metaproperty is a fact about the concept, not
+    about the state of the ontology, so a class rigid in v3 is rigid in v7. `--refresh` asks
+    again for classes already labelled.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    targets = typing_store.targets_from(graph, "label")
+    known = ontoclean.load(conn, version_id)
+    pending = [t for t in targets if refresh or t.iri not in known]
+    if not pending:
+        console.print(
+            f"[green]all {len(targets)} classes are labelled[/] · --refresh asks again"
+        )
+        return
+
+    labels = {target.iri: target.label for target in targets}
+    payloads = [
+        (
+            target.iri,
+            ontoclean.payload(
+                target.label, target.gloss,
+                [labels.get(str(parent), str(parent))
+                 for parent in graph.objects(URIRef(target.iri), RDFS.subClassOf)],
+            ),
+        )
+        for target in (pending[:limit] if limit else pending)
+    ]
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, ontoclean.STAGE)
+    with console.status(f"metaproperties · {len(payloads)} classes"):
+        result = llm.run(
+            Ledger(conn, config.execution), model, ontoclean.PROMPT, stage,
+            payloads, ontoclean.parse,
+        )
+
+    written = [ontoclean.Labels(iri=iri, **answer) for iri, answer in result.outputs.items()]
+    ontoclean.persist(conn, version_id, written)
+
+    tally: dict[str, int] = {}
+    for item in written:
+        tally[item.rigidity] = tally.get(item.rigidity, 0) + 1
+    table = Table("what", "count")
+    table.add_row("classes labelled", str(len(written)))
+    for value, count in sorted(tally.items()):
+        table.add_row(f"  rigidity {value}", str(count))
+    table.add_row("failed", str(len(result.failures)))
+    table.add_row("still unlabelled", str(len(targets) - len(ontoclean.load(conn, version_id))))
+    console.print(table)
+    for iri, error in list(result.failures.items())[:5]:
+        console.print(f"  [red]{labels.get(iri, iri)}[/]: {error}")
 
 
 @app.command("conflicts")
@@ -1303,11 +1383,13 @@ def _commit_axioms(
     hermit = reasoners.hermit(ontology)
     metrics = structural.check(candidate)
     smells = validation.pitfalls(candidate)
+    clean = _ontoclean(conn, version_id, candidate)
 
     verdict = Table("filter", "result", "detail")
     verdict.add_row("ELK", elk.verdict, elk.note[:52])
     verdict.add_row("HermiT", "consistent" if hermit.consistent else REJECTED,
                     f"{len(hermit.unsatisfiable)} unsatisfiable")
+    verdict.add_row("OntoClean", clean.decision, clean.note[:52])
     verdict.add_row("pitfalls", smells.decision, smells.note[:52])
     verdict.add_row("structural", REJECTED if metrics.rejected else "clean",
                     f"depth {metrics.depth} · {len(metrics.findings)} finding(s)")
@@ -1315,6 +1397,11 @@ def _commit_axioms(
 
     if elk.verdict == REJECTED or not hermit.consistent or hermit.unsatisfiable:
         console.print("[red]not applied[/]: the reasoner rejected it")
+        return False
+    if clean.rejected:
+        for finding in clean.findings[:6]:
+            console.print(f"  [red]OntoClean[/] {finding}")
+        console.print("[red]not applied[/]: OntoClean rejected a subsumption")
         return False
     if metrics.rejected and not apply_changes:
         for finding in metrics.findings[:8]:
@@ -1970,8 +2057,32 @@ def _shape_and_smell(config, conn, version_id, graph) -> list[validation.Verdict
             except validation.ShapesUnavailable as exc:
                 verdicts.append(validation.Verdict("SHACL", validation.SKIPPED, str(exc)[:60]))
 
+    verdicts.append(_ontoclean(conn, version_id, graph))
     verdicts.append(validation.pitfalls(graph))
     return verdicts
+
+
+def _ontoclean(conn, version_id, graph) -> validation.Verdict:
+    """B5 filter 4. Reports what it could check, never what it assumed."""
+    labels = ontoclean.load(conn, version_id)
+    if not labels:
+        return validation.Verdict(
+            "OntoClean", validation.SKIPPED,
+            "no metaproperties; run `metaproperties` to label the classes",
+        )
+    violations, checked, skipped = ontoclean.check(graph, labels)
+    coverage = f"{checked} subsumption(s) checked, {skipped} unlabelled"
+    if not violations:
+        return validation.Verdict("OntoClean", validation.PASS, coverage)
+    names = versioning.label_index(graph)
+    return validation.Verdict(
+        "OntoClean", validation.REJECT, f"{len(violations)} violation(s); {coverage}",
+        [
+            f"{versioning.short_name(item.child, names)} ⊑ "
+            f"{versioning.short_name(item.parent, names)} — {item.detail}"
+            for item in violations
+        ],
+    )
 
 
 _IRI_TOKEN = re.compile(r"<([^>]+)>|(?<![\S])(https?://\S+)")

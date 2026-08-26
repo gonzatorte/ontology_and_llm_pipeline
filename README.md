@@ -30,7 +30,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | B3 | **induce** | Convierte huérfanas en clases nuevas |
 | B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
 | B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
-| B5 | **validate** | Cadena de filtros: ELK, HermiT, SHACL, OntoClean, OOPS!, evidencia, estructura |
+| B5 | **validate** · **metaproperties** | Cadena de filtros: ELK, HermiT, SHACL, OntoClean, pitfalls, evidencia, estructura |
 | B6 | **branch** | Arma las alternativas coherentes entre las que elegís |
 | B7–B8 | **apply** | Aplica la rama, versiona en el DAG, detecta loops |
 | — | **regenerate** | Recomputa el ABox desde las menciones |
@@ -64,7 +64,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B4b enriquecimiento de glosas | listo (`enrich`, `circular`) |
 | B5 filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
 | B5 filtro 3 (SHACL) | listo (`--extra validation`); las shapes se escriben a mano |
-| B5 filtro 4 (OntoClean) | **no implementado** — necesita metapropiedades etiquetadas |
+| B5 filtro 4 (OntoClean) | listo (`metaproperties` + `validate`) |
 | B5 filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
 | B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
@@ -498,7 +498,7 @@ un axioma individual (D5): ve ramas, y la cadena decide qué entra en ellas.
 | 1 | ELK | rechazo duro, incompleto | listo |
 | 2 | HermiT: consistencia y satisfacibilidad | rechazo duro, con justificaciones | listo |
 | 3 | SHACL sobre el ABox | rechazo | listo, si hay `shapes.ttl` |
-| 4 | OntoClean | rechazo duro | **falta** |
+| 4 | OntoClean | rechazo duro | listo, si las clases están etiquetadas |
 | 5 | Pitfalls de modelado | **advertencia, nunca rechazo** | listo (subconjunto local) |
 | 6 | Evidencia textual | rechazo, **sólo procedencia `textual`** | listo |
 | 7 | Métricas estructurales | rechazo | listo |
@@ -519,6 +519,35 @@ Tres cosas de la cadena que no son obvias:
   afirmaciones distintas. Generar una desde la otra convertiría cada silencio en una violación,
   que es exactamente la lectura de mundo cerrado que este proyecto no está haciendo. Sin shapes
   el filtro reporta que **no corrió**, que no es lo mismo que pasar.
+
+#### OntoClean (filtro 4)
+
+```bash
+uv run onto-pipeline --env-file opencode.env metaproperties   # etiquetar las clases
+uv run onto-pipeline validate                                  # el filtro ya tiene qué mirar
+```
+
+Es el único filtro que atrapa una **subsunción mal formada** en vez de una inconsistencia.
+`Student ⊑ Person` está bien; `Person ⊑ Student` es perfectamente consistente en OWL y está mal
+por una razón que ningún razonador puede enunciar: ser estudiante es algo que se deja de ser, y
+ser persona no.
+
+Al modelo se le hacen **cuatro preguntas en castellano llano** —¿se puede dejar de ser esto?
+¿hay forma de decidir si dos son el mismo? ¿cada uno es un todo con borde? ¿necesita otra cosa
+para existir?— y nunca se le pide la notación de OntoClean: preguntar en jerga devuelve una
+respuesta sobre la jerga. Las cuatro restricciones sobre esas etiquetas sí las aplica el código.
+
+Las etiquetas **viajan entre versiones**: una metapropiedad es un hecho sobre el concepto, no
+sobre el estado de la ontología, así que una clase rígida en v3 lo es en v7 y volver a preguntar
+sería pagar dos veces la misma respuesta. `--refresh` vuelve a preguntar igual.
+
+Una clase sin etiquetar **no produce violación**: el filtro reporta cuántas subsunciones
+verificó y cuántas salteó por falta de etiqueta. Un filtro que revisara en silencio un décimo de
+la jerarquía estaría reportando un resultado limpio que nunca estableció.
+
+Es la parte más débil de la cadena y el spec lo dice: con ontología superior las metapropiedades
+se heredan; sin ella las etiqueta el LLM, que es "factible, menos confiable, y trabajo adicional
+que contradice parcialmente D5".
 
 Instalación del filtro 3: `uv sync --extra validation`.
 

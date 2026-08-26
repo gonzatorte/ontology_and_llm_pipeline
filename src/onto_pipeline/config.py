@@ -211,6 +211,7 @@ class Llm(BaseModel):
     B3_naming: StageModel = StageModel(tier="large", temperature=0.3)
     B4_axiomatization: StageModel = StageModel(tier="large", temperature=0.7)
     B4b_enrichment: StageModel = StageModel(tier="medium", temperature=0.3)
+    B5_ontoclean: StageModel = StageModel(tier="large", temperature=0.0)
     B6_branching: StageModel = StageModel(tier="large", temperature=0.3)
     regeneration_retry: StageModel = StageModel(tier="large", temperature=0.7)
 

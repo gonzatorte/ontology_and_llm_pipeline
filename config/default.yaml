@@ -252,6 +252,9 @@ llm:
   B3_naming:          {tier: large,  temperature: 0.3}
   B4_axiomatization:  {tier: large,  temperature: 0.7}
   B4b_enrichment:     {tier: medium, temperature: 0.3}
+  # Metapropiedades de OntoClean. Temperatura 0: no es una pregunta creativa, y la misma clase
+  # tiene que dar la misma respuesta en dos corridas o el filtro 4 deja de ser determinista.
+  B5_ontoclean:       {tier: large,  temperature: 0.0}
   B6_branching:       {tier: large,  temperature: 0.3}
   regeneration_retry: {tier: large,  temperature: 0.7}
 

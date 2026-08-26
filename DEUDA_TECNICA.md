@@ -265,12 +265,19 @@ instrumento como la ausencia del hallazgo.
 
 ### 8e. La cadena B5 tiene seis de siete filtros, y el que falta es el caro
 
-**Falta OntoClean (filtro 4)**, que el spec marca como rechazo duro. No es difícil de aplicar
-—las cuatro restricciones sobre rigidez, identidad, unidad y dependencia son mecánicas— sino de
-alimentar: requiere que cada clase tenga esas metapropiedades etiquetadas. Con ontología
-superior se heredan; sin ella las etiqueta el LLM, que el propio spec reconoce como "factible,
-menos confiable, y trabajo adicional que contradice parcialmente D5". Es una etapa nueva con su
-prompt, su verificación y su costo, no un chequeo más.
+**OntoClean (filtro 4) está, y su punto débil es de dónde salen las etiquetas.** Las cuatro
+restricciones son mecánicas y no tienen deuda; el insumo sí. Con ontología superior las
+metapropiedades se heredan, y sin ella las etiqueta el LLM — que el propio spec reconoce como
+"factible, menos confiable, y trabajo adicional que contradice parcialmente D5". Nadie ha medido
+todavía cuán confiable es: haría falta un conjunto de clases con metapropiedades anotadas a mano
+y comparar. Hasta entonces, un rechazo de este filtro es tan bueno como la etiqueta que lo
+produjo, y por eso el comando reporta cuántas subsunciones verificó y cuántas salteó.
+
+Dos consecuencias operativas. Las clases inducidas en una iteración **llegan sin etiquetar**, así
+que sus subsunciones se saltean hasta que se vuelva a correr `metaproperties`; el disparo
+automático tras `axiomatize` no está. Y las etiquetas viajan entre versiones a propósito, lo que
+es correcto para un concepto estable y **equivocado si una clase cambia de significado**
+conservando el IRI — un caso que hoy nada detecta.
 
 **El filtro 5 no es OOPS!, es un subconjunto local.** Están implementados P06 (ciclos en la
 jerarquía), P08 (clase sin etiqueta o sin definición), P11 (propiedad sin dominio o sin rango),
