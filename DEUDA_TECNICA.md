@@ -4,6 +4,10 @@ Documento vivo. Registra **mejoras a futuro** —cosas que hoy funcionan pero po
 mejor, y decisiones tomadas con evidencia insuficiente que conviene rehacer cuando la haya—.
 No es una lista de bugs: lo que está roto se arregla, no se documenta.
 
+> **Al agregar una entrada:** los números colisionan cuando dos sesiones escriben en paralelo —
+> ya pasó con el 17—. Antes de numerar, mirá el último `###` que hay. Y al referenciar otra
+> entrada, mejor por título que por número, porque los números se corren.
+
 El estado de implementación por etapa está en el [README](README.md); acá va lo que no se ve
 mirando la tabla de estado.
 
@@ -147,7 +151,8 @@ sentido de *tema* tipa como la clase **Subject a 0.992**, dentro de la zona de a
 ningún umbral lo filtra.
 
 Ninguna de las dos opciones está resuelta. Ver el plan en
-[`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md).
+[`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md), y el comando
+`calibrate`, que corre el barrido.
 
 ### 8. Los umbrales 0.92 / 0.70
 
@@ -172,6 +177,9 @@ El spec tiene cinco puntos donde decide el usuario —elegir rama (§6.6), zona 
 ninguno tiene interfaz. La mitad del camino ya está: los hallazgos de A0 viven en
 `review_items` con estado y decisiones que sobreviven a re-correr. Falta lo mismo para la zona
 gris de B2 (219 menciones esperando) y una interfaz encima.
+
+Cuando exista, `review_items` también es donde viven las excepciones por caso de las reglas de
+mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
 
 ### 11. Mundo abierto: lo que falta
 
@@ -201,3 +209,90 @@ rutear esas páginas a MinerU.
 
 Los marcadores de palabras función están hardcodeados. Otro idioma son ~10 líneas más, o
 apoyarse en el `/Lang` declarado del PDF.
+
+### 15. Código sin consumidor
+
+Tres cosas implementadas y probadas que nada invoca. No están rotas: están desconectadas, y
+cada una es o bien un cable que falta o bien código a borrar.
+
+- **`versioning.nearest_state`** — detección de loops parciales (§6.8): la rama vuelve *casi* al
+  estado anterior, mismo compromiso de modelado con IRIs distintos, y el hash exacto no lo ve.
+  Distancia de Jaccard sobre los conjuntos de axiomas normalizados. Falta el umbral en el config
+  y el llamador, que es B6 al presentar una rama. Antes de B6 no hay dónde enchufarlo.
+- **`iteration.mode | trigger | batch_size | max_iterations`** — `mode` elige entre re-correr
+  la extracción sobre todo el corpus o sólo sobre lo nuevo (D14, default global); `trigger` y
+  `batch_size`, cuándo se dispara una iteración; `max_iterations`, el corte duro de §10.3.
+  Los cuatro describen un loop que hoy no existe: las etapas se corren a mano, una por comando.
+  Se consumen cuando exista el orquestador, no antes.
+- **`branching.*`** — `max_branches`, `present_independent_axes_separately`,
+  `auto_apply_when_no_axis`. Configuran B6, que no está implementado.
+
+Lo que hay que evitar es que crezcan en silencio: una clave de config que nadie lee afirma algo
+falso sobre lo que el sistema hace. `matching.blocking_strategy` fue el caso —decía `embedding`
+y bloqueaba por prefijo de 4 caracteres— y se resolvió haciendo que el config **rechace** un
+valor no implementado en vez de aceptarlo. Ese es el patrón para las que quedan.
+
+### 16. Multi-rama: las preguntas que el spec deja abiertas
+
+Que B6 no esté implementado lo dice el README. Lo que va acá es distinto: el diseño multi-rama
+tiene preguntas que **el spec mismo declara sin resolver**, y quien lo implemente necesita
+encontrarlas antes de empezar, no descubrirlas a mitad de camino.
+
+- **Expiración de rechazos (§6.7, riesgo R2).** Con semilla reorganizable un rechazo no es
+  permanente: lo rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura
+  cambió. Bloquearlo para siempre acorrala el proceso; no bloquearlo produce un loop. La
+  política elegida —registrar el rechazo relativo al estado de la ontología y expirarlo cuando
+  las clases involucradas se reorganizan— está marcada textualmente como **"no es una regla
+  limpia, requiere ajuste empírico"**. Es la deuda más profunda del aparato y no se resuelve
+  leyendo: se resuelve con iteraciones reales encima.
+- **Comparación por forma normal (§6.7).** Para detectar re-proposición hay que normalizar el
+  axioma antes de comparar, o el mismo compromiso vuelve con IRIs distintos y no se detecta.
+  La pieza existe —`versioning.logical_axioms` canonicaliza— pero no está conectada a la tabla
+  `decisions`, que es donde vive el historial de rechazos.
+- **Scoring de ramas en frío (§11).** `historical_affinity` y `parsimonia` requieren historial,
+  y el spec dice explícitamente que se **omitan** en las primeras iteraciones en vez de
+  calcularse con datos insuficientes. O sea: el scoring nace incompleto por diseño y hay que
+  implementarlo sabiéndolo.
+- **Techo de 3–5 ramas (§6.6).** Es un número puesto a dedo contra una explosión de 2^k. El
+  mecanismo real que lo evita es presentar los ejes independientes por separado y armar ramas
+  completas sólo cuando están acoplados; el techo es la red, no la solución.
+- **El umbral de `nearest_state`.** Lo que menciona el punto 15 como cable faltante tiene además
+  un parámetro sin calibrar: cuánta distancia de Jaccard cuenta como "casi el mismo estado". No
+  hay forma de fijarlo sin iteraciones reales, igual que la expiración de rechazos.
+
+Todo esto comparte una propiedad incómoda: **no se puede calibrar contra un corpus externo**,
+como sí se puede el matcher. Depende del historial de decisiones de este proyecto en particular,
+que hoy tiene cero entradas.
+
+### 17. Tipado consciente de la jerarquía
+
+Hoy el matcher rankea cada mención contra las clases como si fueran independientes: no sabe que
+`Interview ⊑ Technique`. Usar la estructura —preferir la clase más específica cuyos ancestros
+también puntúan, penalizar una cuyos hermanos puntúan idéntico— es el mecanismo natural contra
+el eco léxico, que es el modo de falla que ningún umbral filtra (punto 7).
+
+No se puede medir sobre la semilla actual: 34 clases, profundidad 3, seis raíces. Sí sobre un
+par de calibración con jerarquía profunda, donde entra como una variable más del barrido de
+umbrales.
+
+### 18. `cross_language_always_grey` nunca se midió
+
+`matching.cross_language_always_grey: true` y la elección de un bi-encoder multilingüe son
+decisiones de config sin una sola medición detrás. El razonamiento declarado —un encoder
+monolingüe empujaría todo par es/en a la zona gris por idioma solo— es plausible y nunca se
+verificó, y la regla que lo acompaña es fuerte: manda a revisión humana *todo* par en idiomas
+distintos, sin importar el score.
+
+**Ningún par de calibración disponible la toca**, porque todos son en inglés. La única vía
+encontrada son los corpus clínicos del BSC —**SympTEMIST**, **DisTEMIST**, **MedProcNER**: 1.000
+casos clínicos en español cada uno, anotados y normalizados a SNOMED CT, en standoff BRAT, que
+`calibration.read_brat` ya lee—. SNOMED CT es lo más axiomatizado disponible (EL++, definiciones
+lógicas en casi todo el vocabulario) y **Argentina es país miembro de SNOMED International**, con
+lo cual la Affiliate License es gratuita.
+
+Lo que cuesta: la licencia hay que tramitarla, y SNOMED son ~360k conceptos, así que hay que
+subsetear y documentar el criterio como pide la fase 0 del plan. Por eso está acá y no en la
+tabla de tareas: no está en el camino crítico de la calibración, y no conviene que bloquee C2–C7.
+
+Mientras tanto el default se queda como está. Lo honesto es que se queda por falta de evidencia
+en contra, no por evidencia a favor.

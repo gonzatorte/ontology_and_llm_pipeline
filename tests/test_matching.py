@@ -285,3 +285,57 @@ def test_the_synonym_index_does_not_join_two_unrelated_classes():
     index = matching.synonym_index(targets)
 
     assert "observation" not in index["interview"]
+
+
+class RandomEncoder:
+    """Dense vectors, so the two ranking paths are compared on something without ties."""
+
+    def __init__(self, dimensions: int = 16, seed: int = 0) -> None:
+        import random
+
+        self.random = random.Random(seed)
+        self.dimensions = dimensions
+
+    def encode(self, texts):
+        return [[self.random.random() for _ in range(self.dimensions)] for _ in texts]
+
+
+def test_the_numpy_and_python_ranking_paths_agree(monkeypatch):
+    """Typing against a real inventory is 30 million dot products, so it runs through numpy.
+    A pipeline run and a calibration run on the same install must not disagree about which
+    class won just because one of them found numpy."""
+    import builtins
+
+    targets = [Target(iri=f"c:{index:03d}", label=f"label {index}") for index in range(200)]
+    mentions = [mention(f"m{index}", f"text {index}") for index in range(40)]
+    matcher = Matcher(RandomEncoder(), auto_merge_threshold=1.1, grey_zone_lower=0.0)
+    target_vectors = matcher.vectors_for([target.text for target in targets])
+    mention_vectors = matcher.vectors_for([m.text for m in mentions])
+
+    with_numpy = matcher._rank(mention_vectors, target_vectors, targets, 5)
+
+    real_import = builtins.__import__
+
+    def without_numpy(name, *args, **kwargs):
+        if name == "numpy":
+            raise ImportError("numpy is not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_numpy)
+    in_python = matcher._rank(mention_vectors, target_vectors, targets, 5)
+
+    assert [[t.iri for _, t in row] for row in with_numpy] == \
+           [[t.iri for _, t in row] for row in in_python]
+    # float32 against the interpreter's float64: close, not identical, and far below any zone.
+    assert all(
+        abs(left - right) < 1e-5
+        for fast, slow in zip(with_numpy, in_python, strict=True)
+        for (left, _), (right, _) in zip(fast, slow, strict=True)
+    )
+
+
+def test_top_k_larger_than_the_inventory_is_not_an_error(matcher):
+    """The seed has thirty-four classes and top_k defaults to five, but a subset ontology or a
+    withheld inventory can be smaller than k."""
+    typings = matcher.type_mentions([mention("m1", "a procedure we applied")], TARGETS, top_k=99)
+    assert typings[0].iri == "c:Technique"

@@ -13,6 +13,10 @@ class Paths(BaseModel):
     seed_ontology: Path
     work_dir: Path = Path("data")
     reasoner_lib: Path = Path("lib")
+    # Where the calibration pairs live: one directory per (corpus, ontología), each with its
+    # own `pair.yml`. Separate from `corpus_root` because they answer different questions —
+    # that pair is the case of application, these are the instrument.
+    calibration_root: Path = Path("../../calibration")
 
 
 class OwlProfile(BaseModel):
@@ -106,6 +110,21 @@ class Iteration(BaseModel):
     reload_seed: int = 0
 
 
+class Mapping(BaseModel):
+    """How the mention layer becomes an ABox (plan_reglas_de_mapeo.md).
+
+    The global policy. Per-case exceptions live in `review_items`, because section 6.4 scopes
+    notarize/force/refute per case while 6.8 recomputes the whole ABox, and a per-case decision
+    that survives a wholesale recompute cannot live in the code doing the recomputing.
+    """
+
+    individual_from: str = "entity"          # entity | mention
+    type_from: list[str] = Field(default_factory=lambda: ["auto"])   # auto, grey
+    provenance: str = "named_graph"          # named_graph | flat
+    conflict_policy: str = "notarize"        # notarize | force | refute
+    duplicate_policy: str = "separate"       # separate | merge
+
+
 class CompetencyQuestions(BaseModel):
     n_candidates: int = 60
     type_quota: dict[str, int] = Field(default_factory=dict)
@@ -167,6 +186,7 @@ class Config(BaseModel):
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()
+    mapping: Mapping = Mapping()
     iteration: Iteration = Iteration()
     cq: CompetencyQuestions = CompetencyQuestions()
     branching: Branching = Branching()
@@ -183,4 +203,5 @@ class Config(BaseModel):
         config.paths.seed_ontology = (base / config.paths.seed_ontology).resolve()
         config.paths.work_dir = (base / config.paths.work_dir).resolve()
         config.paths.reasoner_lib = (base / config.paths.reasoner_lib).resolve()
+        config.paths.calibration_root = (base / config.paths.calibration_root).resolve()
         return config

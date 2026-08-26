@@ -1,0 +1,546 @@
+"""Calibration against a published annotated corpus (plan fases 2 y 3, tareas C2–C5).
+
+Why this exists: the thresholds in `matching:` were never measured, and they cannot be measured
+on the application pair, where the corpus talks *about* research instead of *reporting*
+qualitative studies. A corpus already annotated against an ontology O gives the missing
+instrument for free — **`in_seed` is decidable by construction**: the gold class is in O or it
+is not, so the false-orphan rate needs no annotation campaign.
+
+Three things this module does not do, on purpose:
+
+    no ingest        the corpus is already plain text; A1/A2 never run, so there is no
+                     Markdown and `markdown_hash` hashes the source text itself. That is
+                     what makes the 12.2 objection to importers inapplicable here: the text
+                     is its own reference and no parser version can shift the offsets.
+    no B1            the corpus already carries the mentions. Feeding them through the
+                     extractor would measure the extractor, not the matcher.
+    no seed pipeline `seed.normalize_seed` mints opaque IRIs and hunts for typos, which is the
+                     right treatment for a seed a human wrote and the wrong one for a released
+                     ontology: the gold annotations name classes by their own id, so the ids
+                     have to survive intact. Targets are built straight from the ontology.
+
+The metrics are `annotation.score`, unchanged and shared with the application path. Calibrating
+on numbers computed by different code than the ones the gate is read from would defeat the
+purpose.
+
+## The class holdout
+
+A corpus annotated against O has no genuine orphans: every gold class is in O by construction,
+so `in_seed` is always true and the whole genuine-orphan lane of 10.1 stays empty. That lane is
+half of the 12.1 gate, so leaving it untested would calibrate only half the instrument.
+
+`holdout_classes` manufactures it: a deterministic fraction of the inventory is withheld, and
+every mention of a withheld class becomes a genuine orphan *whose correct answer is known*. It
+measures what nothing else here can — whether the matcher declines to type what it should
+decline, instead of forcing the mention onto the nearest surviving class.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import random
+import re
+import statistics
+import xml.etree.ElementTree as ET
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+
+from . import annotation
+from .matching import Matcher, Mention, Target
+
+KNOWTATOR = "knowtator"
+BRAT = "brat"
+
+# An OBO id (CL:0000540) and the IRI a released OWL file uses for it
+# (http://purl.obolibrary.org/obo/CL_0000540) are the same class. The gold annotations use the
+# first form, so everything is keyed on it.
+_OBO_IRI = re.compile(r"^https?://purl\.obolibrary\.org/obo/([A-Za-z][A-Za-z0-9_]*)_(\d+)$")
+_DEF_QUOTED = re.compile(r'^def:\s*"((?:[^"\\]|\\.)*)"')
+
+
+class UnknownFormat(ValueError):
+    """The pair declares an annotation format nothing reads."""
+
+
+class PairIncomplete(ValueError):
+    """The pair descriptor points at something that is not on disk."""
+
+
+@dataclass
+class GoldMention:
+    id: str
+    span: tuple[int, int]
+    text: str
+    gold_class: str | None
+    in_seed: bool = False
+
+
+@dataclass
+class GoldDocument:
+    doc_id: str
+    text: str
+    mentions: list[GoldMention] = field(default_factory=list)
+    # Annotations the reader could not represent, kept as a number rather than dropped in
+    # silence: a corpus whose conventions do not survive the import is a fact about the
+    # measurement, not a detail of the importer.
+    skipped: int = 0
+
+    @property
+    def text_hash(self) -> str:
+        return hashlib.sha256(self.text.encode("utf-8")).hexdigest()[:16]
+
+
+@dataclass
+class Pair:
+    """A corpus and the ontology it was annotated against."""
+
+    name: str
+    language: str
+    documents: list[GoldDocument]
+    targets: list[Target]
+    withheld: list[str] = field(default_factory=list)
+    excluded_classes: list[str] = field(default_factory=list)
+    dropped_excluded: bool = True
+    description: str = ""
+
+    @property
+    def inventory(self) -> set[str]:
+        return {target.iri for target in self.targets}
+
+    def annotated_documents(self) -> list[annotation.AnnotatedDocument]:
+        """The gold standard in the project's own format, so `annotation.score` applies.
+
+        `page` is 0 throughout: these corpora are plain text with no pagination, and inventing
+        one would put a number in the field that nothing could check.
+        """
+        return [
+            annotation.AnnotatedDocument(
+                doc_id=document.doc_id,
+                markdown_hash=document.text_hash,
+                mentions=[
+                    annotation.Mention(
+                        id=mention.id,
+                        page=0,
+                        span=mention.span,
+                        text=mention.text,
+                        gold_class=mention.gold_class,
+                        in_seed=mention.in_seed,
+                    )
+                    for mention in document.mentions
+                ],
+            )
+            for document in self.documents
+        ]
+
+    def mentions(self) -> list[Mention]:
+        return [
+            Mention(
+                id=mention.id,
+                text=mention.text,
+                document_id=document.doc_id,
+                language=self.language,
+            )
+            for document in self.documents
+            for mention in document.mentions
+        ]
+
+
+# ─────────────────────────────  annotation formats  ─────────────────────────────
+# Kept behind a registry because the pairs of C5 do not share a format: CRAFT is Knowtator,
+# the food and materials corpora are BRAT. Adding one is a reader, not a change to the loader.
+
+
+def read_knowtator(path: Path, text: str) -> tuple[list[GoldMention], int]:
+    """Knowtator standoff XML: `<annotation>` carries the spans, `<classMention>` the class,
+    joined by mention id.
+
+    Discontinuous annotations — 424 of CRAFT's 9,147 CL mentions — are skipped rather than
+    flattened. Flattening them to (first start, last end) would hand the encoder the text
+    between the fragments, which the annotator deliberately left out.
+    """
+    root = ET.parse(path).getroot()
+    class_of = {
+        node.get("id"): child.get("id")
+        for node in root.findall("classMention")
+        for child in node.findall("mentionClass")
+    }
+    mentions, skipped = [], 0
+    for node in root.findall("annotation"):
+        spans = node.findall("span")
+        reference = node.find("mention")
+        identifier = reference.get("id") if reference is not None else None
+        if len(spans) != 1 or identifier is None or identifier not in class_of:
+            skipped += 1
+            continue
+        start, end = int(spans[0].get("start")), int(spans[0].get("end"))
+        mentions.append(
+            GoldMention(
+                id=identifier, span=(start, end), text=text[start:end],
+                gold_class=class_of[identifier],
+            )
+        )
+    return mentions, skipped
+
+
+def read_brat(path: Path, text: str) -> tuple[list[GoldMention], int]:
+    """BRAT `.ann`: `T<n>\\t<class> <start> <end>\\t<text>`. Only text-bound annotations are
+    read; relations and attributes are not part of what B2 is measured on."""
+    mentions, skipped = [], 0
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line.startswith("T"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            skipped += 1
+            continue
+        head = parts[1].split(" ")
+        # A discontinuous BRAT span is written `start end;start end`; same decision as above.
+        if len(head) != 3 or ";" in parts[1]:
+            skipped += 1
+            continue
+        kind, start, end = head[0], int(head[1]), int(head[2])
+        mentions.append(
+            GoldMention(
+                id=f"{path.stem}:{parts[0]}", span=(start, end), text=text[start:end],
+                gold_class=kind,
+            )
+        )
+    return mentions, skipped
+
+
+READERS = {KNOWTATOR: read_knowtator, BRAT: read_brat}
+
+
+# ─────────────────────────────  ontology  ─────────────────────────────
+
+
+def curie(identifier: str) -> str:
+    """`http://purl.obolibrary.org/obo/CL_0000540` and `CL:0000540` name the same class."""
+    match = _OBO_IRI.match(identifier)
+    return f"{match.group(1)}:{match.group(2)}" if match else identifier
+
+
+def read_obo(path: Path) -> list[dict]:
+    """Enough of OBO to build targets: id, name, definition, synonyms.
+
+    Deliberately not a full parser. The alternative is loading the OWL through rdflib, which
+    for a released ontology means minutes and hundreds of megabytes to recover four fields.
+    The axioms the ontology is chosen for are not read here — they are the symbolic side's
+    input, and the `.owl` sits next to this file for that.
+    """
+    entries = []
+    for stanza in Path(path).read_text(encoding="utf-8", errors="replace").split("\n[")[1:]:
+        kind, _, body = stanza.partition("]\n")
+        if kind != "Term" or "\nis_obsolete: true" in body:
+            continue
+        identifier = _first(body, "id")
+        name = _first(body, "name")
+        if not identifier or not name:
+            continue
+        definition = None
+        for line in body.splitlines():
+            match = _DEF_QUOTED.match(line)
+            if match:
+                definition = match.group(1).replace('\\"', '"')
+                break
+        entries.append(
+            {
+                "id": identifier,
+                "label": name,
+                "gloss": definition,
+                "synonyms": re.findall(r'^synonym:\s*"((?:[^"\\]|\\.)*)"', body, re.M),
+            }
+        )
+    return entries
+
+
+def _first(body: str, tag: str) -> str | None:
+    match = re.search(rf"^{tag}:\s*(.+)$", body, re.M)
+    return match.group(1).strip() if match else None
+
+
+def load_targets(paths: Sequence[Path], match_against: str) -> list[Target]:
+    """Union of the given ontology files, first definition of a class winning.
+
+    More than one file because CRAFT annotates with the released ontology *plus* extension
+    classes it defines itself, and a gold class from either has to resolve. Order matters:
+    the released ontology goes first, so its wording is the one measured.
+    """
+    by_id: dict[str, Target] = {}
+    for path in paths:
+        for entry in read_obo(path):
+            identifier = curie(entry["id"])
+            if identifier in by_id:
+                continue
+            by_id[identifier] = Target(
+                iri=identifier,
+                label=entry["label"],
+                gloss=entry["gloss"],
+                alt_labels=list(entry["synonyms"]),
+                match_against=match_against,
+            )
+    return sorted(by_id.values(), key=lambda target: target.iri)
+
+
+# ─────────────────────────────  loading a pair  ─────────────────────────────
+
+
+def load_pair(
+    directory: Path, *, match_against: str, holdout: float | None = None,
+    drop_excluded: bool = True,
+) -> Pair:
+    """Read `pair.yml` and everything it points at. Paths inside it resolve against it.
+
+    `holdout` overrides the descriptor's `holdout_classes`, because withholding classes changes
+    what the headline number means and that belongs in the command that asked for it, not in a
+    file someone else may read later without noticing.
+
+    `drop_excluded` takes the corpus's own guarantee seriously. On CRAFT/CL the effect is not
+    marginal: `CL:0000000` is labelled *cell*, the annotators used the extension class
+    `CL_GO_EXT:cell` instead — also labelled *cell* — and that class is 3,262 of the 8,723 gold
+    mentions. Leaving a label-identical class that is guaranteed wrong in the candidate pool
+    measures a modelling collision, not the matcher. `--keep-excluded` restores it, which is
+    the run that shows how much of the error was that.
+    """
+    directory = Path(directory)
+    descriptor = directory / "pair.yml"
+    if not descriptor.exists():
+        raise PairIncomplete(f"{directory} has no pair.yml")
+    spec = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+
+    def resolve(value: str) -> Path:
+        return (directory / value).resolve()
+
+    fmt = spec["annotations"]["format"]
+    if fmt not in READERS:
+        raise UnknownFormat(f"{fmt!r}; available: {', '.join(sorted(READERS))}")
+    reader = READERS[fmt]
+
+    text_dir = resolve(spec["documents"]["dir"])
+    annotation_dir = resolve(spec["annotations"]["dir"])
+    suffix = spec["annotations"].get("suffix", ".ann")
+    if not text_dir.is_dir() or not annotation_dir.is_dir():
+        raise PairIncomplete(f"{text_dir} or {annotation_dir} is missing; see the pair's note")
+
+    documents = []
+    for text_path in sorted(text_dir.glob(spec["documents"].get("glob", "*.txt"))):
+        annotation_path = annotation_dir / f"{text_path.stem}{suffix}"
+        if not annotation_path.exists():
+            continue
+        text = text_path.read_text(encoding="utf-8")
+        mentions, skipped = reader(annotation_path, text)
+        documents.append(GoldDocument(text_path.stem, text, mentions, skipped))
+    if not documents:
+        raise PairIncomplete(f"{directory}: no document had both text and annotations")
+
+    targets = load_targets(
+        [resolve(item) for item in spec["ontology"]["files"]], match_against
+    )
+    requested = {"fraction": holdout} if holdout else spec.get("holdout_classes")
+    withheld = _withhold(targets, requested)
+    excluded = _excluded(spec.get("excluded_classes"), resolve)
+
+    removed = set(withheld) | (set(excluded) if drop_excluded else set())
+    pair = Pair(
+        name=spec.get("name", directory.name),
+        language=spec.get("language", "en"),
+        documents=documents,
+        targets=[target for target in targets if target.iri not in removed],
+        withheld=withheld,
+        excluded_classes=excluded,
+        dropped_excluded=drop_excluded,
+        description=spec.get("description", ""),
+    )
+    inventory = pair.inventory
+    for document in pair.documents:
+        for mention in document.mentions:
+            mention.gold_class = curie(mention.gold_class) if mention.gold_class else None
+            mention.in_seed = mention.gold_class in inventory
+    return pair
+
+
+def _withhold(targets: Sequence[Target], holdout) -> list[str]:
+    """Deterministic class-level holdout. A fraction, or an explicit list of ids."""
+    if not holdout:
+        return []
+    if isinstance(holdout, list):
+        return sorted(curie(item) for item in holdout)
+    fraction = float(holdout.get("fraction", 0.0))
+    if fraction <= 0:
+        return []
+    identifiers = sorted(target.iri for target in targets)
+    generator = random.Random(int(holdout.get("seed", 0)))
+    return sorted(generator.sample(identifiers, int(len(identifiers) * fraction)))
+
+
+def _excluded(value, resolve) -> list[str]:
+    """Classes a mention must never be typed to.
+
+    CRAFT ships one such list per annotation set: classes its annotators decided not to use,
+    which its README says are *guaranteed* false positives for anything that predicts them.
+    It is precision signal that costs no annotation.
+    """
+    if not value:
+        return []
+    if isinstance(value, list):
+        return sorted(curie(item) for item in value)
+    path = resolve(value)
+    if not path.exists():
+        return []
+    return sorted(
+        curie(line.split("\t")[0].strip())
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
+
+
+# ─────────────────────────────  the bench  ─────────────────────────────
+
+
+@dataclass
+class Ranking:
+    """Top-1 per mention with thresholds removed, so a sweep costs one encoding pass.
+
+    The matcher applies the zones inside `type_mentions`, which is right for the pipeline and
+    wrong for a sweep: re-encoding 9,000 mentions for each candidate threshold would take
+    hours to produce numbers that are a function of scores already computed. Running it wide
+    open recovers the score, and the zones are applied here.
+    """
+
+    best: dict[str, str]
+    score: dict[str, float]
+    runner_up: dict[str, str | None]
+
+
+@dataclass
+class Distribution:
+    correct: list[float] = field(default_factory=list)
+    wrong: list[float] = field(default_factory=list)
+
+    @property
+    def separation(self) -> float:
+        """Distance between the two medians, in units of the pooled spread.
+
+        The single number that answers "is there a threshold at all". A sweep can only find a
+        good operating point if the two distributions are apart; near zero says the ranking,
+        not the threshold, is what needs work.
+        """
+        if len(self.correct) < 2 or len(self.wrong) < 2:
+            return 0.0
+        spread = statistics.pstdev(self.correct + self.wrong)
+        if not spread:
+            return 0.0
+        return (statistics.median(self.correct) - statistics.median(self.wrong)) / spread
+
+
+@dataclass
+class RunReport:
+    match_against: str
+    use_cross_encoder: bool
+    threshold: float
+    report: annotation.OrphanReport
+    distribution: Distribution
+    excluded_hits: int = 0
+
+    @property
+    def row(self) -> tuple[str, ...]:
+        return (
+            self.match_against,
+            "cross" if self.use_cross_encoder else "bi",
+            f"{self.threshold:.2f}",
+            str(len(self.report.correct)),
+            str(len(self.report.mistyped)),
+            str(len(self.report.false_orphans)),
+            str(len(self.report.genuine_orphans)),
+            f"{self.report.false_orphan_rate:.1%}",
+            f"{self.report.typing_f1:.3f}",
+            str(self.excluded_hits),
+        )
+
+
+COLUMNS = (
+    "match_against", "encoder", "umbral", "correcto", "mistyped", "falso huérfano",
+    "huérfano genuino", "tasa FH", "F1", "clase excluida",
+)
+
+
+def rank(pair: Pair, matcher: Matcher, *, top_k: int = 5) -> Ranking:
+    """One encoding pass over the pair, thresholds wide open."""
+    mentions = pair.mentions()
+    typings = matcher.type_mentions(mentions, pair.targets, top_k=top_k)
+    return Ranking(
+        best={typing.mention_id: typing.iri for typing in typings if typing.iri},
+        score={typing.mention_id: typing.score for typing in typings},
+        runner_up={typing.mention_id: typing.runner_up for typing in typings},
+    )
+
+
+def distribution(pair: Pair, ranking: Ranking) -> Distribution:
+    """Scores of the top-1 that was right against the top-1 that was wrong.
+
+    Reported separately from the aggregate because the aggregate cannot distinguish "the
+    threshold is in the wrong place" from "no threshold would help".
+    """
+    result = Distribution()
+    for document in pair.documents:
+        for mention in document.mentions:
+            if mention.gold_class is None or not mention.in_seed:
+                continue
+            score = ranking.score.get(mention.id)
+            if score is None:
+                continue
+            hit = ranking.best.get(mention.id) == mention.gold_class
+            (result.correct if hit else result.wrong).append(score)
+    return result
+
+
+def evaluate(pair: Pair, ranking: Ranking, threshold: float) -> annotation.OrphanReport:
+    predicted = {
+        mention_id: (iri if ranking.score.get(mention_id, 0.0) >= threshold else None)
+        for mention_id, iri in ranking.best.items()
+    }
+    report = annotation.OrphanReport()
+    for document in pair.annotated_documents():
+        partial = annotation.score(document, predicted)
+        report.correct += partial.correct
+        report.mistyped += partial.mistyped
+        report.false_orphans += partial.false_orphans
+        report.genuine_orphans += partial.genuine_orphans
+    return report
+
+
+def excluded_hits(pair: Pair, ranking: Ranking, threshold: float) -> int:
+    excluded = set(pair.excluded_classes)
+    if not excluded:
+        return 0
+    return sum(
+        1
+        for mention_id, iri in ranking.best.items()
+        if iri in excluded and ranking.score.get(mention_id, 0.0) >= threshold
+    )
+
+
+def sweep(
+    pair: Pair, ranking: Ranking, thresholds: Iterable[float], *,
+    match_against: str, use_cross_encoder: bool,
+) -> list[RunReport]:
+    shared = distribution(pair, ranking)
+    return [
+        RunReport(
+            match_against=match_against,
+            use_cross_encoder=use_cross_encoder,
+            threshold=threshold,
+            report=evaluate(pair, ranking, threshold),
+            distribution=shared,
+            excluded_hits=excluded_hits(pair, ranking, threshold),
+        )
+        for threshold in thresholds
+    ]
+
+
+def thresholds(lower: float = 0.30, upper: float = 0.95, step: float = 0.05) -> list[float]:
+    count = int(round((upper - lower) / step)) + 1
+    return [round(lower + index * step, 2) for index in range(count)]

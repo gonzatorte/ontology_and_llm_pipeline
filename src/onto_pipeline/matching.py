@@ -187,16 +187,61 @@ class Matcher:
 
         target_vectors = self.vectors_for([t.text for t in targets])
         mention_vectors = self.vectors_for([m.text for m in mentions])
+        ranked = self._rank(mention_vectors, target_vectors, targets, top_k)
+        return [
+            self._resolve_typing(mention, candidates)
+            for mention, candidates in zip(mentions, ranked, strict=True)
+        ]
 
-        typings = []
-        for mention, vector in zip(mentions, mention_vectors, strict=True):
-            ranked = sorted(
-                ((dot(vector, tv), target) for tv, target in
-                 zip(target_vectors, targets, strict=True)),
-                key=lambda pair: (-pair[0], pair[1].iri),
-            )[:top_k]
-            typings.append(self._resolve_typing(mention, ranked))
-        return typings
+    def _rank(
+        self,
+        mention_vectors: Sequence[Sequence[float]],
+        target_vectors: Sequence[Sequence[float]],
+        targets: Sequence[Target],
+        top_k: int,
+    ) -> list[list[tuple[float, Target]]]:
+        """Top-k targets per mention, by cosine.
+
+        Two paths for one calculation. The Python one is O(mentions x targets) dot products in
+        the interpreter, which is fine at the thirty-four classes of the seed and stops being
+        fine immediately after: against CRAFT's 3,419-class inventory the same loop is 30
+        million dot products of 384 dimensions, hours of work for a number numpy produces in
+        seconds. Chunked in rows like `_neighbour_pairs`, so peak memory is chunk x targets.
+
+        Both paths order the candidates identically, ties broken by IRI. The scores are not
+        bit-identical: numpy works in float32, like `_neighbour_pairs`, so they differ around
+        the seventh decimal. That is far below any threshold the zones are read from, but it
+        means a score is reproducible to a display precision, not to the last bit.
+        """
+        width = min(top_k, len(targets))
+        try:
+            import numpy as np
+        except ImportError:  # pragma: no cover - depends on the install
+            return [
+                sorted(
+                    ((dot(vector, tv), target)
+                     for tv, target in zip(target_vectors, targets, strict=True)),
+                    key=lambda pair: (-pair[0], pair[1].iri),
+                )[:width]
+                for vector in mention_vectors
+            ]
+
+        mention_matrix = np.asarray(mention_vectors, dtype="float32")
+        target_matrix = np.asarray(target_vectors, dtype="float32").T
+        ranked: list[list[tuple[float, Target]]] = []
+        for start in range(0, len(mention_matrix), _CHUNK):
+            block = mention_matrix[start:start + _CHUNK] @ target_matrix
+            # argpartition is O(targets) against the O(targets log targets) of a full sort,
+            # and only the top-k order matters; the exact order comes from the sort below.
+            top = np.argpartition(-block, width - 1, axis=1)[:, :width]
+            for row, columns in enumerate(top.tolist()):
+                ranked.append(
+                    sorted(
+                        ((float(block[row, column]), targets[column]) for column in columns),
+                        key=lambda pair: (-pair[0], pair[1].iri),
+                    )
+                )
+        return ranked
 
     def _resolve_typing(self, mention: Mention, ranked: list[tuple[float, Target]]) -> Typing:
         """Whichever stage produced the final ranking also supplies the score the zones are

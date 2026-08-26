@@ -138,7 +138,7 @@ ataca de frente el riesgo declarado abajo (*“el punto de operación no transfi
 | Par | Inventario | Anotaciones | Por qué |
 |---|---|---|---|
 | **HPO GSC+** | HPO, ~19k clases, definiciones lógicas vía PATO/UBERON | 228 abstracts, ~1.933 anotaciones, ~490 conceptos | Segundo punto limpio y muy usado como benchmark |
-| **MaterioMiner** | ontología de mecánica de materiales, 179 clases | 2.191 entidades, 4 publicaciones | **No** es más rica que CL; es el control de inventario chico, el análogo más cercano a la semilla de 34 |
+| **MaterioMiner** | ontología de mecánica de materiales, 179 clases | 2.191 entidades, 4 publicaciones | **No** es más rica que CL, y entra igual: es el único dominio no biomédico del conjunto, y con 179 clases es el análogo más cercano que hay a la semilla cualitativa de 34 — mismo orden de inventario, misma profundidad corta |
 | **CafeteriaFCD / CafeteriaSA** | FoodOn (axiomatizada, ~40k) + SNOMED-CT | ~7.400 y ~4.300 anotaciones FoodOn | Extremo de inventario grande, y dominio no clínico |
 
 Cada uno trae su formato: HPO GSC+ y las Cafeteria usan standoff propio / brat, no Knowtator. La
@@ -151,16 +151,13 @@ escala perfecta, pero casi todo `is_a` — no pasa 1b), **Manifesto Project** (s
 Fuera de biomedicina esto prácticamente no existe: lo publicado es tesauro SKOS (AGROVOC, EuroVoc)
 o corpus diminuto. MaterioMiner es el mejor caso no biomédico encontrado.
 
-#### Opción abierta: calibrar también el caso cross-lingüe
+#### Lo que ningún par de acá puede medir
 
-`cross_language_always_grey: true` y el encoder multilingüe son decisiones **sin ninguna evidencia
-detrás**, y ningún par de arriba las toca porque todos son en inglés. Los corpus del BSC
-(**DisTEMIST**, **SympTEMIST**, **MedProcNER**: 1.000 casos clínicos en español cada uno,
-normalizados a SNOMED CT, brat standoff) son la única vía encontrada. SNOMED CT es lo más
-axiomatizado disponible (EL++, definiciones lógicas en casi todo el vocabulario) y **Argentina es
-país miembro de SNOMED International, con lo cual la Affiliate License es gratuita**. Contra: 360k
-conceptos, hay que subsetear y documentar el criterio. No está en el camino crítico; queda como
-C8.
+`cross_language_always_grey: true` y el encoder multilingüe son decisiones sin evidencia detrás, y
+los cuatro pares son en inglés, así que ninguno las toca. La vía existe —los corpus clínicos en
+español del BSC contra SNOMED CT— pero pide tramitar una licencia y subsetear 360k conceptos, y
+no conviene que eso bloquee C2–C7. Queda registrado como **deuda técnica 17** en
+[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md).
 
 Salida de la fase: un directorio con el corpus, su ontología en RDF, y una nota de una página
 sobre formato de anotación y criterio de subseteo si lo hubo.
@@ -206,13 +203,15 @@ Estimación: ~100 líneas + ~40 de CLI.
 
 Estimación: ~120 líneas.
 
-### Fase 4 — Re-decidir las dos opciones de config
+### Fase 4 — Re-decidir las dos opciones de config — **HECHA**
 
-Con n real en lugar de n=10, resolver `match_against` y `use_cross_encoder`, y **reescribir los
-comentarios de `config/default.yaml`** citando la nueva evidencia. Los comentarios actuales
-documentan honestamente que la medición fue sobre diez pares; deben dejar de decir eso.
+Con n = 8.723 en lugar de n = 10, las dos quedaron resueltas y los comentarios de
+`config/default.yaml` reescritos. Ver [Resultados de C4](#resultados-de-c4-2026-09-09).
 
-Si `gloss` gana acá, revisar A0.4: la etapa existe para alimentar un matcher que hoy no la usa.
+La pregunta condicional que dejaba abierta esta fase —«si `gloss` gana acá, revisar A0.4»— se
+respondió al revés y con margen: `gloss` no gana, pierde por 9× y con separación negativa. **A0.4
+no se toca, pero deja de justificarse por B2**: la etapa genera glosas que el matcher no usa y no
+hay evidencia de que deba. Su justificación queda siendo B4b y la lectura humana.
 
 ### Fase 5 — Volver al corpus de aplicación
 
@@ -226,6 +225,88 @@ Con el desajuste ya medido, el resultado esperado es tasa alta. Eso deja de ser 
 sistema y pasa a ser un resultado sobre el caso de aplicación: la salida es cambiar el corpus de
 aplicación (uno que reporte estudios cualitativos) o cambiar la semilla. Decisión de dominio, no
 de ingeniería.
+
+## Resultados de C4 (2026-09-09)
+
+Par: CRAFT `CL+extensions`, 97 documentos, **8.723 menciones** gold (424 discontinuas salteadas),
+inventario de **3.418 clases, 3.281 con definición (96%)**. Cuatro corridas,
+`onto-pipeline calibrate craft-cl`. Crudo en `pipeline/data/calibration/craft-cl.json`.
+
+### La decisión de etiqueta-vs-glosa, con n real
+
+| variante | recall@1 | separación | mejor F1 (umbral) |
+|---|---|---|---|
+| **label · bi** | **6.090 (69,8%)** | **+1,61** | **0,774 (0,90)** |
+| label_and_gloss · bi | 1.161 (13,3%) | −0,49 | 0,135 (0,45) |
+| gloss · bi | 686 (7,9%) | −0,42 | 0,080 (0,40) |
+| label · cross | 2.220 (25,4%) | −0,56 | 0,138 (0,30) |
+
+*Separación* es la distancia entre la mediana del score del top-1 correcto y la del top-1
+equivocado, en desvíos estándar agrupados. Es la pregunta que va **antes** de dónde poner el
+umbral: si las distribuciones se pisan, ningún umbral ayuda.
+
+**`match_against: label` queda resuelto, y en contra del §6.2.** No por poco: 69,8% contra 7,9%.
+Y la condición era favorable a la glosa —96% del inventario trae definición real escrita por
+curadores, no glosas generadas por un LLM—, así que la hipótesis del spec se probó donde debía
+ganar. Lo que decide no es el recall sino el signo: **con glosas la separación es negativa**, los
+errores puntúan más alto que los aciertos. Un umbral más exigente ahí conserva preferentemente lo
+equivocado. La explicación sigue siendo la de forma: una mención es un sintagma corto y una
+etiqueta también; una glosa es una oración. Se revisa con un encoder asimétrico, no con un umbral.
+
+Consecuencia para A0.4: la etapa de generación de glosas **no alimenta al matcher** y no hay
+evidencia de que deba. Sigue justificada por B4b y por lectura humana, no por B2.
+
+**`use_cross_encoder: false` queda resuelto.** Re-rankeando el top-5 del bi-encoder, el recall@1
+cae de 6.090 a 2.220 y la separación se va a −0,56. No es solo que aplaste la escala —que la
+aplasta, todo entre 0,1 y 0,3, que es exactamente R1—: además ordena peor. El reranker genérico de
+IR es el instrumento equivocado acá.
+
+### Los umbrales
+
+El F1 de tipado tiene su máximo en 0,774 con el corte en 0,90, así que **0,92 del spec está
+prácticamente en el óptimo**. Lo que el F1 esconde es el intercambio: en 0,90 la tasa de falsos
+huérfanos es 26,3% con 563 mal tipados; en 0,70 es 4,7% con 2.300 mal tipados. Cuál duele más es
+decisión de diseño —un falso huérfano induce clases espurias en B3— y no algo que el barrido
+resuelva.
+
+**Limitación que hay que nombrar:** el barrido usa un corte, el pipeline usa dos. Lo medido es el
+corte de huérfano. Dónde parte `auto` de zona gris es la pregunta separada de cuánta revisión
+humana se acepta, y no se calibra contra un corpus.
+
+### El hallazgo que no estaba buscado
+
+`CL:0000000` está etiquetada *cell*. Los anotadores de CRAFT no la usan: usan la extension class
+`CL_GO_EXT:cell`, etiquetada *cell* también, y esa clase sola es **3.262 de las 8.723 menciones
+(37%)**. Con las dos en el pool el encoder no puede distinguirlas, y **2.759 menciones caían en la
+que CRAFT garantiza equivocada**. El efecto sobre el número principal:
+
+| inventario | recall@1 | separación |
+|---|---|---|
+| con `CL:0000000` | 3.343 (38,3%) | +0,39 |
+| sin ella (default) | 6.090 (69,8%) | +1,61 |
+
+La mitad del error medido era una colisión de modelado, no el matcher. Por eso las clases que el
+corpus declara nunca-correctas salen del inventario por defecto: dejarlas es envenenar el pool a
+sabiendas. `--keep-excluded` reproduce la corrida de arriba.
+
+Es también el argumento más fuerte a favor de calibrar afuera: ese modo de falla —dos clases con
+etiqueta idéntica, una correcta y otra no— es invisible en un inventario de 34 clases y aparece
+solo cuando el inventario es grande de verdad.
+
+### Huérfanos genuinos fabricados
+
+Con `--holdout 0.2` (683 clases retenidas, determinista): separación +1,69, y la fila de huérfanos
+genuinos deja de ser cero — 415 en el corte 0,90 contra 2.154 falsos. El matcher **sí** se abstiene
+más sobre clases que no están en el inventario que sobre las que sí. Es evidencia débil pero es la
+primera que hay sobre esa mitad de la compuerta del §12.1.
+
+### Efecto colateral: el tipado no escalaba
+
+Tipar 8.723 menciones contra 3.418 clases son 30 millones de productos punto que `matching.py`
+hacía en el intérprete. La corrida no terminaba. Está resuelto con el mismo patrón numpy por
+bloques que ya usaba `_neighbour_pairs`, con un test que fija que los dos caminos rankeen igual.
+Con 34 clases el problema no existía; es el segundo hallazgo que solo aparece con un inventario
+realista.
 
 ## Qué NO se tira
 
@@ -266,21 +347,20 @@ son medición y decisión.
 
 ## Tareas pendientes
 
-Registro de trabajo a ejecutar, en el mismo espíritu que el §14.2 de la spec (T1–T4). C1 está
-hecha; el resto no está implementado.
+Registro de trabajo a ejecutar, en el mismo espíritu que el §14.2 de la spec (T1–T4). C1–C4 y C6
+están hechas; queda C5, C7 y C9.
 
 | # | Tarea | Fase | Bloqueada por | Estimación |
 |---|---|---|---|---|
 | ~~C1~~ | ~~Cablear B2~~ — **hecha** en `a4df6f0`: `Target`, comando `match`, persistencia y umbrales desde config | 1 | — | — |
-| C2 | Importador de corpus anotado: parser de formato desacoplado del mapeo a `annotation.Mention` / `matching.Mention`. Empezar por Knowtator XML (CRAFT); dejar lugar para brat y TSV. Saltea ingest/parse/chunking/extracción: el corpus ya es texto y ya trae las menciones | 2 | — | ~100 líneas + ~40 CLI |
-| C3 | Banco de calibración: barrido de umbrales sobre las métricas que `annotation.py` ya calcula, reportando la **distribución de scores** separando verdaderos de falsos, no solo el agregado | 3 | C2 | ~120 líneas |
-| C4 | **Par primario: CRAFT `CL+extensions` + `cl.owl` completo de OBO Foundry** (no el `.obo` del repo). Correr C3 bajo `match_against` ∈ {label, gloss, label_and_gloss} × `use_cross_encoder` ∈ {true, false}. Usar `unused_classes_for_CL_annotations.txt` como falsos positivos garantizados | 3 | C3 | 4–6 corridas |
-| C5 | **Pares adicionales: HPO GSC+, MaterioMiner, CafeteriaFCD/CafeteriaSA.** Mismo barrido. Objetivo declarado: medir cómo se mueve el punto de operación entre inventarios de 179, 3.540 y ~40k clases, en vez de suponerlo. Requiere los parsers de formato extra de C2 | 3 | C4 | ~60 líneas de parsers + 3 barridos |
-| C6 | Re-decidir `match_against` y `use_cross_encoder` con la evidencia de C4/C5 y **reescribir los comentarios de `config/default.yaml`**, que hoy documentan honestamente un n=10 que dejará de ser cierto | 4 | C5 | medición |
+| ~~C2~~ | ~~Importador de corpus anotado~~ — **hecha**: `calibration.py`, readers `knowtator` y `brat` tras un registro, `pair.yml` por par, offsets validados contra el texto fuente en los 97 documentos | 2 | — | — |
+| ~~C3~~ | ~~Banco de calibración~~ — **hecha**: comando `calibrate`, una pasada de encoding por variante y los umbrales aplicados encima, distribución de scores y separación reportadas aparte del agregado | 3 | C2 | — |
+| ~~C4~~ | ~~Par primario CRAFT `CL+extensions`~~ — **hecha**, cuatro corridas. Ver [Resultados de C4](#resultados-de-c4-2026-09-09) | 3 | C3 | — |
+| C5 | **Pares adicionales: HPO GSC+, MaterioMiner, CafeteriaFCD/CafeteriaSA.** Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
+| ~~C6~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de C4**: ambas resueltas, comentarios de `config/default.yaml` reescritos. C5 puede refinar los umbrales, no estas dos | 4 | C4 | — |
 | C7 | Volver al par de aplicación: config calibrada sobre semilla cualitativa + corpus de ciencia abierta, curva de acumulación del §10.3, evaluar la compuerta del §12.1 | 5 | C6 | medición |
-| C8 | *Opcional.* Par cross-lingüe (SympTEMIST + subset de SNOMED CT) para calibrar `cross_language_always_grey`, hoy sin evidencia. Fuera del camino crítico | 3 | C3 | Affiliate License + subseteo |
+| C9 | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | C4 | decisión |
 
-C2 puede empezar ya: la fase 0 está resuelta y C1 está hecha. C4 es la compuerta: si ahí el
-matcher no separa verdaderos de falsos en ningún punto de operación, C5 en adelante no se corre —
-el resultado es
-que el matcher necesita trabajo, que es el hallazgo correcto y llega antes que con el plan previo.
+C4 era la compuerta —si el matcher no separaba en ningún punto de operación, no había nada que
+calibrar— y la pasó: separación +1,61 con etiquetas. Queda C5, que ya no decide `match_against`
+ni `use_cross_encoder` sino cuánto se mueve el punto de operación con el tamaño del inventario.

@@ -54,8 +54,9 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | Chunking estructura-consciente | listo |
 | B1 extracción de candidatos | listo |
 | B1b correferencia intra-documento | listo |
-| B2 matching y resolución de entidades | cableado, **sin calibrar** (ver Limitaciones) |
+| B2 matching y resolución de entidades | cableado y calibrado contra CRAFT (ver Calibración) |
 | Conjunto de retención: hold-out, anotador, exportador | listo |
+| Banco de calibración contra corpus publicado | listo (`calibrate`) |
 | B2b puenteo por conocimiento del mundo | **no implementado** |
 | B3 inducción de clases | **no implementado** |
 | B4 axiomatización · B4b enriquecimiento de glosas | **no implementado** |
@@ -124,8 +125,8 @@ flowchart TB
   class corpus,seed,OUT io
 ```
 
-Verde: listo. Ámbar: parcial —`A2` sólo born-digital, `B2` sin calibrar, `B5` con 3 de 7
-filtros—. Rojo: no implementado. **El corte hoy está en B2b:** el corpus ya llega
+Verde: listo. Ámbar: parcial —`A2` sólo born-digital, `B2` calibrado contra un corpus publicado
+pero no contra el par de aplicación, `B5` con 3 de 7 filtros—. Rojo: no implementado. **El corte hoy está en B2b:** el corpus ya llega
 hasta menciones extraídas y correferidas, y la semilla hasta la TBox normalizada y validada,
 pero nada cruza todavía de las menciones huérfanas a la inducción de clases.
 
@@ -163,6 +164,7 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
+  calibration_root: ../../calibration    # pares de calibración; ver la sección 7 de Uso
 ```
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
@@ -418,6 +420,39 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
+### 7. Calibración contra un corpus publicado
+
+El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
+cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por
+construcción** —la clase gold está en la ontología o no está— y por lo tanto la métrica que
+gobierna la compuerta del §12.1 no necesita campaña de anotación.
+
+```bash
+uv run onto-pipeline calibrate craft-cl -m label -m gloss -m label_and_gloss
+uv run onto-pipeline calibrate craft-cl -m label --cross-encoder
+uv run onto-pipeline calibrate craft-cl -m label --holdout 0.2
+```
+
+Los pares viven fuera del repo, en [`../calibration/`](../calibration/README.md), al lado de los
+demás corpus de prueba; `paths.calibration_root` apunta ahí. Cada uno trae su `pair.yml` y una
+nota de fase 0 con procedencia, licencia, formato y decisiones de importación. El primario es
+**CRAFT · CL+extensions**: 97 artículos, 8.723 menciones, 3.418 clases.
+
+Lo que reporta, además del barrido de umbrales:
+
+- **La separación** entre los scores del top-1 correcto y los del top-1 equivocado. Es la
+  pregunta que va *antes* de dónde poner el umbral: si las dos distribuciones se pisan, ningún
+  umbral ayuda y lo que hay que arreglar es el ranking.
+- **Huérfanos genuinos fabricados.** Un corpus anotado contra O no tiene ninguno, así que esa
+  mitad de la compuerta quedaría sin probar. `--holdout` retiene una fracción determinista del
+  inventario: toda mención de una clase retenida es un huérfano genuino de respuesta conocida.
+- **Clases que nunca pueden ser correctas.** CRAFT publica, por conjunto de anotación, las clases
+  que sus anotadores decidieron no usar. Salen del inventario por defecto; `--keep-excluded`
+  mide cuánto error causaban.
+
+El plan completo y los resultados están en
+[`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md).
+
 ## Dónde queda todo
 
 ```
@@ -429,7 +464,13 @@ data/                 gitignoreado; todo es derivado y regenerable
   ontology/           la semilla normalizada y el diff de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
+  calibration/        resultados del barrido, un JSON por par
 lib/                  jars del razonador (gitignoreado)
+
+../calibration/       fuera del repo, al lado de Corpus-08052026 y qualitative_ontology.rdf
+  README.md           índice de pares
+  craft-cl/           pair.yml, NOTA_FASE0.md, ontology/
+  _craft/             el clone esparso de CRAFT; regenerable, ver la nota
 ```
 
 ## Caché, checkpoint y telemetría
@@ -472,23 +513,27 @@ conversaciones que trabajan sobre este repo.
   palabra corriente, ninguna una instanciación real. Con el par corpus/semilla desalineado ese
   85% no es un veredicto sobre el matcher.
 - **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice §6.2.**
-  Medido sobre 10 pares mención/clase inequívocos: 7/10 recall@1 contra etiquetas, 2/10 contra
-  glosas, con dos generaciones independientes de glosas. Una mención es un sintagma corto y una
-  etiqueta también; una glosa es una oración larga, y un encoder simétrico pierde más por esa
-  diferencia de forma de lo que gana en significado. Configurable con `matching.match_against`;
-  revisar cuando el cross-encoder esté tuneado o haya un modelo asimétrico.
+  Ya no es provisional. Medido sobre CRAFT/CL —8.723 menciones gold contra 3.418 clases, 96% con
+  definición escrita por curadores— recall@1: etiqueta 69,8%, etiqueta+glosa 13,3%, glosa 7,9%.
+  Y lo que decide no es el recall sino el signo de la separación entre aciertos y errores:
+  +1,61 con etiquetas, **−0,42 con glosas**, donde los errores puntúan más alto que los
+  aciertos y ningún umbral ayuda. Una mención es un sintagma corto y una etiqueta también; una
+  glosa es una oración, y un encoder simétrico pierde más por esa diferencia de forma de lo que
+  gana en significado. Se revisa con un encoder asimétrico, no con un umbral.
 - **La zona gris se desborda mientras los umbrales no estén calibrados.** Con generación de
   candidatos por embedding, todo par candidato ya está por encima de `grey_zone_lower` por
   construcción, así que sobre las 848 menciones caen 2.155 pares en zona gris contra 480 del
   heurístico anterior. No es una regresión: esos pares antes no se formaban, y se separaban en
   silencio sin que nadie los mirara. Ahora son visibles, y son trabajo para el usuario hasta
   que la calibración mueva el piso a donde corresponda.
-- **Los umbrales 0.92/0.70 del spec no están calibrados.** No son universales: dependen del
-  encoder. Calibrarlos requiere el conjunto de retención anotado (§10.1), y §12.1 marca esto
-  como punto de decisión no-go.
-- **El cross-encoder viene apagado.** Un reranker genérico de IR ordena bien pero aplasta los
-  puntajes, fabricando falsos huérfanos. Recién sirve tuneado con LoRA sobre etiquetas
-  acumuladas (§6.3).
+- **Los umbrales 0.92/0.70 resultaron bien puestos, sobre otro par.** El barrido sobre CRAFT/CL
+  pone el máximo de F1 en 0,774 con el corte en 0,90, así que 0,92 está casi en el óptimo. Dos
+  salvedades: el óptimo de F1 deja la tasa de falsos huérfanos en 26,3%, y el punto de operación
+  depende del tamaño del inventario, que acá son 3.418 clases contra las 34 de la semilla.
+- **El cross-encoder viene apagado, ahora con evidencia.** Re-rankeando el top-5 del bi-encoder
+  sobre CRAFT/CL, el recall@1 cae de 6.090 a 2.220 y la separación se va a **−0,56**: no solo
+  aplasta los puntajes a ~0,1–0,3 —que es el falso huérfano que nombra R1— sino que además
+  ordena peor. Recién sirve tuneado con LoRA sobre etiquetas acumuladas (§6.3).
 - **Tablas sin bordes salen como prosa.** `find_tables` sólo ve tablas con líneas; la
   estrategia por texto devuelve la página entera como tabla. El pipeline reporta el hueco en
   vez de adivinar. La respuesta del spec es rutear esas páginas a MinerU.

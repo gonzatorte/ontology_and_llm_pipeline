@@ -6,6 +6,9 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data              # SQLite stores, markdown, crops, reports
   reasoner_lib: ../lib           # OWL API, ELK, HermiT (scripts/fetch-jars.sh)
+  # Pares de calibración: corpus publicado + su ontología, uno por subdirectorio con su
+  # pair.yml. Es el instrumento, no el caso de aplicación — ver calibration/README.md.
+  calibration_root: ../../calibration
 
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:
@@ -48,8 +51,18 @@ seed:
 
 # ─── Matching and entity resolution ──────────────────────
 matching:
+  # Barrido sobre CRAFT/CL (`onto-pipeline calibrate craft-cl`), 8.723 menciones. El F1 de
+  # tipado tiene su máximo en 0,774 con el corte en 0,90, y 0,92 está prácticamente ahí: los
+  # defaults del spec resultaron bien puestos para este par. Lo que el F1 no dice es que en ese
+  # punto la tasa de falsos huérfanos es 26,3%, contra 4,7% en 0,70 — pero con 2.300 mal
+  # tipados que en 0,90 son 563. Cuál de los dos errores duele más es decisión de diseño (un
+  # falso huérfano induce clases espurias en B3), no algo que el barrido pueda resolver.
+  # Advertencia de lectura: el barrido usa UN corte, el pipeline usa dos. Mide el corte de
+  # huérfano; dónde parte auto de zona gris es la pregunta separada de cuánta revisión humana
+  # se está dispuesto a hacer, y eso no se calibra contra un corpus.
   auto_merge_threshold: 0.92
   grey_zone_lower: 0.70
+  # Nunca medido: los cuatro pares de calibración disponibles son en inglés. Ver deuda 17.
   cross_language_always_grey: true
   # embedding | surface_and_keys. Under `embedding`, candidates are pairs at or above
   # grey_zone_lower plus what the ontology asserts (same surface, same declared key value,
@@ -63,21 +76,44 @@ matching:
   bi_encoder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
   cross_encoder: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
   match_against: label             # label | gloss | label_and_gloss
-                                   # PROVISIONAL. The spec (6.2) matches against the gloss.
-                                   # The default moved on n=10 hand-built pairs, measuring
-                                   # RECALL ONLY: 7/10 recall@1 for labels, 2/10 for glosses,
-                                   # over two gloss generations. It does not measure precision,
-                                   # and labels lose there: "subject" meaning *topic* types as
-                                   # class Subject at 0.992 (auto-merge) by lexical echo, which
-                                   # no threshold can filter. The corpus/seed pair used is also
-                                   # thematically mismatched (see README). Neither option is
-                                   # settled; this needs an annotated corpus to decide.
-  use_cross_encoder: false         # OFF until the cross-encoder is tuned (spec 6.3). The
-                                   # generic IR re-ranker ranked correctly but squashed every
-                                   # score to ~0.01, turning a 0.73 match into a false orphan —
-                                   # the failure R1 names. Same weak evidence base as
-                                   # match_against above.
+                                   # SETTLED, against the spec (6.2), which matches on the
+                                   # gloss. Measured on CRAFT/CL: 8.723 gold mentions against
+                                   # 3.418 classes, 96% of them carrying a real definition —
+                                   # the condition under which the spec's premise should have
+                                   # won. recall@1: label 6.090 (69,8%), label_and_gloss 1.161
+                                   # (13,3%), gloss 686 (7,9%). It is not only recall. The gap
+                                   # between the score of a right top-1 and a wrong one, in
+                                   # pooled standard deviations: label +1,61 — and gloss -0,42,
+                                   # label_and_gloss -0,49. NEGATIVE: with glosses the wrong
+                                   # answers score HIGHER than the right ones, so no threshold
+                                   # helps and a higher one preferentially keeps the errors.
+                                   # A mention is a short noun phrase and so is a label; a
+                                   # gloss is a sentence, and a symmetric encoder loses more on
+                                   # that difference in shape than it gains in meaning.
+                                   # Revisit with an asymmetric encoder, not with a threshold.
+  use_cross_encoder: false         # SETTLED OFF. Same run, re-ranking the bi-encoder's top-5:
+                                   # recall@1 falls from 6.090 to 2.220 and the separation goes
+                                   # to -0,56 (right top-1 median 0,143, wrong 0,325). It both
+                                   # ranks worse and scores the errors higher, and it squashes
+                                   # everything into ~0,1-0,3, which is the R1 failure the spec
+                                   # names: a 0,73 match becomes a false orphan. A generic IR
+                                   # re-ranker is the wrong instrument here; it earns its place
+                                   # only tuned on accumulated accept/reject labels (6.3).
   device: null                     # null lets torch choose; "cuda" or "cpu" to force
+
+# ─── Mapping rules: mention layer -> ABox ────────────────
+# La política global. Las excepciones por caso viven en `review_items`, no acá: §6.4 les da
+# alcance por caso y §6.8 recomputa el ABox entero, así que no pueden vivir dentro del código
+# que recomputa. Ver plan_reglas_de_mapeo.md.
+mapping:
+  individual_from: entity      # entity (componente de fusión) | mention (sólo diagnóstico)
+  type_from: [auto]            # zonas que producen rdf:type. La gris no tipa hasta que la
+                               # contestás: es la política conservadora de §6.2 en el ABox.
+  provenance: named_graph      # named_graph (uno por documento) | flat
+  conflict_policy: notarize    # notarize | force | refute — §6.4. Notarizar es el único que
+                               # no destruye información, y es el default silencioso del spec.
+  duplicate_policy: separate   # separate | merge. Separados y marcados, fuera del conteo de
+                               # soporte funcional (§6.8).
 
 # ─── Iteration ───────────────────────────────────────────
 iteration:

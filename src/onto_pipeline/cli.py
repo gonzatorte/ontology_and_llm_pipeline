@@ -15,6 +15,7 @@ from rich.table import Table
 from . import (
     annotate,
     annotation,
+    calibration,
     coreference,
     cq,
     extraction,
@@ -72,6 +73,20 @@ InferOption = typer.Option(
 CommentOption = typer.Option("", "--comment", help="Why, in your words.")
 IncludeHeldOutOption = typer.Option(
     False, "--include-held-out", help="Also process the retention set. Normally you do not."
+)
+PairOption = typer.Argument(..., help="Calibration pair: a directory under calibration_root.")
+MatchAgainstOption = typer.Option(
+    [], "--match-against", "-m", help="Repeatable: label | gloss | label_and_gloss."
+)
+CrossEncoderSweepOption = typer.Option(
+    False, "--cross-encoder", help="Run each variant with and without the re-ranker."
+)
+HoldoutOption = typer.Option(
+    None, "--holdout", help="Withhold this fraction of classes to manufacture genuine orphans."
+)
+KeepExcludedOption = typer.Option(
+    False, "--keep-excluded",
+    help="Keep classes the corpus guarantees are wrong. Shows how much error they cause.",
 )
 
 
@@ -522,6 +537,168 @@ def match_cmd(
         "[yellow]uncalibrated[/]: the thresholds are the spec's defaults, not measured ones. "
         "See Limitaciones in the README."
     )
+
+
+@app.command("calibrate")
+def calibrate_cmd(
+    pair_name: str = PairOption,
+    config_path: Path = ConfigOption,
+    match_against: list[str] = MatchAgainstOption,
+    cross_encoder: bool = CrossEncoderSweepOption,
+    holdout: float | None = HoldoutOption,
+    keep_excluded: bool = KeepExcludedOption,
+    limit: int | None = LimitOption,
+) -> None:
+    """Sweep the matcher's thresholds against a published annotated corpus (plan, C3–C5).
+
+    This is the instrument, not the case of application. What it measures transfers because it
+    is a property of the method and the encoder — label versus gloss, whether the cross-encoder
+    crushes the scale, where true and false separate. The operating point transfers only in
+    part: an inventory of thousands offers more chances for something spurious to clear a
+    threshold than one of thirty-four.
+    """
+    from .embeddings import CrossEncoderReranker, EncoderUnavailable, SentenceTransformerEncoder
+
+    config = Config.load(config_path)
+    directory = config.paths.calibration_root / pair_name
+    if not directory.is_dir():
+        raise typer.BadParameter(f"no pair at {directory}; see calibration/README.md")
+
+    variants = list(match_against) or [config.matching.match_against]
+    encoders = [False, True] if cross_encoder else [config.matching.use_cross_encoder]
+
+    reports: list[calibration.RunReport] = []
+    for variant in variants:
+        pair = calibration.load_pair(
+            directory, match_against=variant, holdout=holdout,
+            drop_excluded=not keep_excluded,
+        )
+        if limit:
+            pair.documents = pair.documents[:limit]
+        _describe_pair(pair, variant, variants[0] == variant)
+        for use_cross in encoders:
+            try:
+                encoder = SentenceTransformerEncoder(
+                    config.matching.bi_encoder, config.matching.device
+                )
+                reranker = (
+                    CrossEncoderReranker(config.matching.cross_encoder, config.matching.device)
+                    if use_cross else None
+                )
+            except EncoderUnavailable as exc:
+                raise typer.BadParameter(f"{exc}; uv sync --extra matching") from exc
+            # A fresh Matcher per run: the vector cache is keyed by text, and a gloss and a
+            # label are different texts, but sharing it across runs would hide how much of the
+            # cost each variant carries.
+            matcher = matching.Matcher(
+                encoder, reranker,
+                auto_merge_threshold=1.1,   # wide open: the sweep applies the zones itself
+                grey_zone_lower=0.0,
+                cross_language_always_grey=config.matching.cross_language_always_grey,
+                respect_declared_haskey=config.matching.respect_declared_haskey,
+                blocking_strategy=config.matching.blocking_strategy,
+            )
+            label = f"{variant} · {'cross' if use_cross else 'bi'}"
+            with console.status(f"{label}: {len(pair.mentions())} mentions"):
+                ranking = calibration.rank(pair, matcher)
+                runs = calibration.sweep(
+                    pair, ranking, calibration.thresholds(),
+                    match_against=variant, use_cross_encoder=use_cross,
+                )
+            reports.extend(runs)
+            _report_distribution(label, runs[0].distribution)
+
+    _report_sweep(reports)
+    path = config.paths.work_dir / "calibration" / f"{pair_name}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "match_against": run.match_against,
+                    "use_cross_encoder": run.use_cross_encoder,
+                    "threshold": run.threshold,
+                    "correct": len(run.report.correct),
+                    "mistyped": len(run.report.mistyped),
+                    "false_orphans": len(run.report.false_orphans),
+                    "genuine_orphans": len(run.report.genuine_orphans),
+                    "false_orphan_rate": run.report.false_orphan_rate,
+                    "typing_f1": run.report.typing_f1,
+                    "excluded_hits": run.excluded_hits,
+                    "separation": run.distribution.separation,
+                }
+                for run in reports
+            ],
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    console.print(f"[dim]{path}[/]")
+
+
+def _describe_pair(pair: calibration.Pair, variant: str, first: bool) -> None:
+    if not first:
+        return
+    mentions = sum(len(document.mentions) for document in pair.documents)
+    skipped = sum(document.skipped for document in pair.documents)
+    glossed = sum(1 for target in pair.targets if target.gloss)
+    table = Table("pair", pair.name)
+    table.add_row("documents", str(len(pair.documents)))
+    table.add_row("gold mentions", f"{mentions} ({skipped} discontinuous, skipped)")
+    table.add_row("inventory", f"{len(pair.targets)} classes, {glossed} with a definition")
+    if pair.withheld:
+        table.add_row("withheld", f"{len(pair.withheld)} classes — their mentions are orphans")
+    if pair.excluded_classes:
+        fate = "dropped from the inventory" if pair.dropped_excluded else "kept, --keep-excluded"
+        table.add_row("never correct", f"{', '.join(pair.excluded_classes[:5])} — {fate}")
+    console.print(table)
+    if variant in {"gloss", "label_and_gloss"} and glossed < len(pair.targets):
+        console.print(
+            f"[yellow]{len(pair.targets) - glossed} classes have no definition[/]: "
+            f"they fall back to the label, so the comparison is not clean for those."
+        )
+
+
+def _report_distribution(label: str, dist: calibration.Distribution) -> None:
+    """The number that says whether a threshold exists at all, before asking where to put it."""
+    if not dist.correct or not dist.wrong:
+        console.print(f"[dim]{label}: not enough of both classes to compare distributions[/]")
+        return
+    import statistics as _stats
+
+    console.print(
+        f"{label}: correct top-1 median [bold]{_stats.median(dist.correct):.3f}[/] "
+        f"(n={len(dist.correct)}) · wrong top-1 median "
+        f"[bold]{_stats.median(dist.wrong):.3f}[/] (n={len(dist.wrong)}) · "
+        f"separation [bold]{dist.separation:.2f}[/]"
+    )
+
+
+def _report_sweep(reports: list[calibration.RunReport]) -> None:
+    """Every threshold for the best variant, and the best threshold for every variant.
+
+    Printing the full cross-product would be a hundred rows nobody reads. What the decision
+    needs is the shape of one curve and the comparison between variants at their own optimum.
+    """
+    if not reports:
+        return
+    best = max(reports, key=lambda run: run.report.typing_f1)
+    table = Table(*calibration.COLUMNS, title="threshold sweep · best variant")
+    for run in reports:
+        if (run.match_against, run.use_cross_encoder) == (best.match_against,
+                                                          best.use_cross_encoder):
+            table.add_row(*run.row, style="bold" if run is best else None)
+    console.print(table)
+
+    variants = Table(*calibration.COLUMNS, title="each variant at its own best threshold")
+    seen = {}
+    for run in reports:
+        key = (run.match_against, run.use_cross_encoder)
+        if key not in seen or run.report.typing_f1 > seen[key].report.typing_f1:
+            seen[key] = run
+    for run in sorted(seen.values(), key=lambda item: -item.report.typing_f1):
+        variants.add_row(*run.row)
+    console.print(variants)
 
 
 @app.command("annotate")
