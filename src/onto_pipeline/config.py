@@ -58,6 +58,26 @@ class Extraction(BaseModel):
     max_mention_words: int = 8
 
 
+class Bridging(BaseModel):
+    """B2b — world-knowledge bridging (spec 6.2b), between matching and induction."""
+
+    n_candidates: int = 5
+    # A surface whose best class falls below this gets no candidates and is not asked about:
+    # offering five classes none of which is close invites the forced connection the prompt
+    # warns against. Below the matcher's own grey floor on purpose — the point of the stage is
+    # to reach relations the encoder could not see.
+    min_candidate_score: float = 0.45
+
+
+class Induction(BaseModel):
+    # Single-link over the orphan mentions: a concept's phrasings form a chain, so two ends
+    # need only be close to something between them. Uncalibrated, like every other threshold
+    # here — see DEUDA_TECNICA.md.
+    similarity_threshold: float = 0.75
+    min_support: int = 3          # one mention proposing a class is noise (spec 6.6)
+    max_phrases_in_prompt: int = 30
+
+
 class Seed(BaseModel):
     base_iri: str = "https://ontology.local/id/"
     label_divergence_threshold: float = 0.8
@@ -183,6 +203,8 @@ class Config(BaseModel):
     seed: Seed = Seed()
     chunking: Chunking = Chunking()
     extraction: Extraction = Extraction()
+    bridging: Bridging = Bridging()
+    induction: Induction = Induction()
     classification: Classification = Classification()
     boilerplate: Boilerplate = Boilerplate()
     matching: Matching = Matching()

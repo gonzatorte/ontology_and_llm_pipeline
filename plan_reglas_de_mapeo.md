@@ -149,9 +149,15 @@ que ninguno de los dos pudo resolver está en `review_items` esperando, no bloqu
 deliberadamente fuera de la tabla `mentions`; `entities_from` derivando componentes;
 `possible_duplicate_unresolved` marcado; `review_items` como store de excepciones.
 
-**Falta:** el registro de reglas y su serialización canónica; la columna `rules_hash` en
-`versions`; la función de regeneración; el comando `regenerate`; y el disparador tras aplicar
-una rama, que llega con la aplicación y versionado (`apply`) y no antes.
+**Implementado** (`mapping.py`, `versioning.record_rules`, comando `regenerate`): el registro
+de reglas con su serialización canónica y su hash; la columna `rules_hash` en `versions`, con
+migración para stores que la preceden; la función de regeneración, pura y sólo-lectura sobre la
+capa de menciones; y la política global en `mapping:` del config.
+
+**Falta:** las excepciones por caso escritas en `review_items` —hoy `MappingRules.exceptions`
+existe, entra en el hash y nada la puebla, porque las interfaces de decisión no existen—; y el
+disparador tras aplicar una rama, que llega con la aplicación y versionado (`apply`) y no
+antes.
 
 ## Orden
 

@@ -15,12 +15,15 @@ from rich.table import Table
 from . import (
     annotate,
     annotation,
+    bridging,
     calibration,
     coreference,
     cq,
     extraction,
     glosses,
+    induction,
     llm,
+    mapping,
     matching,
     review,
     structural,
@@ -73,6 +76,9 @@ InferOption = typer.Option(
 CommentOption = typer.Option("", "--comment", help="Why, in your words.")
 IncludeHeldOutOption = typer.Option(
     False, "--include-held-out", help="Also process the retention set. Normally you do not."
+)
+ForceRegenOption = typer.Option(
+    False, "--force", help="Write the ABox again even if the rules did not change."
 )
 PairOption = typer.Argument(..., help="Calibration pair: a directory under calibration_root.")
 MatchAgainstOption = typer.Option(
@@ -444,6 +450,222 @@ def coref_cmd(
         for label, error in result.failures.items():
             console.print(f"  [red]{label}[/]: {error}")
     console.print(table)
+
+
+def _orphans(conn, version_id: str) -> list[dict]:
+    return [
+        dict(row)
+        for row in conn.execute(
+            "SELECT m.id, m.surface_text, t.runner_up, t.score FROM mention_typing t "
+            "JOIN mentions m ON m.id = t.mention_id "
+            "WHERE t.version_id = ? AND t.iri IS NULL ORDER BY m.id",
+            (version_id,),
+        )
+    ]
+
+
+def _encoder(config):
+    from .embeddings import EncoderUnavailable, SentenceTransformerEncoder
+
+    try:
+        return SentenceTransformerEncoder(config.matching.bi_encoder, config.matching.device)
+    except EncoderUnavailable as exc:
+        raise typer.BadParameter(f"{exc}; uv sync --extra matching") from exc
+
+
+@app.command("bridge")
+def bridge_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+) -> None:
+    """B2b: relate orphans to seed classes by world knowledge (spec 6.2b).
+
+    Runs between `match` and `induce`, and running it is not optional if `induce` is going to
+    run: every mention the seed did cover but the matcher failed to connect would otherwise
+    become a spurious induced class.
+
+    The model is never asked for OWL. It gets a phrase and a short list of candidate classes,
+    and answers one atomic question — an example of it, a kind of it, or neither. A class it was
+    not offered is a rejected answer, not a bridge.
+    """
+    from .matching import Matcher
+
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    orphans = _orphans(conn, version_id)
+    if not orphans:
+        raise typer.BadParameter(f"no orphan mentions against {version_id}; run match first")
+
+    targets = typing_store.targets_from(graph, config.matching.match_against)
+    if not targets:
+        raise typer.BadParameter(f"{version_id} has no classes to bridge to")
+
+    matcher = Matcher(_encoder(config))
+    surfaces = [row["surface_text"] for row in orphans]
+    items = bridging.candidates(
+        orphans, targets,
+        matcher.vectors_for(surfaces),
+        matcher.vectors_for([target.text for target in targets]),
+        n_candidates=config.bridging.n_candidates,
+        min_score=config.bridging.min_candidate_score,
+    )
+    if not items:
+        console.print(
+            f"[yellow]{len(orphans)} orphans, none with a class above "
+            f"{config.bridging.min_candidate_score}[/]; nothing to ask about"
+        )
+        return
+
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, bridging.STAGE)
+    with console.status(f"B2b · {len(items)} phrases from {len(orphans)} orphan mentions"):
+        result = llm.run(
+            Ledger(conn, config.execution), model, bridging.PROMPT, stage,
+            [(item.id, bridging.payload(item)) for item in items],
+            bridging.parse,
+        )
+
+    bridges, declined = [], 0
+    for item in items:
+        answer = result.outputs.get(item.id)
+        if not answer:
+            continue
+        bridge = bridging.bridges_from(item, answer)
+        if bridge is None:
+            declined += 1
+            continue
+        bridges.append(bridge)
+    bridging.persist(conn, version_id, bridges)
+
+    labels = {target.iri: target.label for target in targets}
+    table = Table("phrase", "relation", "seed class", "mentions", "score")
+    for bridge in sorted(bridges, key=lambda item: -len(item.mention_ids))[:15]:
+        table.add_row(
+            bridge.surface[:34], bridge.relation,
+            labels.get(bridge.target_iri, bridge.target_iri)[:26],
+            str(len(bridge.mention_ids)), f"{bridge.score:.2f}",
+        )
+    console.print(table)
+    covered = sum(len(bridge.mention_ids) for bridge in bridges)
+    console.print(
+        f"[green]{len(bridges)} bridges[/] covering {covered} of {len(orphans)} orphan "
+        f"mentions · {declined} phrases the model declined to connect\n"
+        f"marked [bold]{bridging.WORLD_KNOWLEDGE}[/]: no citation is possible, so the evidence "
+        f"filter does not apply to them (6.2b)\n"
+        f"{result.executed} executed, {result.cached} cached, {len(result.failures)} failed · "
+        f"{result.in_tokens} in / {result.out_tokens} out tokens"
+    )
+    for identifier, error in list(result.failures.items())[:5]:
+        console.print(f"  [red]{identifier}[/]: {error}")
+
+
+@app.command("induce")
+def induce_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+) -> None:
+    """B3: turn orphan mentions into proposed classes (spec 6.1, 6.6).
+
+    The code clusters, the model names. Nothing is applied: a proposal records the nearest
+    existing class as a *candidate* parent for B4 to rule on, not as an asserted subsumption.
+    """
+    from .matching import Matcher
+
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    orphans = _orphans(conn, version_id)
+    if not orphans:
+        raise typer.BadParameter(
+            f"no orphan mentions against {version_id}; run match first"
+        )
+
+    # A mention a bridge already accounts for is not an orphan any more: the seed does cover it,
+    # world knowledge said so, and inducing a class for it would be the spurious class 12.1
+    # exists to prevent.
+    bridged = bridging.bridged_mentions(conn, version_id)
+    if bridged:
+        orphans = [row for row in orphans if row["id"] not in bridged]
+        console.print(f"[dim]{len(bridged)} mentions covered by a bridge; skipped[/]")
+        if not orphans:
+            console.print("[yellow]every orphan was bridged[/]; nothing left to induce")
+            return
+    else:
+        console.print(
+            "[yellow]no bridges recorded[/] for this version. Run `bridge` first, or every "
+            "mention the matcher missed becomes a proposed class (6.2b)."
+        )
+
+    matcher = Matcher(_encoder(config))
+    surfaces = [row["surface_text"] for row in orphans]
+    clusters = induction.cluster(
+        [row["id"] for row in orphans], surfaces, matcher.vectors_for(surfaces),
+        threshold=config.induction.similarity_threshold,
+        min_support=config.induction.min_support,
+    )
+    if not clusters:
+        console.print(
+            f"[yellow]{len(orphans)} orphans, no cluster reached "
+            f"min_support={config.induction.min_support}[/]"
+        )
+        return
+
+    labels = {
+        target.iri: target for target in typing_store.targets_from(graph, "label")
+    }
+    runner_up = {row["id"]: row["runner_up"] for row in orphans}
+    for item in clusters:
+        nearest = labels.get(runner_up.get(item.mention_ids[0]) or "")
+        if nearest is not None:
+            item.nearest_iri, item.nearest_label = nearest.iri, nearest.label
+            item.nearest_gloss = nearest.gloss or ""
+
+    model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
+    stage = llm.settings(config.llm, induction.STAGE)
+    with console.status(f"B3 · naming {len(clusters)} clusters from {len(orphans)} orphans"):
+        result = llm.run(
+            Ledger(conn, config.execution), model, induction.PROMPT, stage,
+            [(item.id, induction.payload(
+                item, max_phrases=config.induction.max_phrases_in_prompt)) for item in clusters],
+            induction.parse,
+        )
+
+    proposals, declined = [], 0
+    for item in clusters:
+        answer = result.outputs.get(item.id)
+        if not answer:
+            continue
+        if not answer.get("is_a_class"):
+            declined += 1
+            continue
+        proposals.append(
+            induction.Proposal(
+                cluster_id=item.id, label=answer["label"], gloss=answer.get("gloss", ""),
+                criterion=answer["criterion"], support=item.support,
+                mention_ids=item.mention_ids, nearest_iri=item.nearest_iri,
+                nearest_score=item.nearest_score,
+            )
+        )
+    induction.persist(conn, version_id, proposals)
+
+    table = Table("proposed class", "support", "criterion", "nearest existing")
+    for proposal in sorted(proposals, key=lambda p: -p.support)[:20]:
+        table.add_row(
+            proposal.label[:28], str(proposal.support), proposal.criterion[:44],
+            (labels[proposal.nearest_iri].label if proposal.nearest_iri in labels else "-"),
+        )
+    console.print(table)
+    console.print(
+        f"{len(orphans)} orphans -> {len(clusters)} clusters -> [green]{len(proposals)}[/] "
+        f"proposed classes, {declined} groups the model declined to name · "
+        f"{len(result.failures)} failed · {result.in_tokens}/{result.out_tokens} tokens"
+    )
+    console.print("[dim]nothing applied; B4 decides the axioms[/]")
 
 
 @app.command("match")
@@ -1031,6 +1253,55 @@ def diff_cmd(
 
     _show_diff(baseline, target, result, limit, versioning.label_index(before, after))
     console.print(f"[green]wrote[/] {_write_diff(config, baseline, target, result)}")
+
+
+@app.command("regenerate")
+def regenerate_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    force: bool = ForceRegenOption,
+) -> None:
+    """Recompute the ABox from the mention layer (plan_reglas_de_mapeo.md).
+
+    Not a migration: the ABox derives from the mentions and from one ontology version, so a
+    reorganization of the TBox never needs one — the rules change and this runs again. Pure and
+    read-only over the mention layer, which is the invariant of section 3 and the one this
+    stage could break by accident.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    rules = mapping.rules_from_config(config.mapping, config.seed.base_iri)
+
+    rows, typings = mapping.load_inputs(conn, version_id)
+    if not rows:
+        raise typer.BadParameter("no mentions; run extract first")
+
+    changed = versioning.record_rules(conn, version_id, rules.rules_hash())
+    if not changed and not force:
+        console.print(
+            f"[yellow]{version_id} already regenerated[/] under {rules.rules_hash()[:19]}; "
+            "nothing to do. --force writes it again."
+        )
+        return
+
+    result = mapping.regenerate(rows, typings, rules)
+    target = config.paths.work_dir / "ontology" / f"{version_id}.abox.trig"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(result.dataset.serialize(format="trig"), encoding="utf-8")
+
+    table = Table("what", "count", "note")
+    table.add_row("individuals", str(result.n_individuals), f"from {len(rows)} mentions")
+    table.add_row("typed", str(result.n_typed), f"zones {', '.join(rules.type_from)}")
+    table.add_row("untyped", str(result.n_untyped), "orphans, or typed in a rejected zone")
+    table.add_row("possible duplicates", str(result.n_unresolved),
+                  "out of the functional-property support count")
+    table.add_row("quads", str(result.n_triples), rules.provenance)
+    console.print(table)
+    console.print(
+        f"version [bold]{version_id}[/] · rules {result.rules_hash[:19]}\n"
+        f"[green]wrote[/] {target}"
+    )
 
 
 @app.command()

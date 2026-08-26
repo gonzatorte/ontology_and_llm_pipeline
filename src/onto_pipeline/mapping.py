@@ -39,6 +39,7 @@ from typing import Any
 from rdflib import Dataset, Graph, Literal, URIRef
 from rdflib.namespace import OWL, PROV, RDF, RDFS, XSD
 
+from . import typing_store
 from .typing_store import POSSIBLE_DUPLICATE
 
 AUTO = "auto"
@@ -255,7 +256,13 @@ def regenerate(
 def load_inputs(
     conn: sqlite3.Connection, version_id: str
 ) -> tuple[list[MentionRow], dict[str, tuple[str | None, str]]]:
-    """Read-only, by contract: regeneration never writes to the mention layer."""
+    """Read-only over the mention layer, by contract: regeneration never writes to it.
+
+    Installing the typing schema is not an exception to that — it creates the table if the
+    store predates it, so that a version with no typings reads as "no mention is typed" rather
+    than raising.
+    """
+    typing_store.install(conn)
     rows = [
         MentionRow(
             id=row["id"], document_id=row["document_id"], page=row["page"],

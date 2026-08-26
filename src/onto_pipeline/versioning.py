@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS versions (
   turtle       TEXT NOT NULL,
   note         TEXT,
   created_at   TEXT,
+  rules_hash   TEXT,             -- which mapping rules produced this version's ABox
   FOREIGN KEY (parent_id) REFERENCES versions(id)
 );
 CREATE INDEX IF NOT EXISTS idx_versions_hash ON versions(state_hash);
@@ -78,6 +79,13 @@ def _now() -> str:
 
 def install(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so a column added after the
+    # fact needs this. `rules_hash` records which mapping rules produced a version's ABox:
+    # without it the same TBox under different rules gives different ABoxes and nothing says
+    # so (plan_reglas_de_mapeo.md).
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
+    if "rules_hash" not in columns:
+        conn.execute("ALTER TABLE versions ADD COLUMN rules_hash TEXT")
     conn.commit()
 
 
@@ -214,6 +222,28 @@ def load(conn: sqlite3.Connection, version_id: str) -> tuple[Version, Graph]:
         iteration=row["iteration"], branch_id=row["branch_id"], note=row["note"] or "",
     )
     return version, Graph().parse(data=row["turtle"], format="turtle")
+
+
+def record_rules(conn: sqlite3.Connection, version_id: str, rules_hash: str) -> bool:
+    """Stamp a version with the mapping rules its ABox was regenerated under.
+
+    Returns whether this changed anything: a version already stamped with the same hash has
+    nothing to regenerate, and that is the check that makes regeneration idempotent rather
+    than merely deterministic.
+    """
+    install(conn)
+    row = conn.execute(
+        "SELECT rules_hash FROM versions WHERE id = ?", (version_id,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"no version {version_id!r}")
+    if row["rules_hash"] == rules_hash:
+        return False
+    conn.execute(
+        "UPDATE versions SET rules_hash = ? WHERE id = ?", (rules_hash, version_id)
+    )
+    conn.commit()
+    return True
 
 
 def find_by_hash(conn: sqlite3.Connection, hash_value: str) -> Version | None:

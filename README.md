@@ -57,14 +57,14 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B2 matching y resolución de entidades | cableado y calibrado contra CRAFT (ver Calibración) |
 | Conjunto de retención: hold-out, anotador, exportador | listo |
 | Banco de calibración contra corpus publicado | listo (`calibrate`) |
-| B2b puenteo por conocimiento del mundo | **no implementado** |
-| B3 inducción de clases | **no implementado** |
+| B2b puenteo por conocimiento del mundo | listo (`bridge`) |
+| B3 inducción de clases | listo (`induce`) |
 | B4 axiomatización · B4b enriquecimiento de glosas | **no implementado** |
 | B5 filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
 | B5 filtros 3–6 (SHACL, OntoClean, OOPS!, evidencia) | **no implementado** |
 | B6 construcción de ramas | **no implementado** |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
-| Regeneración del ABox | **no implementado** (depende de B1–B2) |
+| Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
 
 ```mermaid
@@ -119,16 +119,17 @@ flowchart TB
   classDef todo fill:#fbdcdc,stroke:#c53030,color:#4d1414
   classDef io fill:#e6e8eb,stroke:#6b7280,color:#1f2937
 
-  class A1,CHK,A0,A4,B1,B1b,B78,CQE,HOLD ok
+  class A1,CHK,A0,A4,B1,B1b,B2b,B3,B78,CQE,HOLD,ABOX ok
   class A2,B2,B5 partial
-  class A3,B2b,B3,B4,B6,ABOX todo
+  class A3,B4,B6 todo
   class corpus,seed,OUT io
 ```
 
 Verde: listo. Ámbar: parcial —`A2` sólo born-digital, `B2` calibrado contra un corpus publicado
-pero no contra el par de aplicación, `B5` con 3 de 7 filtros—. Rojo: no implementado. **El corte hoy está en B2b:** el corpus ya llega
-hasta menciones extraídas y correferidas, y la semilla hasta la TBox normalizada y validada,
-pero nada cruza todavía de las menciones huérfanas a la inducción de clases.
+pero no contra el par de aplicación, `B5` con 3 de 7 filtros—. Rojo: no implementado. **El
+corte hoy está en B4:** el corpus llega hasta clases propuestas —extraídas, correferidas,
+tipadas, puenteadas e inducidas— y la semilla hasta la TBox normalizada y validada, pero nada
+convierte todavía una propuesta en axiomas.
 
 **No hay sesión interactiva.** Hoy esto es un CLI de comandos discretos. El spec tiene varios
 puntos donde el usuario decide —elegir rama (§6.6), zona gris del matcher (§6.2), pregunta por
@@ -164,7 +165,7 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
-  calibration_root: ../../calibration    # pares de calibración; ver la sección 7 de Uso
+  calibration_root: ../../calibration    # pares de calibración; ver la sección 9 de Uso
 ```
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
@@ -304,7 +305,38 @@ pendiente.
 
 Sin proveedor configurado saltea A0.4 y te dice cuántas glosas quedaron pendientes.
 
-### 3. Validación (A0.0 + B5)
+### 3. Iteración sobre el corpus (B1 → B3)
+
+```bash
+uv run onto-pipeline --env-file opencode.env extract    # menciones por chunk
+uv run onto-pipeline --env-file opencode.env coref      # agrupar las del mismo individuo
+uv run onto-pipeline match                              # tipar contra la semilla
+uv run onto-pipeline --env-file opencode.env bridge     # puentear huérfanas (§6.2b)
+uv run onto-pipeline --env-file opencode.env induce     # las que quedan, a clases nuevas
+```
+
+**`bridge` no es opcional si vas a correr `induce`.** Antes de dar por huérfana una mención,
+pregunta si se relaciona con una clase que la semilla ya tiene *aunque ningún documento lo
+diga*: el corpus escribe "focus group" y la semilla tiene `Technique`. Sin esa etapa, cada
+mención que la semilla sí cubría pero el matcher no conectó se vuelve una clase inducida
+espuria — el falso huérfano alimentando al inductor, que es justo lo que la compuerta no-go de
+§12.1 quiere evitar. `induce` avisa si no encuentra puentes para esa versión.
+
+Al modelo **nunca se le pide OWL**: recibe un sintagma y una lista corta de clases candidatas, y
+responde un juicio atómico —ejemplo de, tipo de, o ninguna—. Una clase que no estaba en la lista
+es respuesta rechazada, no puente; se verifica mecánicamente, igual que `coref` verifica que
+todo id agrupado exista.
+
+Los puentes quedan marcados `world_knowledge`, y esa marca tiene consecuencia: **el filtro de
+evidencia de B5 no se les aplica**. Sin la distinción, "todo axioma sin cita se descarta"
+mataría exactamente los puentes que hacen útil a la semilla. Pasan igual por el razonador y por
+OntoClean, y te llegan marcados como lo que son.
+
+Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403 preguntas que
+cubren el 70% de las huérfanas; bajarlo a 0,30 son 582 preguntas y el 98%. El umbral no está
+calibrado, como todos los demás.
+
+### 4. Validación (A0.0 + B5)
 
 ```bash
 uv run onto-pipeline validate                    # última versión
@@ -317,7 +349,7 @@ Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 encontró nada, pero puede haber ignorado el axioma culpable), nunca `OK`. Si la cobertura EL
 cae por debajo del umbral, devuelve `SKIPPED`.
 
-### 4. Competency questions
+### 5. Competency questions
 
 ```bash
 uv run onto-pipeline cq import examples/competency_questions.json
@@ -328,7 +360,34 @@ Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además
 `eval` corre todo contra una versión del DAG y registra la tasa de aprobación, que es el
 criterio de parada primario.
 
-### 5. Inspección
+### 6. Regeneración del ABox
+
+```bash
+uv run onto-pipeline regenerate                  # última versión
+uv run onto-pipeline regenerate --version v3
+uv run onto-pipeline regenerate --force          # reescribir aunque las reglas no cambien
+```
+
+Recomputa el ABox desde la capa de menciones y los tipados de una versión de ontología, y lo
+escribe en `data/ontology/<version>.abox.trig`. **No es una migración**: como el ABox se deriva
+de las menciones y no de fuentes externas, reorganizar la TBox nunca necesita una — cambian las
+reglas y esto se corre de nuevo.
+
+La función es pura y **sólo lee** la capa de menciones, que es el invariante de §3 y lo único
+que esta etapa podría romper por descuido. Las reglas de mapeo salen de `mapping:` en el config;
+el contrato completo está en [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md). Dos cosas que
+conviene saber al leer la salida:
+
+- **El IRI de un individuo se acuña desde su mención ancla**, no desde el grupo entero. Sumar
+  menciones a una entidad —lo que pasa en cada iteración— conserva su IRI; sólo partir el grupo
+  genera uno nuevo, que es cuando corresponde.
+- **La zona gris no tipa.** Con `type_from: [auto]`, una mención que quedó en zona gris produce
+  un individuo con procedencia y sin clase. Existe, y lo que falta es la decisión, no el dato.
+
+La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
+con las mismas reglas no hace nada y lo dice.
+
+### 7. Inspección
 
 ```bash
 uv run onto-pipeline report                 # T1: HTML por documento
@@ -356,7 +415,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 6. Conjunto de retención
+### 8. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -420,7 +479,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 7. Calibración contra un corpus publicado
+### 9. Calibración contra un corpus publicado
 
 El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
 cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por
@@ -461,7 +520,7 @@ data/                 gitignoreado; todo es derivado y regenerable
   markdown/           un .md por documento; los spans de los bloques indexan esto
   assets/             recortes de figuras
   reports/            HTML de evaluación del parser (T1)
-  ontology/           la semilla normalizada y el diff de cada versión
+  ontology/           la semilla normalizada, el diff y el ABox de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
   calibration/        resultados del barrido, un JSON por par

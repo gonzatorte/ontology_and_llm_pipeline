@@ -39,6 +39,23 @@ boilerplate:
 extraction:
   max_mention_words: 8   # a mention is a noun phrase; a clause is an extraction error
 
+# Puenteo por conocimiento del mundo (§6.2b), entre el tipado y la inducción. Sin esta etapa,
+# cada mención que la semilla sí cubría pero el matcher no conectó se convierte en una clase
+# inducida espuria: el falso huérfano alimentando al inductor.
+bridging:
+  n_candidates: 5              # clases ofrecidas al modelo por cada forma superficial
+  min_candidate_score: 0.45    # por debajo, no se pregunta: ofrecer cinco clases ninguna
+                               # cercana invita a la conexión forzada. Deliberadamente más bajo
+                               # que grey_zone_lower — la etapa existe para alcanzar relaciones
+                               # que el encoder no ve. Medido sobre las 686 huérfanas de v2:
+                               # 0,30 → 582 preguntas (98% de las huérfanas), 0,45 → 403 (70%),
+                               # 0,60 → 183 (33%). Sin calibrar, como todo umbral acá.
+
+induction:
+  similarity_threshold: 0.75   # single-link sobre las menciones huérfanas
+  min_support: 3               # una mención proponiendo una clase es ruido (§6.6)
+  max_phrases_in_prompt: 30
+
 chunking:
   target_chars: 3000     # a chunk is B1's unit of extraction
   max_chars: 6000        # a table is atomic and may exceed this
