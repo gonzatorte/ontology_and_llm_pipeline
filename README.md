@@ -63,7 +63,10 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B4 axiomatización | listo (`axiomatize`) |
 | B4b enriquecimiento de glosas | listo (`enrich`, `circular`) |
 | B5 filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
-| B5 filtros 3–6 (SHACL, OntoClean, OOPS!, evidencia) | **no implementado** |
+| B5 filtro 3 (SHACL) | listo (`--extra validation`); las shapes se escriben a mano |
+| B5 filtro 4 (OntoClean) | **no implementado** — necesita metapropiedades etiquetadas |
+| B5 filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
+| B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
@@ -486,6 +489,38 @@ segunda es conocimiento. Marcar algo falso **no** escribe una aserción negativa
 uv run onto-pipeline validate                    # última versión
 uv run onto-pipeline validate --version v0
 ```
+
+La cadena está apilada y **sólo lo que la sobrevive llega a formar ramas**. El usuario nunca ve
+un axioma individual (D5): ve ramas, y la cadena decide qué entra en ellas.
+
+| # | Filtro | Tipo | Estado |
+|---|---|---|---|
+| 1 | ELK | rechazo duro, incompleto | listo |
+| 2 | HermiT: consistencia y satisfacibilidad | rechazo duro, con justificaciones | listo |
+| 3 | SHACL sobre el ABox | rechazo | listo, si hay `shapes.ttl` |
+| 4 | OntoClean | rechazo duro | **falta** |
+| 5 | Pitfalls de modelado | **advertencia, nunca rechazo** | listo (subconjunto local) |
+| 6 | Evidencia textual | rechazo, **sólo procedencia `textual`** | listo |
+| 7 | Métricas estructurales | rechazo | listo |
+
+Tres cosas de la cadena que no son obvias:
+
+- **El filtro 6 se aplica a una procedencia y no a la otra.** La regla "todo axioma sin cita se
+  descarta" borraría justamente los puentes que hacen útil a la semilla: un axioma
+  `world_knowledge` no tiene cita por construcción (§6.2b), y eso es para lo que existe.
+  Aplicárselo no es una política más estricta, es otra y equivocada.
+- **El filtro 5 nunca rechaza.** Un pitfall es un olor —una clase sin definición, una propiedad
+  sin dominio, un ciclo en la jerarquía— y algunos son deliberados. Lo que hay implementado es
+  un **subconjunto local del catálogo OOPS!**, no OOPS!: el scanner real es un servicio web, y
+  mandarle la ontología de alguien a un tercero es una decisión de su dueño, no un paso que un
+  pipeline dé por su cuenta. Qué pitfalls quedan afuera está en la deuda técnica.
+- **Las shapes de SHACL se escriben a mano**, en `data/shapes.ttl`. No se derivan de la TBox: OWL
+  dice qué tiene que ser verdad y SHACL qué tiene que estar dicho, y bajo mundo abierto son
+  afirmaciones distintas. Generar una desde la otra convertiría cada silencio en una violación,
+  que es exactamente la lectura de mundo cerrado que este proyecto no está haciendo. Sin shapes
+  el filtro reporta que **no corrió**, que no es lo mismo que pasar.
+
+Instalación del filtro 3: `uv sync --extra validation`.
 
 Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 

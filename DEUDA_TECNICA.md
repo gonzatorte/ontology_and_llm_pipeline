@@ -263,6 +263,29 @@ declara. El comando dice cuál de los dos tests usó, precisamente para no repor
 instrumento como la ausencia del hallazgo.
 
 
+### 8e. La cadena B5 tiene seis de siete filtros, y el que falta es el caro
+
+**Falta OntoClean (filtro 4)**, que el spec marca como rechazo duro. No es difícil de aplicar
+—las cuatro restricciones sobre rigidez, identidad, unidad y dependencia son mecánicas— sino de
+alimentar: requiere que cada clase tenga esas metapropiedades etiquetadas. Con ontología
+superior se heredan; sin ella las etiqueta el LLM, que el propio spec reconoce como "factible,
+menos confiable, y trabajo adicional que contradice parcialmente D5". Es una etapa nueva con su
+prompt, su verificación y su costo, no un chequeo más.
+
+**El filtro 5 no es OOPS!, es un subconjunto local.** Están implementados P06 (ciclos en la
+jerarquía), P08 (clase sin etiqueta o sin definición), P11 (propiedad sin dominio o sin rango),
+P19 (varios dominios, que OWL lee como intersección) y P24 (definición recursiva). Quedan afuera
+los que necesitan juicio semántico —P02 sinónimos como clases, P03 subclase donde iba instancia,
+P07 conceptos distintos en una clase, P13 inversas no declaradas, P30 equivalentes no
+declaradas— y ésos son buena parte del valor del catálogo real. El scanner de verdad es un
+servicio web: correrlo significa mandarle la ontología del usuario a un tercero, y esa es una
+decisión suya, no un default. Si alguna vez se agrega, va detrás de un flag explícito.
+
+**Las shapes de SHACL no existen todavía.** El filtro corre pero no hay ninguna escrita, así que
+hoy siempre reporta SKIPPED en el caso de aplicación. Escribir el primer juego —procedencia
+obligatoria, cardinalidad de las etiquetas, individuos sin tipo— es trabajo pendiente y barato.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.

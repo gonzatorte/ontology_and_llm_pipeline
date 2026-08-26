@@ -8,7 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import typer
-from rdflib import Graph
+from rdflib import Dataset, Graph
 from rich.console import Console
 from rich.table import Table
 
@@ -32,6 +32,7 @@ from . import (
     review,
     structural,
     typing_store,
+    validation,
     versioning,
 )
 from .chunking import chunk_document
@@ -658,6 +659,10 @@ def axiomatize_cmd(
         proposals, judgements, base_iri=config.seed.base_iri,
         label_to_iri=label_to_iri, support=support,
     )
+    # B5 filter 6, before anything is stored: a `textual` axiom must cite the mentions it came
+    # from. Applied to `world_knowledge` it would delete exactly the bridges that make the seed
+    # useful, so it is not applied to them (6.2b).
+    assembly.axioms, uncited = validation.evidence(assembly.axioms)
     axiomatization.persist(conn, version_id, assembly.axioms)
 
     tally: dict[str, int] = {}
@@ -669,6 +674,7 @@ def axiomatize_cmd(
         table.add_row(f"  {relation}", str(count))
     table.add_row("classes to mint", str(len(assembly.minted)))
     table.add_row("axioms assembled", str(len(assembly.axioms)))
+    table.add_row("  dropped for lack of evidence", str(len(uncited)))
     table.add_row("proposals refused", str(len(assembly.rejected)))
     console.print(table)
     for proposal_id, why in list(assembly.rejected.items())[:5]:
@@ -697,6 +703,8 @@ def axiomatize_cmd(
     verdict.add_row("ELK", elk.verdict, elk.note[:52])
     verdict.add_row("HermiT", "consistent" if hermit.consistent else REJECTED,
                     f"{len(hermit.unsatisfiable)} unsatisfiable")
+    smells = validation.pitfalls(candidate_graph)
+    verdict.add_row("pitfalls", smells.decision, smells.note[:52])
     verdict.add_row("structural", REJECTED if metrics.rejected else "clean",
                     f"depth {metrics.depth} · {len(metrics.findings)} finding(s)")
     console.print(verdict)
@@ -1294,11 +1302,13 @@ def _commit_axioms(
     elk = reasoners.elk(ontology, coverage_threshold=config.reasoner.elk_coverage_threshold)
     hermit = reasoners.hermit(ontology)
     metrics = structural.check(candidate)
+    smells = validation.pitfalls(candidate)
 
     verdict = Table("filter", "result", "detail")
     verdict.add_row("ELK", elk.verdict, elk.note[:52])
     verdict.add_row("HermiT", "consistent" if hermit.consistent else REJECTED,
                     f"{len(hermit.unsatisfiable)} unsatisfiable")
+    verdict.add_row("pitfalls", smells.decision, smells.note[:52])
     verdict.add_row("structural", REJECTED if metrics.rejected else "clean",
                     f"depth {metrics.depth} · {len(metrics.findings)} finding(s)")
     console.print(verdict)
@@ -1904,6 +1914,9 @@ def validate(
         f"{len(hermit.unsatisfiable)} unsatisfiable class(es)",
     )
 
+    for verdict in _shape_and_smell(config, conn, version_id, graph):
+        table.add_row(verdict.name, verdict.decision, verdict.note[:52])
+
     metrics = structural.check(graph)
     table.add_row(
         "structural",
@@ -1912,6 +1925,10 @@ def validate(
         f"{metrics.n_classes} classes · {len(metrics.findings)} finding(s)",
     )
     console.print(table)
+    for verdict in _shape_and_smell(config, conn, version_id, graph):
+        for finding in verdict.findings[:12]:
+            colour = "red" if verdict.rejected else "yellow"
+            console.print(f"[{colour}]{verdict.name}[/] {finding}")
     for finding in metrics.findings:
         console.print(f"[yellow]{finding.check}[/] {finding.subject} — {finding.detail}")
     for iri, justifications in hermit.justifications.items():
@@ -1920,6 +1937,41 @@ def validate(
             console.print(f"  justification {index}:")
             for axiom in axioms:
                 console.print(f"    {axiom}")
+
+
+def _shape_and_smell(config, conn, version_id, graph) -> list[validation.Verdict]:
+    """B5 filters 3 and 5. Neither needs a model and only the first can reject.
+
+    SHACL runs over the ABox, not the TBox: shape constraints are about the instance data.
+    With no shapes written it reports that it did not run, which is not the same as passing.
+    """
+    verdicts = []
+    shapes_path = config.paths.work_dir / "shapes.ttl"
+    shapes_graph = validation.load_shapes(shapes_path)
+    if shapes_graph is None:
+        verdicts.append(validation.Verdict(
+            "SHACL", validation.SKIPPED, f"no shapes at {shapes_path.name}; nothing to check"
+        ))
+    else:
+        abox = config.paths.work_dir / "ontology" / f"{version_id}.abox.trig"
+        if not abox.exists():
+            verdicts.append(validation.Verdict(
+                "SHACL", validation.SKIPPED, "no ABox for this version; run regenerate"
+            ))
+        else:
+            # Into a Dataset and then flattened: the ABox keeps its provenance in named
+            # graphs, and parsing TriG straight into a Graph silently keeps only the default
+            # one — every shape would then find no targets and conform over nothing.
+            dataset = Dataset()
+            dataset.parse(str(abox), format="trig")
+            data = mapping.flatten(dataset)
+            try:
+                verdicts.append(validation.shapes(data, shapes_graph))
+            except validation.ShapesUnavailable as exc:
+                verdicts.append(validation.Verdict("SHACL", validation.SKIPPED, str(exc)[:60]))
+
+    verdicts.append(validation.pitfalls(graph))
+    return verdicts
 
 
 _IRI_TOKEN = re.compile(r"<([^>]+)>|(?<![\S])(https?://\S+)")

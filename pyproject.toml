@@ -24,6 +24,12 @@ reasoning = [
 matching = [
     "sentence-transformers>=6.0.1",
 ]
+# B5 filter 3. Optional because the filter reports SKIPPED without shapes anyway, and shapes
+# are written by hand: OWL says what must be true, SHACL what must be stated, and under the
+# open-world assumption generating one from the other turns every silence into a violation.
+validation = [
+    "pyshacl>=0.26.0",
+]
 
 [project.scripts]
 onto-pipeline = "onto_pipeline.cli:app"
