@@ -491,9 +491,9 @@ valor no implementado en vez de aceptarlo. Ese es el patrón para las que quedan
 
 ### 16. Multi-rama: las preguntas que el spec deja abiertas
 
-Que B6 no esté implementado lo dice el README. Lo que va acá es distinto: el diseño multi-rama
-tiene preguntas que **el spec mismo declara sin resolver**, y quien lo implemente necesita
-encontrarlas antes de empezar, no descubrirlas a mitad de camino.
+B6 ya está implementado (`branch`). Lo que va acá es distinto: el diseño multi-rama tiene
+preguntas que **el spec mismo declara sin resolver**, y siguen sin resolverse — implementar la
+etapa no las contesta, sólo las vuelve alcanzables.
 
 - **Expiración de rechazos (§6.7, riesgo R2).** Con semilla reorganizable un rechazo no es
   permanente: lo rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura
@@ -512,7 +512,8 @@ encontrarlas antes de empezar, no descubrirlas a mitad de camino.
   implementarlo sabiéndolo.
 - **Techo de 3–5 ramas (§6.6).** Es un número puesto a dedo contra una explosión de 2^k. El
   mecanismo real que lo evita es presentar los ejes independientes por separado y armar ramas
-  completas sólo cuando están acoplados; el techo es la red, no la solución.
+  completas sólo cuando están acoplados; el techo es la red, no la solución. **Implementado
+  así**: `couple()` agrupa por axiomas compartidos y `max_branches` es sólo el corte final.
 - **El umbral de `nearest_state`.** Lo que menciona el punto 15 como cable faltante tiene además
   un parámetro sin calibrar: cuánta distancia de Jaccard cuenta como "casi el mismo estado". No
   hay forma de fijarlo sin iteraciones reales, igual que la expiración de rechazos.
@@ -589,3 +590,40 @@ Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
 
 Lo que **no** arregla nada es tocar el esquema de IRIs. La identidad no es el problema; la
 desambiguación sí.
+
+### 20. El historial de feedback (§6.7) está a medias, y en dos lugares
+
+`branch --choose` graba qué rama se eligió y marca rechazadas a sus hermanas, que es la mitad que
+importa —lo aceptado ya está en la ontología, lo rechazado no está en ningún otro lado—. Lo que
+falta es todo lo que el spec quiere hacer **con** ese registro.
+
+**El esquema D9 existe y nadie lo escribe.** La tabla `decisions` está en `db.py` con exactamente
+los campos que pide §6.7 —`status`, `axis`, `comment`, `normalized_axioms`, `ontology_state`— y
+**cero filas**: `branching` guarda su propia versión más pobre en `branches.status` y
+`branches.note`. Son dos lugares para lo mismo, y el que se usa es el que menos guarda:
+
+- `status` en `branches` es `chosen`/`rejected`; D9 distingue además **`invalid`**, y esa
+  distinción es el punto — separa la señal fuerte ("esto está mal") del rechazo blando ("elegí
+  otra"), que colapsadas se pierden.
+- `axis` en `branches` es el id del eje detectado (`attribute_as_class:6c6b32…`); D9 quiere una de
+  **seis categorías fijas** (`granularity`, `division_criterion`, `property_vs_class`,
+  `directionality`, `scope`, `terminology`), que es lo que hace comparables dos decisiones de
+  iteraciones distintas.
+- `comment` sí está, y el spec dice que **es el campo que más rinde**.
+
+**Falta el destino del feedback, que es lo que lo justifica.** §6.7 es explícito en que con
+decenas o pocos cientos de decisiones no se ajusta un modelo: se hace **recuperación de ejemplos
+en contexto** —ante una propuesta nueva, traer las 3–5 decisiones históricas más parecidas por
+embedding e inyectarlas en el prompt con el comentario del usuario—. Nada de eso existe. Hoy
+`branching.history()` cuenta (eje, opción) y alimenta `historical_affinity`, que es un número; el
+spec quiere los precedentes, que además son **inspeccionables**: ante una propuesta rara se puede
+ver qué casos usó.
+
+**Y falta conectar la forma normal.** `versioning.logical_axioms` ya canonicaliza, pero no está
+enchufado a `decisions`, así que el mismo compromiso vuelve con IRIs distintos y no se detecta
+como re-proposición. Ver también la entrada 16, que reúne las preguntas que el spec deja abiertas
+sobre este mismo aparato.
+
+Orden razonable si se retoma: unificar en `decisions` (una tabla, no dos) → mapear el eje a las
+seis categorías → recuperación por embedding → forma normal. Lo primero es barato y lo que
+desbloquea el resto.

@@ -166,6 +166,18 @@ Dos cosas sobre el proveedor, para que nadie las vuelva a plantear:
   a un tercero sobre quién lo está llamando. No presionó, y siguió usando el proveedor como
   estaba. Si vuelve a salir, la respuesta es la misma.
 
+## Qué falta, en una línea
+
+La secuencia de construcción del spec (§12) está dada en sus cinco pasos y la tabla de estado del
+README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes de prometer nada:
+
+- **§6.3, el ajuste del matcher (LoRA)** — bloqueado por datos, no por código: hace falta que
+  alguien conteste unos cientos de pares de zona gris. Deuda 8i.
+- **§6.7, el historial de feedback** — se graban los rechazos, pero el esquema D9, la recuperación
+  de precedentes en el prompt y la comparación por forma normal no existen. Deuda 20.
+- **La compuerta no-go de §12.1 sigue abierta**, y es la que decide si tiene sentido seguir
+  construyendo encima. Ver el README.
+
 ## Antes de decir que algo falta
 
 Mirar la tabla de estado del README y las entradas de `DEUDA_TECNICA.md`. Varias cosas que

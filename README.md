@@ -48,7 +48,27 @@ módulos también (`extraction.py`, `coreference.py`, `matching.py`).
 ## Estado
 
 El spec define una secuencia de construcción de 5 pasos (§12) y prohíbe explícitamente armar
-el pipeline completo antes de ver datos. Vamos por el paso 3.
+el pipeline completo antes de ver datos. **Los cinco pasos están dados**, con una salvedad en el
+3 que decide qué se puede hacer después:
+
+| Paso | Qué pedía | Estado |
+|---|---|---|
+| 1 | A1–A2 sobre 5 documentos + script de evaluación del parser (T1) | **hecho** — `ingest`, `report` |
+| 2 | A0 + A3–A4: normalización, CQ generadas y validadas | **hecho** — `normalize-seed`, `cq propose`, `cq import`. Falta llegar a las 40–60 CQ aceptadas que el paso pide: hay **5**, todas escritas a mano (A4), ninguna generada aún |
+| 3 | B1–B2 + evaluación contra el conjunto de retención | **hecho, con la compuerta abierta** — ver abajo |
+| 4 | B4–B5 sin ramas, aplicación directa | **hecho** — `axiomatize` + la cadena de siete filtros |
+| 5 | B6–B8: ramas, scoring, DAG completo | **hecho** — `branch`, `versions`, `diff` |
+
+**La compuerta no-go del paso 3 (§12.1) sigue abierta y es lo que condiciona todo lo demás.** El
+spec dice: si la tasa de falsos huérfanos es alta, no seguir construyendo, porque cada falso
+huérfano se vuelve una clase espuria en B3 y con multi-rama se estaría eligiendo entre variantes
+de ruido. Hoy sobre el par de aplicación esa tasa no es interpretable —el corpus y la semilla no
+se corresponden (ver Limitaciones)— y sobre el par de calibración da 18% en el corte configurado.
+Las tres vías que el spec da para cerrarla son mejor encoder, mejores glosas y **LoRA**; las dos
+primeras se probaron y la tercera está bloqueada por falta de etiquetas.
+
+Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `calibrate`, T3
+`export-annotations`, T4 la telemetría en `work_units` desde el principio.
 
 | Etapa | Estado |
 |---|---|
@@ -76,6 +96,8 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B5 filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
 | B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
+| B6.3 ajuste del matcher (LoRA) | **no implementado** — bloqueado por datos, no por código; ver deuda 8i |
+| §6.7 historial y feedback | **a medias**: se graban los rechazos; falta el esquema D9, la recuperación de precedentes y la forma normal. Ver deuda 20 |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
 | Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
