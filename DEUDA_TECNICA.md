@@ -312,6 +312,25 @@ Dos límites del relevamiento mismo, para cuando lo tenga:
   útil y no es lo mismo. El comando lo dice, pero conviene tenerlo presente al leerlo.
 
 
+### 8g. `next` guía pero no ejecuta
+
+El orquestador contesta qué corresponde hacer y se detiene donde hace falta una persona, que es
+la parte difícil y la que importa. Lo que no hace es **correr la etapa por vos**, y no por
+diseño sino por una razón mecánica: los comandos de etapa viven dentro de sus wrappers de Typer,
+así que llamarlos desde Python pasa objetos `OptionInfo` en lugar de valores. Para tener `--run`
+hay que extraer primero cada comando en (wrapper delgado + función común), que son unos diez
+comandos.
+
+Se dejó sin hacer en vez de resolverlo a medias porque un runner que se saltea un punto de
+decisión es peor que no tener runner: los cinco puntos donde decide el usuario son justamente
+donde el sistema no debe elegir solo. Cuando se haga, `--run` tiene que avanzar **de a una
+etapa** y frenar en el primer `waiting on you`.
+
+Dos cosas que `next` todavía no mira: si el `rules_hash` cambió desde la última regeneración (hoy
+siempre sugiere `regenerate`, que es conservador pero ruidoso) y si las glosas cambiaron desde el
+último `match`, que es lo que cierra el bucle de §4.3.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.

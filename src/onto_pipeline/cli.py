@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict
 from pathlib import Path
@@ -32,6 +33,7 @@ from . import (
     mapping,
     matching,
     ontoclean,
+    orchestration,
     review,
     stopping,
     structural,
@@ -760,6 +762,55 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("next")
+def next_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+) -> None:
+    """What to run next, and what is waiting on you.
+
+    Five points in this design are the user's decision — the matcher's grey zone, the branch, a
+    functional property, a competency question, a typo in the seed. A runner that went straight
+    through them would be deciding them by default, so a pending decision outranks any stage
+    that could run: everything after it would be built on an answer nobody gave.
+
+    A stage whose input does not exist is reported as blocked rather than pending. Which of the
+    two it is is the difference between advice and a checklist.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    # The env file is loaded by the app-level callback, so this reads the result rather than
+    # the flag: `--env-file` before the subcommand is the one way in, and there is no second.
+    has_provider = bool(os.environ.get(config.llm.api_key_env, ""))
+
+    plan = orchestration.survey(conn, version_id, has_provider=has_provider)
+    colours = {
+        orchestration.DONE: "green", orchestration.READY: "bold",
+        orchestration.WAITING: "yellow", orchestration.BLOCKED: "dim",
+    }
+    table = Table("stage", "state", "detail", title=f"against {version_id}")
+    for step in plan.steps:
+        table.add_row(
+            step.name, f"[{colours[step.state]}]{step.state}[/]", step.detail
+        )
+    console.print(table)
+
+    waiting = orchestration.blocking(plan)
+    if waiting:
+        console.print(
+            f"[yellow]{len(waiting)} decision(s) are yours[/], and the stages after them would "
+            "be built on an answer nobody gave:"
+        )
+        for step in waiting:
+            console.print(f"  {step.name} — [bold]{step.command}[/]")
+        return
+    if plan.next is None:
+        console.print("[green]nothing pending[/] · `onto-pipeline stop` says whether it is done")
+        return
+    console.print(f"[bold]next:[/] {plan.next.name} — [bold]{plan.next.command}[/]")
 
 
 @app.command("stop")

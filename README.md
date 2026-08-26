@@ -29,6 +29,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | 6.4 | **conflicts** · **mark** | Documentos que se contradicen; notarizar, forzar, refutar |
 | 6.8 | **functional** | Candidatas a propiedad funcional, y qué fusionaría declararlas |
 | 10.3 | **stop** | Los cuatro criterios de parada, con su rol |
+| — | **next** | Qué corresponde correr, y qué está esperándote a vos |
 | B3 | **induce** | Convierte huérfanas en clases nuevas |
 | B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
 | B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
@@ -74,6 +75,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
 | Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
 | Criterios de parada (§10.3) | listo (`stop`); los cuatro |
+| Guía de iteración | listo (`next`); no ejecuta, ver deuda |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
 
@@ -315,7 +317,28 @@ pendiente.
 
 Sin proveedor configurado saltea A0.4 y te dice cuántas glosas quedaron pendientes.
 
-### 3. Iteración sobre el corpus (B1 → B3)
+### 3. ¿Y ahora qué? (`next`)
+
+```bash
+uv run onto-pipeline next
+```
+
+Lee el almacén y contesta una sola pregunta: qué corresponde hacer. Tres formas de respuesta —
+**ready** (se puede correr, y acá está el comando), **waiting on you** (hay una decisión abierta)
+y **blocked** (falta el insumo de una etapa anterior). Que diga cuál de las dos últimas es lo que
+separa un consejo de una lista.
+
+**Una decisión pendiente le gana a cualquier etapa que podría correr**, porque todo lo que viene
+después estaría construido sobre una respuesta que nadie dio. Este diseño tiene cinco puntos que
+decide el usuario —zona gris del matcher (§6.2), rama (§6.6), propiedad funcional (§6.8),
+validación de CQ (§4.4), errata en la semilla (§4.3)— y un runner que los pasara de largo los
+estaría decidiendo por default, que es la falla que D5 y D21 nombran desde los dos lados: no
+preguntar nunca y que el sistema elija el modelado en silencio, o preguntar todo y volverse el
+trabajo manual que vino a reemplazar.
+
+**No ejecuta nada**, a propósito por ahora — ver la deuda técnica.
+
+### 4. Iteración sobre el corpus (B1 → B3)
 
 ```bash
 uv run onto-pipeline --env-file opencode.env extract    # menciones por chunk
@@ -346,7 +369,7 @@ Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403
 cubren el 70% de las huérfanas; bajarlo a 0,30 son 582 preguntas y el 98%. El umbral no está
 calibrado, como todos los demás.
 
-### 4. Axiomatización, enriquecimiento y ramas (B4 + B4b + B6)
+### 5. Axiomatización, enriquecimiento y ramas (B4 + B4b + B6)
 
 ```bash
 uv run onto-pipeline --env-file opencode.env axiomatize   # propuestas -> axiomas
@@ -435,7 +458,7 @@ Sobre el par actual el resultado es cero pasajes para las 34 clases de la semill
 exactamente lo que predice el desajuste temático documentado más abajo: no es una falla de la
 etapa, es la etapa reportando que el corpus no define nada de lo que la semilla nombra.
 
-### 5. Conflictos fácticos (§6.4)
+### 6. Conflictos fácticos (§6.4)
 
 ```bash
 uv run onto-pipeline conflicts                       # ¿quién se contradice con quién?
@@ -487,7 +510,7 @@ decisión que no cambiara ninguna regla sería una decisión que el ABox nunca n
 Bajo mundo abierto, no asertar X y asertar ¬X son cosas distintas: la primera es silencio, la
 segunda es conocimiento. Marcar algo falso **no** escribe una aserción negativa en la ontología.
 
-### 6. Validación (A0.0 + B5)
+### 7. Validación (A0.0 + B5)
 
 ```bash
 uv run onto-pipeline validate                    # última versión
@@ -561,7 +584,7 @@ Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 encontró nada, pero puede haber ignorado el axioma culpable), nunca `OK`. Si la cobertura EL
 cae por debajo del umbral, devuelve `SKIPPED`.
 
-### 7. Competency questions
+### 8. Competency questions
 
 ```bash
 uv run onto-pipeline cq import examples/competency_questions.json
@@ -572,7 +595,7 @@ Cada CQ va pareada con su SPARQL, que tiene que parsear; una CQ generada además
 `eval` corre todo contra una versión del DAG y registra la tasa de aprobación, que es el
 criterio de parada primario.
 
-### 8. Propiedades funcionales (§6.8)
+### 9. Propiedades funcionales (§6.8)
 
 ```bash
 uv run onto-pipeline functional                                   # ¿qué candidatas hay?
@@ -613,7 +636,7 @@ relevamiento podría fabricar su propia evidencia.
 Hoy no encuentra nada en el caso de aplicación, y con razón: el pipeline extrae tipos y
 procedencia, no propiedades. La etapa está lista para cuando las haya.
 
-### 9. ¿Cuándo parar? (§10.3)
+### 10. ¿Cuándo parar? (§10.3)
 
 ```bash
 uv run onto-pipeline stop                 # los cuatro criterios
@@ -647,7 +670,7 @@ Con menos de dos ventanas de documentos el comando dice **desconocido**, no "apl
 mide, y una clase paraguas maximiza cobertura destruyendo justo el valor conceptual para el que
 existe la ontología. Es diagnóstico y nunca objetivo.
 
-### 10. Regeneración del ABox
+### 11. Regeneración del ABox
 
 ```bash
 uv run onto-pipeline regenerate                  # última versión
@@ -674,7 +697,7 @@ conviene saber al leer la salida:
 La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
 con las mismas reglas no hace nada y lo dice.
 
-### 11. Inspección
+### 12. Inspección
 
 ```bash
 uv run onto-pipeline report                 # T1: HTML por documento
@@ -702,7 +725,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 12. Conjunto de retención
+### 13. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -766,7 +789,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 13. Calibración contra un corpus publicado
+### 14. Calibración contra un corpus publicado
 
 El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
 cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por
