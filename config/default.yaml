@@ -77,8 +77,21 @@ matching:
   # Advertencia de lectura: el barrido usa UN corte, el pipeline usa dos. Mide el corte de
   # huérfano; dónde parte auto de zona gris es la pregunta separada de cuánta revisión humana
   # se está dispuesto a hacer, y eso no se calibra contra un corpus.
-  auto_merge_threshold: 0.92
-  grey_zone_lower: 0.70
+  # MEDIDOS, no los defaults del spec. Barrido sobre craft-cl: 8.723 menciones gold contra
+  # 3.418 clases candidatas, bi-encoder, match_against=label.
+  #   umbral  precisión  recall     F1
+  #     0.70     72,3%    68,9%   0,706   <- el default del spec: 3 de cada 10 aceptadas, mal
+  #     0.80     82,9%    68,5%   0,750
+  #     0.90     91,2%    67,2%   0,774   <- pico de F1
+  #     0.95     97,9%    58,0%   0,729
+  # El recall casi no se mueve entre 0,30 y 0,90 (69,8% -> 67,2%): el ranking ya es correcto y
+  # el umbral solo filtra mistypes. Por eso subir es casi gratis en recall y caro en huérfanas.
+  # auto_merge = la barra para fusionar SIN preguntar -> precisión ≥95%.
+  # grey_zone_lower = por debajo se descarta como huérfana, que es el error que el spec dice
+  # que más cuesta; se elige por debajo del pico de F1 para mandar la duda al usuario, que la
+  # recupera, en vez de perderla.
+  auto_merge_threshold: 0.95
+  grey_zone_lower: 0.80
   # Nunca medido: los cuatro pares de calibración disponibles son en inglés. Ver deuda 17.
   cross_language_always_grey: true
   # embedding | surface_and_keys. Under `embedding`, candidates are pairs at or above

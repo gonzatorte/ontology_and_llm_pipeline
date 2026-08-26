@@ -142,22 +142,34 @@ información gratis.
 Estas no son mejoras opcionales: son decisiones que hoy están apoyadas en muy poco y que
 condicionan todo lo que viene después.
 
-### 7. `matching.match_against` y `matching.use_cross_encoder`
+### 7. `matching.match_against` y `matching.use_cross_encoder` — RESUELTO en parte
 
-Ambas se decidieron sobre **10 pares armados a mano, midiendo solo recall**, y sobre un par
-corpus/semilla que después resultó estar temáticamente desalineado. La medición de recall no
-dice nada de precisión, y con etiquetas se pierde precisión por eco léxico: `subject` en
-sentido de *tema* tipa como la clase **Subject a 0.992**, dentro de la zona de auto-merge, donde
-ningún umbral lo filtra.
+**Medido sobre `craft-cl`**: 8.723 menciones gold contra 3.418 clases candidatas, no diez pares
+hechos a mano. `match_against: label` era correcto y por amplio margen — F1 **0,774** contra
+0,135 de etiqueta+glosa y 0,080 de glosa sola. La conclusión sacada con n=10 se sostuvo; la
+evidencia que la sostenía, no.
 
-Ninguna de las dos opciones está resuelta. Ver el plan en
-[`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md), y el comando
-`calibrate`, que corre el barrido.
+Queda abierto `use_cross_encoder`: el barrido lo soporta (`--cross-encoder`) y no se corrió.
 
-### 8. Los umbrales 0.92 / 0.70
 
-Son los defaults del spec, nunca medidos. Y no son universales: dependen del encoder. Deberían
-ser **salida** de una calibración, no entrada escrita a mano.
+### 8. Los umbrales — MEDIDOS, y el punto de operación no transfiere
+
+Ya no son los defaults del spec. Sobre `craft-cl`, el 0,70 que traía aceptaba mal 3 de cada 10
+menciones (precisión 72,3%); ahora `auto_merge` está en 0,95 (precisión 97,9%) y
+`grey_zone_lower` en 0,80 (82,9%), elegido por debajo del pico de F1 para mandar la duda al
+usuario en vez de descartarla como huérfana.
+
+**Lo que sigue sin resolverse es transferirlos.** Se midieron contra un inventario de 3.418
+clases y la semilla de aplicación tiene 34: con más candidatos hay más chances de que algo
+espurio supere el umbral, así que el punto de operación se mueve con el tamaño y no se sabe
+cuánto. Esa curva es exactamente la tarea C5 del plan —179, 3.419 y ~40k clases— y hasta
+medirla, los valores de arriba son un punto de partida defendible, no un valor final.
+
+Un detalle de lectura que importa: en `craft-cl` **las huérfanas genuinas son cero por
+construcción** —toda clase gold está en la ontología—, así que ahí toda huérfana es falsa y la
+tasa no es comparable con la del par de aplicación. Para que lo sea hay que correr el barrido
+con `--holdout`, que retiene clases a propósito para fabricar huérfanas genuinas.
+
 
 ### 9. El par corpus/semilla
 
