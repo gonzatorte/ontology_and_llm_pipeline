@@ -28,6 +28,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | B2b | **bridge** | Conecta huérfanas con la semilla por conocimiento del mundo |
 | 6.4 | **conflicts** · **mark** | Documentos que se contradicen; notarizar, forzar, refutar |
 | 6.8 | **functional** | Candidatas a propiedad funcional, y qué fusionaría declararlas |
+| 10.3 | **stop** | Los cuatro criterios de parada, con su rol |
 | B3 | **induce** | Convierte huérfanas en clases nuevas |
 | B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
 | B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
@@ -72,6 +73,7 @@ el pipeline completo antes de ver datos. Vamos por el paso 3.
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
 | Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
+| Criterios de parada (§10.3) | listo (`stop`); los cuatro |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
 
@@ -611,7 +613,41 @@ relevamiento podría fabricar su propia evidencia.
 Hoy no encuentra nada en el caso de aplicación, y con razón: el pipeline extrae tipos y
 procedencia, no propiedades. La etapa está lista para cuando las haya.
 
-### 9. Regeneración del ABox
+### 9. ¿Cuándo parar? (§10.3)
+
+```bash
+uv run onto-pipeline stop                 # los cuatro criterios
+uv run onto-pipeline stop --curve         # y la curva documento por documento
+```
+
+Son **dos terminaciones distintas** y confundirlas es el error que este comando existe para
+evitar: la de iteración (¿esta ronda se agotó?) y la de proceso (¿la ontología está lista?).
+Siendo incremental, la segunda nunca es "terminada": es *suficiente hasta que lleguen documentos
+nuevos*, y así lo reporta.
+
+| Criterio | Rol | Qué mide |
+|---|---|---|
+| Competency questions | **primario** | % de CQ que responden vía SPARQL, y **sólo él dice qué falta** |
+| Saturación de novedad | secundario | conceptos nuevos por documento en los últimos k |
+| Curva de acumulación | **diagnóstico** | conceptos únicos vs. documentos; nunca detiene nada |
+| Presupuesto | **duro** | `max_iterations`; arbitrario, y el único que siempre termina |
+
+**La curva de acumulación es la que rompe el círculo.** Los otros tres miran el corpus, así que
+pueden coincidir y estar equivocados en la misma dirección — un límite que el spec enuncia y que
+no se puede sacar desde adentro del sistema. Una curva que sigue subiendo con pendiente marcada
+en el documento 100 dice que **el corpus es insuficiente y ninguna cantidad de iteraciones lo
+arregla**; una que aplanó en el 40 dice que los últimos 60 aportaron poco. Es la única distinción
+disponible entre un problema del pipeline y un problema de los datos, y por eso es diagnóstico y
+no criterio: no detiene nada, informa.
+
+Con menos de dos ventanas de documentos el comando dice **desconocido**, no "aplanó": la cola
+*es* el principio, y compararlas es comparar un número consigo mismo.
+
+**La cobertura de menciones no está en la lista, a propósito.** El sistema optimiza lo que se
+mide, y una clase paraguas maximiza cobertura destruyendo justo el valor conceptual para el que
+existe la ontología. Es diagnóstico y nunca objetivo.
+
+### 10. Regeneración del ABox
 
 ```bash
 uv run onto-pipeline regenerate                  # última versión
@@ -638,7 +674,7 @@ conviene saber al leer la salida:
 La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
 con las mismas reglas no hace nada y lo dice.
 
-### 10. Inspección
+### 11. Inspección
 
 ```bash
 uv run onto-pipeline report                 # T1: HTML por documento
@@ -666,7 +702,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 11. Conjunto de retención
+### 12. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -730,7 +766,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 12. Calibración contra un corpus publicado
+### 13. Calibración contra un corpus publicado
 
 El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
 cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por

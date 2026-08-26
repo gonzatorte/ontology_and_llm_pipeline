@@ -33,6 +33,7 @@ from . import (
     matching,
     ontoclean,
     review,
+    stopping,
     structural,
     typing_store,
     validation,
@@ -97,6 +98,9 @@ MarkOption = typer.Option(
 MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention ids to mark.")
 ExportOption = typer.Option(
     None, "--export", help="Write the misextractions to this JSONL, for the evaluation set."
+)
+CurveOption = typer.Option(
+    False, "--curve", help="Print the accumulation curve document by document."
 )
 DeclareOption = typer.Option(
     None, "--declare", help="Ask what declaring this property functional would merge."
@@ -756,6 +760,62 @@ def axiomatize_cmd(
         f"{len(graph)} -> {len(candidate_graph)} triples"
     )
     _publish_diff(config, conn, committed.id)
+
+
+@app.command("stop")
+def stop_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    iteration: int = IterationOption,
+    curve: bool = CurveOption,
+) -> None:
+    """Should this stop? The four criteria of spec 10.3, with their roles.
+
+    Competency questions are primary and the only criterion that says *what* is missing.
+    Novelty saturation is secondary and automatic. The accumulation curve is a diagnostic and
+    never stops anything — it is the one that says whether the problem is the pipeline or the
+    corpus, and the only one that breaks the circle the other three sit in. The budget is hard
+    and arbitrary, and the only one that always terminates.
+
+    Mention coverage is deliberately absent: a system optimizes what is measured, and an
+    umbrella class maximizes coverage while destroying the conceptual value.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+
+    assessment = stopping.assess(
+        conn, version_id,
+        target_pass_rate=config.cq.target_pass_rate,
+        novelty_window=config.stopping.novelty_window,
+        novelty_threshold=config.stopping.novelty_threshold,
+        iteration=iteration,
+        max_iterations=config.iteration.max_iterations,
+    )
+
+    table = Table("criterion", "role", "state", "value", "note")
+    for criterion in assessment.criteria:
+        colour = {stopping.MET: "green", stopping.NOT_MET: "yellow"}.get(criterion.state, "dim")
+        table.add_row(
+            criterion.name, criterion.role, f"[{colour}]{criterion.state}[/]",
+            criterion.value, criterion.note,
+        )
+    console.print(table)
+
+    if assessment.stop:
+        console.print(
+            f"[green]stop[/] — {', '.join(assessment.reasons)}. Being incremental, this is "
+            "'enough until new documents arrive', not 'finished'."
+        )
+    else:
+        console.print("[yellow]keep going[/]: no criterion is met")
+
+    if curve:
+        plot = Table("#", "document", "new", "cumulative")
+        for point in assessment.curve:
+            plot.add_row(str(point.index), point.document_id[:40], str(point.new),
+                         str(point.cumulative))
+        console.print(plot)
 
 
 @app.command("functional")

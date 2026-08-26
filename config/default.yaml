@@ -157,6 +157,17 @@ enrichment:
   max_passage_chars: 1200
   min_passages: 1          # sin pasajes no se pregunta; inventar una glosa no es enriquecer
 
+# ─── Criterios de parada (§10.3) ─────────────────────────
+# Dos terminaciones distintas: de iteración (¿esta ronda se agotó?) y de proceso (¿la ontología
+# está lista?). Siendo incremental, la segunda es "suficiente hasta que lleguen documentos
+# nuevos". El criterio primario es `cq.target_pass_rate` y el duro `iteration.max_iterations`;
+# no se repiten acá para que cada uno tenga un solo lugar donde cambiarse.
+# La cobertura de menciones NO es criterio de parada a propósito: el sistema optimiza lo que se
+# mide, y una clase paraguas maximiza cobertura destruyendo el valor conceptual. Es diagnóstico.
+stopping:
+  novelty_window: 5        # documentos que mira la saturación
+  novelty_threshold: 1.0   # conceptos nuevos por documento por debajo de los cuales satura
+
 # ─── Ramas (§6.6) ────────────────────────────────────────
 # El multi-rama es el camino excepcional, no el default: preguntar en cada iteración sin
 # conflicto real es exactamente el trabajo manual que el pipeline existe para evitar (D21).

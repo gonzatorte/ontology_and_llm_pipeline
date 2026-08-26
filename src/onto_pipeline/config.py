@@ -147,6 +147,17 @@ class Iteration(BaseModel):
     reload_seed: int = 0
 
 
+class Stopping(BaseModel):
+    """When a round is exhausted, and when the ontology is enough (spec 10.3)."""
+
+    # New concepts per document over the last `novelty_window` documents, below which the
+    # corpus is saturated. Saturated *with respect to the corpus* — never to the domain.
+    novelty_window: int = 5
+    novelty_threshold: float = 1.0
+    # `cq.target_pass_rate` is the primary criterion and `iteration.max_iterations` the hard
+    # one; neither is repeated here, so there is one place to change each.
+
+
 class Mapping(BaseModel):
     """How the mention layer becomes an ABox (plan_reglas_de_mapeo.md).
 
@@ -246,6 +257,7 @@ class Config(BaseModel):
     mapping: Mapping = Mapping()
     iteration: Iteration = Iteration()
     cq: CompetencyQuestions = CompetencyQuestions()
+    stopping: Stopping = Stopping()
     branching: Branching = Branching()
     llm: Llm = Llm()
     execution: Execution = Execution()
