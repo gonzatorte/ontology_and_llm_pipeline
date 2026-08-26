@@ -351,6 +351,28 @@ Dos huecos concretos en la etapa:
   conviene saberlo antes de leer 60 candidatas.
 
 
+### 8i. LoRA (§6.3) — la única pieza del plan bloqueada por falta de datos, no de código
+
+El spec pone el ajuste del matcher como el arreglo de la compuerta no-go: si la tasa de falsos
+huérfanos es alta, mejor modelo, mejores glosas, **LoRA con las primeras etiquetas**. Las
+primeras dos ya se probaron —las glosas empeoraron el matching y el encoder es el que hay— así
+que queda la tercera, y es la única del plan que no se puede escribir todavía.
+
+Lo que falta es el insumo, y ahora se sabe exactamente cuál: las respuestas de zona gris que
+`grey answer` acumula. Hoy hay **una**. `grey labels --export` ya las escribe en el formato que
+un entrenamiento necesita (mención, clase ofrecida, puntaje, si se aceptó), así que la
+infraestructura de datos está; falta que alguien conteste unos cientos de pares.
+
+**No escribir el entrenador antes de tener con qué probarlo.** Un script de fine-tuning que
+nunca corrió sobre datos reales es código que parece listo y no lo está, y el proyecto ya
+documenta esa clase de falla (la edición silenciosa de la entrada de coordinación). El orden es:
+contestar zona gris → exportar → medir el cross-encoder tuneado contra el barrido de `calibrate`
+→ recién ahí decidir si `use_cross_encoder` vuelve a `true`.
+
+Cuánto hace falta es desconocido. Con 219 pares esperando en `v2` hay techo para una primera
+tanda, pero un re-ranker entrenado con doscientos ejemplos es una apuesta, no una medición.
+
+
 ### 9. El par corpus/semilla
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
