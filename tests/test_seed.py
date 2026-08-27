@@ -194,7 +194,8 @@ def test_typo_detection_survives_a_real_sized_vocabulary():
 
 
 def test_a_class_that_already_has_a_definition_is_not_re_glossed():
-    """A0.4 escribe la glosa que falta, no reemplaza la que hay. Sobre una ontología publicada
+    """PREP-NORMALIZE-GLOSSES escribe la glosa que falta, no reemplaza la que hay. Sobre una
+    ontología publicada
     lo segundo tira las definiciones de los curadores y encima paga por hacerlo."""
     from rdflib import Graph, Literal, URIRef
     from rdflib.namespace import OWL, RDF, SKOS

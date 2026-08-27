@@ -1,4 +1,4 @@
-"""Work-unit ledger: cache, checkpoint and cost telemetry are one mechanism (spec 8.3).
+"""Work-unit ledger: cache, checkpoint and cost telemetry are one mechanism (SCHEMAS-WORK-UNITS).
 
 Execution protocol, verbatim from the spec:
 1. a stage enumerates all its units before emitting anything, marked `pending`;

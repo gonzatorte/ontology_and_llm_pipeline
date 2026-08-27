@@ -81,7 +81,9 @@ def test_the_cross_encoder_reranks_the_bi_encoders_shortlist(matcher):
 
 
 def test_a_target_without_a_gloss_has_only_its_label():
-    """Glosses arrive in A0.4 and improve in B4b; until then the label is what there is."""
+    """Glosses arrive in PREP-NORMALIZE-GLOSSES and improve in ITER-AXIOMATIZE-ENRICH; until then
+    the label is what there is.
+    """
     target = Target(iri="c:Technique", label="Technique")
     assert target.text == "Technique" and not target.grounded_in_gloss
 
@@ -156,7 +158,9 @@ def test_a_matching_declared_key_merges_across_differing_surface_forms(matcher):
 
 
 def test_intra_document_pairs_are_not_compared(matcher):
-    """Anaphora is resolved in B1b with mention ids; it never reaches cross-document linking."""
+    """Anaphora is resolved in ITER-COREFER with mention ids; it never reaches cross-document
+    linking.
+    """
     assert matcher.resolve([
         mention("m1", "Genome Canada", "d1"), mention("m2", "Genome Canada", "d1")
     ]) == []

@@ -1,16 +1,18 @@
-"""Competency questions: the store and the evaluation (spec 4.4, 4.5, 10.3).
+"""Competency questions: the store and the evaluation (PREP-CQ-GENERATED, 4.5, 10.3).
 
 Hard requirement from the spec: every accepted CQ is paired with its SPARQL query. Without
 that pairing, evaluating the stopping criterion needs human judgement every iteration and the
-automation is gone. A question that cannot be formalized as a query is discarded in A3's
+automation is gone. A question that cannot be formalized as a query is discarded in
+PREP-CQ-GENERATED's
 mechanical filter for exactly this reason.
 
 The primary stopping rule is CQ pass rate >= target with no rise over two iterations. What
 makes it the primary criterion is not the number: a failing CQ says *what* is missing, which
 feeds the next iteration's prompt. No other criterion has that property.
 
-A3 generation lives in `cq_generation.py`, which needs a model. The store, the evaluation and
-A4 import are deterministic and are here.
+PREP-CQ-GENERATED generation lives in `cq_generation.py`, which needs a model. The store, the
+evaluation and
+PREP-CQ-USER import are deterministic and are here.
 """
 
 from __future__ import annotations
@@ -30,7 +32,8 @@ USER = "user"
 
 ACCEPTED = "accepted"
 DISCARDED = "discarded"
-# A3's output before anyone has looked at it. The mechanical filter has already run; what is
+# PREP-CQ-GENERATED's output before anyone has looked at it. The mechanical filter has already run;
+# what is
 # left is the three-action review the spec calls one-time work, not per-iteration work.
 PROPOSED = "proposed"
 
@@ -49,10 +52,10 @@ CREATE TABLE IF NOT EXISTS competency_questions (
   question     TEXT NOT NULL,
   language     TEXT,
   cq_type      TEXT,
-  origin       TEXT NOT NULL,   -- generated (A3) | user (A4)
+  origin       TEXT NOT NULL,   -- generated (PREP-CQ-GENERATED) | user (PREP-CQ-USER)
   sparql       TEXT NOT NULL,
-  status       TEXT NOT NULL,   -- proposed (A3, unreviewed) | accepted | discarded
-  citation     TEXT,            -- JSON {document_id, page, quote}; A3 requires one
+  status       TEXT NOT NULL,   -- proposed (PREP-CQ-GENERATED, unreviewed) | accepted | discarded
+  citation     TEXT,            -- JSON {document_id, page, quote}; PREP-CQ-GENERATED requires one
   created_at   TEXT
 );
 
@@ -98,7 +101,7 @@ class Evaluation:
         return len(self.passed) / total if total else 0.0
 
     def delta(self, previous: Evaluation | None) -> dict[str, list[str]]:
-        """`cq_delta` of a branch (spec 8.2): which questions this change won and lost."""
+        """`cq_delta` of a branch (SCHEMAS-BRANCH): which questions this change won and lost."""
         if previous is None:
             return {"newly_passing": sorted(self.passed), "newly_failing": []}
         before = set(previous.passed)
@@ -125,7 +128,7 @@ def validate(question: CompetencyQuestion) -> None:
     except Exception as exc:  # noqa: BLE001 - rdflib raises several parse error types
         raise MalformedQuery(f"{question.id}: {exc}") from exc
     if question.origin == GENERATED and not question.citation:
-        # A3's filter: a generated question without a citation and page is discarded.
+        # PREP-CQ-GENERATED's filter: a generated question without a citation and page is discarded.
         raise ValueError(f"{question.id}: a generated CQ needs a citation")
 
 
@@ -191,7 +194,7 @@ def decide(conn: sqlite3.Connection, ids: list[str], status: str) -> int:
 
 
 def read_file(path: Path) -> list[CompetencyQuestion]:
-    """A4: the questions the user writes without looking at the generated ones."""
+    """PREP-CQ-USER: the questions the user writes without looking at the generated ones."""
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     return [
         CompetencyQuestion(
@@ -243,7 +246,7 @@ def record(conn: sqlite3.Connection, evaluation: Evaluation) -> None:
 
 
 def should_stop(history: list[float], target: float) -> bool:
-    """Primary stopping rule (spec 10.3): at or above target, and not rising for two
+    """Primary stopping rule (EVAL-STOPPING): at or above target, and not rising for two
     iterations. Reaching the target once is not enough — the rate has to have settled."""
     if len(history) < 3 or history[-1] < target:
         return False

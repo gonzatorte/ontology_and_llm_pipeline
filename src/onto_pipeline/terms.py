@@ -1,4 +1,6 @@
-"""Denormalising identifiers and comparing the terms that come out (spec 4.3, A0.2/A0.3)."""
+"""Denormalising identifiers and comparing the terms that come out (PREP-NORMALIZE,
+PREP-NORMALIZE-LABELS/PREP-NORMALIZE-TYPOS).
+"""
 
 from __future__ import annotations
 

@@ -59,7 +59,7 @@ class Extraction(BaseModel):
 
 
 class Bridging(BaseModel):
-    """B2b — world-knowledge bridging (spec 6.2b), between matching and induction."""
+    """ITER-BRIDGE — world-knowledge bridging, between matching and induction."""
 
     n_candidates: int = 5
     # A surface whose best class falls below this gets no candidates and is not asked about:
@@ -74,16 +74,17 @@ class Induction(BaseModel):
     # need only be close to something between them. Uncalibrated, like every other threshold
     # here — see DEUDA_TECNICA.md.
     similarity_threshold: float = 0.75
-    min_support: int = 3          # one mention proposing a class is noise (spec 6.6)
+    min_support: int = 3          # one mention proposing a class is noise (ITER-BRANCH)
     max_phrases_in_prompt: int = 30
     # Desde qué parecido con una clase existente una propuesta es un duplicado — o sea, sus
     # menciones eran falsos huérfanos. No se descarta sola: es el diagnóstico del matcher que la
-    # compuerta de §12.1 pide. Medido: `Test specimen` dio 1,00 y `Grain boundary` 0,99.
+    # compuerta de BUILD-NO-GO-GATE pide. Medido: `Test specimen` dio 1,00 y `Grain boundary` 0,99.
     redundant_threshold: float = 0.90
 
 
 class Enrichment(BaseModel):
-    """B4b — gloss enrichment from definitional passages (spec 6.5, 4.3)."""
+    """ITER-AXIOMATIZE-ENRICH — gloss enrichment from definitional passages (ITER-AXIOMATIZE, 4.3).
+    """
 
     # Passages per class, spread across documents before going deep: five from one paper
     # describe that paper's usage, and the circularity control is about that difference.
@@ -104,7 +105,7 @@ class Seed(BaseModel):
     label_divergence_threshold: float = 0.8
 
 
-# What candidate generation implements. Both are real; `embedding` is spec 6.2's.
+# What candidate generation implements. Both are real; `embedding` is ITER-MATCH's.
 BLOCKING_STRATEGIES = frozenset({"embedding", "surface_and_keys"})
 
 
@@ -152,7 +153,7 @@ class Iteration(BaseModel):
 
 
 class Tuning(BaseModel):
-    """Ajuste del re-ranker (spec 6.3). El modelo que se ajusta es `matching.cross_encoder`."""
+    """Ajuste del re-ranker (ITER-TUNE). El modelo que se ajusta es `matching.cross_encoder`."""
 
     # auto | full | lora. `auto` elige por tamaño: completo mientras entre, LoRA cuando no.
     method: str = "auto"
@@ -186,7 +187,7 @@ class Tuning(BaseModel):
 
 
 class Stopping(BaseModel):
-    """When a round is exhausted, and when the ontology is enough (spec 10.3)."""
+    """When a round is exhausted, and when the ontology is enough (EVAL-STOPPING)."""
 
     # New concepts per document over the last `novelty_window` documents, below which the
     # corpus is saturated. Saturated *with respect to the corpus* — never to the domain.
@@ -254,18 +255,18 @@ class Llm(BaseModel):
     base_url: str = ""
     api_key_env: str = ""          # the variable name; never the key itself
     models: dict[str, str] = Field(default_factory=dict)   # tier -> model id
-    A0_2_labels: StageModel = StageModel(tier="small", temperature=0.0)
-    A0_4_glosses: StageModel = StageModel(tier="medium", temperature=0.3)
-    A3_cq_generation: StageModel = StageModel(tier="large", temperature=0.3)
-    B1_extraction: StageModel = StageModel(tier="medium", temperature=0.0)
-    B1b_coreference: StageModel = StageModel(tier="medium", temperature=0.0)
-    B2_matching: StageModel = StageModel(tier="small", temperature=0.0)
-    B2b_bridging: StageModel = StageModel(tier="large", temperature=0.3)
-    B3_naming: StageModel = StageModel(tier="large", temperature=0.3)
-    B4_axiomatization: StageModel = StageModel(tier="large", temperature=0.7)
-    B4b_enrichment: StageModel = StageModel(tier="medium", temperature=0.3)
-    B5_ontoclean: StageModel = StageModel(tier="large", temperature=0.0)
-    B6_branching: StageModel = StageModel(tier="large", temperature=0.3)
+    prep_normalize_labels: StageModel = StageModel(tier="small", temperature=0.0)
+    prep_normalize_glosses: StageModel = StageModel(tier="medium", temperature=0.3)
+    prep_cq_generated: StageModel = StageModel(tier="large", temperature=0.3)
+    iter_extract: StageModel = StageModel(tier="medium", temperature=0.0)
+    iter_corefer: StageModel = StageModel(tier="medium", temperature=0.0)
+    iter_match: StageModel = StageModel(tier="small", temperature=0.0)
+    iter_bridge: StageModel = StageModel(tier="large", temperature=0.3)
+    iter_induce: StageModel = StageModel(tier="large", temperature=0.3)
+    iter_axiomatize: StageModel = StageModel(tier="large", temperature=0.7)
+    iter_axiomatize_enrich: StageModel = StageModel(tier="medium", temperature=0.3)
+    iter_validate_ontoclean: StageModel = StageModel(tier="large", temperature=0.0)
+    iter_branch: StageModel = StageModel(tier="large", temperature=0.3)
     regeneration_retry: StageModel = StageModel(tier="large", temperature=0.7)
 
 

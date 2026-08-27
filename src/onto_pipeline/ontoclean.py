@@ -1,4 +1,4 @@
-"""B5 filter 4 — OntoClean over the subsumption hierarchy (spec 6.6).
+"""ITER-VALIDATE filter 4 — OntoClean over the subsumption hierarchy (ITER-BRANCH).
 
 A hard reject, and the only filter in the chain that catches a *badly formed subsumption*
 rather than an inconsistent one. `Student ⊑ Person` is fine; `Person ⊑ Student` is perfectly
@@ -22,7 +22,8 @@ forbidding one of the child:
 
 **Where the labels come from is the weak point, and the spec says so.** With an upper ontology
 they are inherited. Without one the model labels them, which the spec itself calls "feasible,
-less reliable, and additional work that partly contradicts D5". So the labelling is a separate,
+less reliable, and additional work that partly contradicts BRANCH-ONLY-REVIEW". So the labelling is
+a separate,
 cached stage with its own answers on record, the model is asked four plain questions rather
 than for OntoClean jargon, and an unlabelled class produces no violation instead of a guess:
 this filter reports what it could check, never what it assumed.
@@ -42,7 +43,7 @@ from rdflib.namespace import RDFS
 
 from .llm import Prompt
 
-STAGE = "B5_ontoclean"
+STAGE = "iter_validate_ontoclean"
 
 # The metaproperty values, in the notation of the literature. `~R` is the anti-rigid case that
 # does the most work: it is what makes `Person ⊑ Student` a violation.

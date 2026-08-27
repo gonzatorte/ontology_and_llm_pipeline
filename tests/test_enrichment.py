@@ -187,7 +187,7 @@ def typed(conn, mention_id, iri, document_id, version="v1"):
 
 def test_a_match_against_a_document_that_wrote_the_gloss_is_flagged(tmp_path):
     """Not an error and not discarded: the one that must not be counted as independent
-    evidence of coverage (§4.3)."""
+    evidence of coverage (PREP-NORMALIZE)."""
     conn = connect(tmp_path)
     from onto_pipeline import typing_store
 

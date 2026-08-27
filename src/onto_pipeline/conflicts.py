@@ -1,11 +1,11 @@
-"""Factual conflicts — document 12 asserts X, document 47 asserts ¬X (spec 6.4).
+"""Factual conflicts — document 12 asserts X, document 47 asserts ¬X (ITER-CONFLICTS).
 
 Different in kind from the modelling commitments of 6.6. A modelling commitment is a choice
 about how to describe the world; a factual conflict is two documents describing it differently,
 and the ontology has to hold both facts and the disagreement.
 
 **The volume filter is the design.** Deciding case by case is the manual review the pipeline
-exists to avoid (D5), so the split is mechanical:
+exists to avoid (BRANCH-ONLY-REVIEW), so the split is mechanical:
 
     a conflict that does not break the reasoner  →  notarized by default, silently
     a conflict that does break it                →  reaches the user, and there will be few
@@ -27,7 +27,8 @@ it belongs to branching as a modelling axis and never to a per-case decision.
 **Refuted and misextracted must not be mixed.** They look identical in an interface and are
 opposite signals. `refuted` means the document asserts X and X is not true — the assertion is
 excluded from the ABox. `misextracted` means the document never said X and the extractor
-misread it — that is a B1 bug, and it belongs to the evaluation set. Merging them loses the
+misread it — that is a ITER-EXTRACT bug, and it belongs to the evaluation set. Merging them loses
+the
 only free source of extraction-error labels this system has.
 
 Under the open-world assumption, not asserting X and asserting ¬X are different things: the
@@ -279,7 +280,8 @@ def findings(
     """Only the conflicts the reasoner would break on, plus the patterns.
 
     Everything else is notarized without asking. A queue that lists every disagreement is the
-    manual review D5 rules out, and the conflicts that matter are exactly the ones where a
+    manual review BRANCH-ONLY-REVIEW rules out, and the conflicts that matter are exactly the ones
+    where a
     person's judgement changes the answer.
     """
     def name(iri: str) -> str:
@@ -363,7 +365,8 @@ def misextractions(conn: sqlite3.Connection) -> list[dict]:
     """The extraction errors, for the evaluation set.
 
     Free labels: nobody annotated them on purpose, they are what a reader noticed while
-    resolving conflicts, and they are the only source of B1 error labels this system has that
+    resolving conflicts, and they are the only source of ITER-EXTRACT error labels this system has
+    that
     costs nothing to produce.
     """
     install(conn)

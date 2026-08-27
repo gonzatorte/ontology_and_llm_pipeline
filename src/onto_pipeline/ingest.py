@@ -1,7 +1,9 @@
-"""Runs A1+A2 over a set of documents through the work-unit ledger and persists the result.
+"""Runs PREP-CLASSIFY+PREP-PARSE over a set of documents through the work-unit ledger and persists
+the result.
 
-A1 and A2 share a single work unit per document: both need the PDF open, and the page
-classification is what routes A2. The unit key includes the thresholds that produced it, so
+PREP-CLASSIFY and PREP-PARSE share a single work unit per document: both need the PDF open, and the
+page
+classification is what routes PREP-PARSE. The unit key includes the thresholds that produced it, so
 changing a threshold invalidates the cache rather than silently reusing stale output.
 """
 
@@ -225,7 +227,7 @@ def load_block_objects(conn: sqlite3.Connection, doc_id: str) -> list[Block]:
 
 
 def set_held_out(conn: sqlite3.Connection, doc_ids: list[str], held_out: bool = True) -> int:
-    """Mark documents as the retention set (spec 10.1)."""
+    """Mark documents as the retention set (EVAL-PIPELINE)."""
     cursor = conn.executemany(
         "UPDATE documents SET held_out = ? WHERE id = ?",
         [(int(held_out), doc_id) for doc_id in doc_ids],
@@ -277,7 +279,7 @@ def select_for_reload(
 
     Sampling is seeded so two runs of the same configuration choose the same documents. An
     unseeded sample would make the corpus a moving target across iterations, and the
-    accumulation curve (spec 10.3) could not be read.
+    accumulation curve (EVAL-STOPPING) could not be read.
     """
     done = {
         row["document_id"]

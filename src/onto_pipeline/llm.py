@@ -1,6 +1,6 @@
 """The LLM port.
 
-Governing principle of every LLM use in the pipeline (spec 6.1):
+Governing principle of every LLM use in the pipeline (ITER-EXTRACT):
 
     The LLM classifies and names. The code builds the logic. The reasoner rejects.
 
@@ -47,7 +47,7 @@ class ChatModel(Protocol):
 @dataclass
 class Prompt:
     """Versioned: the version is part of the cache key, so editing a prompt invalidates that
-    stage's cached output instead of silently reusing it (spec 8.3)."""
+    stage's cached output instead of silently reusing it (SCHEMAS-WORK-UNITS)."""
 
     stage: str
     version: str

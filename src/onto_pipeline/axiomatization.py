@@ -1,4 +1,4 @@
-"""Axiomatization — proposed classes become axioms (spec 6.5, 6.1).
+"""Axiomatization — proposed classes become axioms (ITER-AXIOMATIZE, 6.1).
 
 The governing principle, stated once more because this is the stage where breaking it would do
 the most damage:
@@ -44,7 +44,7 @@ from rdflib.namespace import OWL, RDF, RDFS, SKOS
 
 from .llm import Prompt
 
-STAGE = "B4_axiomatization"
+STAGE = "iter_axiomatize"
 
 SUBCLASS = "subclass_of"
 INSTANCE = "instance_of"
@@ -55,7 +55,7 @@ WORLD_KNOWLEDGE = "world_knowledge"
 
 PROMPT = Prompt(
     stage=STAGE,
-    version="v2",   # v2: el prompt muestra precedentes (§6.7)
+    version="v2",   # v2: el prompt muestra precedentes (ITER-FEEDBACK)
     template="""A new concept was found in a research corpus. Decide how it relates to the
 concepts an existing ontology already has.
 
@@ -205,7 +205,7 @@ def parse(text: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def mint_iri(base_iri: str, label: str, proposal_id: str) -> str:
-    """Opaque, like every other entity (A0.1), and derived so a re-run is stable."""
+    """Opaque, like every other entity (PREP-NORMALIZE-IRIS), and derived so a re-run is stable."""
     import uuid
 
     from .seed import _IRI_NAMESPACE
@@ -276,7 +276,8 @@ def assemble(
 def normal_form(axioms: Sequence[Axiom], labels: dict[str, str]) -> str:
     """La forma normal de una propuesta: qué dice, sin depender de los IRIs que le tocaron.
 
-    Sin esto no se puede detectar una re-proposición (§6.7). Un IRI acuñado sale de `uuid5` sobre
+    Sin esto no se puede detectar una re-proposición (ITER-FEEDBACK). Un IRI acuñado sale de `uuid5`
+    sobre
     el id de la propuesta, así que el **mismo** compromiso —la misma clase, con el mismo nombre,
     colgando del mismo padre— vuelve en la iteración siguiente con otro identificador y no se
     parece en nada al anterior. Lo que se conserva entre iteraciones es cómo se llaman las cosas,

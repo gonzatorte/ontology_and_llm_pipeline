@@ -96,7 +96,8 @@ def test_hermit_reports_a_consistent_ontology(reasoners):
 
 
 def test_justifications_name_the_conflicting_axioms(reasoners):
-    """B6 groups branches by decision axis, which needs the conflicting subset, not the fact
+    """ITER-BRANCH groups branches by decision axis, which needs the conflicting subset, not the
+    fact
     that a conflict exists."""
     result = reasoners.hermit(reasoners.load(graph(UNSATISFIABLE)))
     justifications = result.justifications["http://example.org/onto#Interview"]
@@ -114,7 +115,8 @@ def test_profile_detection_reports_the_seed_as_owl_dl(reasoners):
 
 
 def test_an_undeclared_annotation_property_leaves_owl_dl(reasoners):
-    """The defect A0.0 caught in A0's own output: SKOS annotations must be declared or the
+    """The defect PREP-NORMALIZE-PROFILE caught in PREP-NORMALIZE's own output: SKOS annotations
+    must be declared or the
     ontology is not OWL 2 DL and ELK's coverage collapses."""
     undeclared = CONSISTENT + """
     @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
@@ -137,7 +139,7 @@ ENTAILED = """
 
 def test_an_entailment_is_not_a_triple_until_it_is_written_down(reasoners):
     """Why the inferential CQ type could never pass: SPARQL reads triples, and "i1 is a
-    Technique" is entailed but not asserted (spec 4.4)."""
+    Technique" is entailed but not asserted (PREP-CQ-GENERATED)."""
     from onto_pipeline import cq
 
     asserted = graph(ENTAILED)

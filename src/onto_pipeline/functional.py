@@ -1,4 +1,4 @@
-"""Functional properties — the silent risk (spec 6.8, D2).
+"""Functional properties — the silent risk (ITER-APPLY, DL-WITH-FUNCTIONALS).
 
 `owl:FunctionalProperty` is maximum cardinality 1 under another name, and this is the one
 category the spec sends to an individual decision by the user, because domain knowledge is

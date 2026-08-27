@@ -1,14 +1,19 @@
-"""A0 — seed normalization (spec 4.3).
+"""PREP-NORMALIZE — seed normalization.
 
-A0.1 mints an opaque IRI per entity and keeps the original as provenance; A0.2 derives labels
-and flags the pairs that diverge instead of assuming a translation; A0.3 runs four
-deterministic typo detectors against the ontology's own vocabulary; A0.4 assembles the
+PREP-NORMALIZE-IRIS mints an opaque IRI per entity and keeps the original as provenance;
+PREP-NORMALIZE-LABELS derives labels
+and flags the pairs that diverge instead of assuming a translation; PREP-NORMALIZE-TYPOS runs four
+deterministic typo detectors against the ontology's own vocabulary; PREP-NORMALIZE-GLOSSES assembles
+the
 structural neighbourhood each gloss is written from.
 
-A0.0 (OWL profile detection) is not here: its two consumers — reasoner routing and bounding
-B4 — arrive with the reasoner, and the OWL API computes profiles itself (spec 9.1).
+PREP-NORMALIZE-PROFILE (OWL profile detection) is not here: its two consumers — reasoner routing and
+bounding
+ITER-AXIOMATIZE — arrive with the reasoner, and the OWL API computes profiles itself
+(REASONING-STACK).
 
-Corrections land on labels, never on identifiers: after A0.1 the identifier carries no
+Corrections land on labels, never on identifiers: after PREP-NORMALIZE-IRIS the identifier carries
+no
 meaning, so the question does not arise.
 """
 
@@ -83,7 +88,8 @@ class TypoFinding:
 
 @dataclass
 class GlossContext:
-    """What the gloss prompt is built from — never the class name (spec 4.3, A0.4): a gloss is
+    """What the gloss prompt is built from — never the class name (PREP-NORMALIZE,
+    PREP-NORMALIZE-GLOSSES): a gloss is
     a definition, and denormalizing an identifier only ever yields a name."""
 
     iri: str
@@ -173,7 +179,8 @@ def _rewrite(graph: Graph, mapping: dict[URIRef, str]) -> Graph:
         rewritten.add((URIRef(opaque), SKOS.historyNote, Literal(str(original))))
 
     # OWL 2 DL requires every annotation property to be declared. Without this the ontology
-    # leaves the DL profile, ELK's coverage collapses and it is skipped as a filter (spec 9.2).
+    # leaves the DL profile, ELK's coverage collapses and it is skipped as a filter
+    # (REASONING-ELK-ASYMMETRY).
     for annotation in DECLARED_ANNOTATIONS:
         rewritten.add((annotation, RDF.type, OWL.AnnotationProperty))
     return rewritten
@@ -413,7 +420,8 @@ def _naming_pattern(entities: list[Entity]) -> list[TypoFinding]:
 def gloss_contexts(seed: NormalizedSeed) -> list[GlossContext]:
     """El vecindario estructural de cada clase **que todavía no tiene definición**.
 
-    A0.4 es un *bootstrap*: escribe la glosa que falta, no reemplaza la que hay. La distinción
+    PREP-NORMALIZE-GLOSSES es un *bootstrap*: escribe la glosa que falta, no reemplaza la que hay.
+    La distinción
     no era ociosa — sobre una ontología publicada, devolver todas las clases hacía que la etapa
     reescribiera 428 definiciones de curadores con texto del modelo, y encima pagando por
     hacerlo. Mejorar una glosa existente con lo que dice el corpus es otra etapa (`enrich`), y

@@ -1,13 +1,14 @@
-"""A0.4 — gloss bootstrap (spec 4.3).
+"""PREP-NORMALIZE-GLOSSES — gloss bootstrap.
 
-A label is a name; a gloss is a definition. The matcher (B2) compares a mention's text
+A label is a name; a gloss is a definition. The matcher (ITER-MATCH) compares a mention's text
 against the definition, not against the name, so denormalizing an identifier does not produce
 one. The prompt is built from the structural neighbourhood: superclass, subclasses, the
 properties the class is domain or range of, and the classes it is disjoint with. The label is
 included so the sentence can name its subject, but the substance has to come from the
 neighbourhood.
 
-The gloss is not a fixed value of A0. B4b enriches it from definitional passages every
+The gloss is not a fixed value of PREP-NORMALIZE. ITER-AXIOMATIZE-ENRICH enriches it from
+definitional passages every
 iteration, which closes a self-correcting loop: a better gloss means better matching, which
 means fewer false orphans. A mention orphaned at iteration 3 can be typed correctly at 8.
 """
@@ -24,7 +25,7 @@ from rdflib.namespace import SKOS
 from .llm import Prompt
 from .seed import GlossContext
 
-STAGE = "A0_4_glosses"
+STAGE = "prep_normalize_glosses"
 
 PROMPT = Prompt(
     stage=STAGE,

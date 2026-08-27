@@ -1,7 +1,8 @@
-"""B2 — matching and entity resolution (spec 6.2).
+"""ITER-MATCH — matching and entity resolution.
 
 The quality bottleneck of the pipeline. If the matcher types badly, entities that belonged to
-the seed fall into orphans and induce spurious classes in B3, so this is where the evaluation
+the seed fall into orphans and induce spurious classes in ITER-INDUCE, so this is where the
+evaluation
 effort goes and why the false-orphan rate is measured apart from any aggregate F1.
 
 Two operations that must not be conflated:
@@ -9,7 +10,8 @@ Two operations that must not be conflated:
     typing            mention -> seed class. Bi-encoder retrieval, cross-encoder re-ranking,
                       over *glosses* — the matcher compares a mention's text against the
                       definition, not against the name.
-    entity resolution mention <-> mention. Separate individuals until confirmed (D10), which
+    entity resolution mention <-> mention. Separate individuals until confirmed
+    (SEPARATE-UNTIL-CONFIRMED), which
                       is the default, not the whole policy.
 
 "Separate until confirmed" is completed by four components: blocking, three zones rather than
@@ -23,7 +25,8 @@ count for functional properties — two duplicates with one value each look like
 functionality when they are one entity with two values, which is a hidden conflict — so those
 individuals are marked `possible_duplicate_unresolved` and excluded from that count (6.8).
 
-Glosses are bootstrapped in A0.4 and enriched in B4b, and this stage is re-run over orphans
+Glosses are bootstrapped in PREP-NORMALIZE-GLOSSES and enriched in ITER-AXIOMATIZE-ENRICH, and this
+stage is re-run over orphans
 when they change: better gloss, better matching, fewer false orphans. A mention orphaned at
 iteration 3 can be typed correctly at 8.
 """
@@ -284,7 +287,7 @@ class Matcher:
         seed's classes correctly but squashed every score to ~0.01, dropping a match the
         bi-encoder had put at 0.73 into the discard zone. That is R1 — a false orphan —
         manufactured by the matcher itself. A cross-encoder earns its place here only once
-        it is tuned on accumulated accept/reject labels (spec 6.3).
+        it is tuned on accumulated accept/reject labels (ITER-TUNE).
         """
         if self.reranker is not None:
             scores = self.reranker.score([(mention.text, target.text) for _, target in ranked])
@@ -312,7 +315,7 @@ class Matcher:
         keys: dict[str, list[str]] | None = None,
         inferred_class: dict[str, str] | None = None,
     ) -> list[Decision]:
-        """Cross-document entity resolution. Intra-document anaphora is B1b's job and never
+        """Cross-document entity resolution. Intra-document anaphora is ITER-COREFER's job and never
         reaches here."""
         synonyms = synonyms or {}
         keys = keys or {}
@@ -514,7 +517,7 @@ def synonym_index(targets: Sequence[Target]) -> dict[str, set[str]]:
 
 def unresolved_duplicates(decisions: Sequence[Decision]) -> set[str]:
     """Mentions left in the grey zone. They carry `possible_duplicate_unresolved` in the
-    mention layer and are excluded from functional-property support counts (spec 6.8)."""
+    mention layer and are excluded from functional-property support counts (ITER-APPLY)."""
     pending: set[str] = set()
     for decision in decisions:
         if decision.action == ASK:

@@ -1,4 +1,4 @@
-"""Stopping criteria (spec 10.3, D23).
+"""Stopping criteria (EVAL-STOPPING, STOPPING-CRITERIA).
 
 Two different terminations, and conflating them is the mistake this module exists to prevent:
 

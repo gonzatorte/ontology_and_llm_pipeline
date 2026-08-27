@@ -1,4 +1,4 @@
-"""Structure-aware chunking (spec 4.2). The chunk is B1's unit of extraction (spec 6.1).
+"""Structure-aware chunking (PREP-PARSE). The chunk is ITER-EXTRACT's unit of extraction.
 
 Two rules the spec states outright:
 

@@ -1,8 +1,9 @@
-"""Concrete `ChatModel` backends (spec 7, D13).
+"""Concrete `ChatModel` backends (CONFIG, API-LLM-ALLOWED).
 
 One client covers every backend in play, because they all speak the OpenAI chat-completions
 shape: OpenCode Zen/Go at https://opencode.ai/zen/go/v1, and Ollama at
-http://127.0.0.1:11434/v1. That keeps the per-stage temperature (D24) and the token accounting
+http://127.0.0.1:11434/v1. That keeps the per-stage temperature (TEMPERATURE-PER-STAGE) and the
+token accounting
 the ledger needs (T4) in one place.
 
 Credentials are read from the environment and never from the config file, never logged, and

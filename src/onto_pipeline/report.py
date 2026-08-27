@@ -1,4 +1,4 @@
-"""T1 — manual parser evaluation report (spec 14.2, step 1 of the build sequence).
+"""T1 — manual parser evaluation report (DELIVERABLES-PENDING, step 1 of the build sequence).
 
 One self-contained HTML file per document: the rendered page beside what the parser made of
 it, so the advance criterion of step 1 ("visual inspection: the parse is acceptable") can

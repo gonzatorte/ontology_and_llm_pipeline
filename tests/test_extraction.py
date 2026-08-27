@@ -65,7 +65,7 @@ def test_a_repeated_surface_form_yields_distinct_mentions():
 
 
 def test_a_mention_the_model_invented_is_dropped_and_counted():
-    """A surface the passage does not contain is a B1 bug and has to surface as one."""
+    """A surface the passage does not contain is a ITER-EXTRACT bug and has to surface as one."""
     only = block(0, "The researchers shared the data.", span_start=0)
     located = extraction.locate(
         chunk_of(only),

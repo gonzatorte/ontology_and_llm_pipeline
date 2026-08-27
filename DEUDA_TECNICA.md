@@ -63,7 +63,7 @@ por qué se descartó una alternativa, qué se midió y no se anotó, qué pregu
 
 La consecuencia práctica: **lo que importa se escribe en el repo antes de cerrar una sesión**, no
 se deja "por si hace falta mirar la conversación". Esta ronda de auditoría encontró un hallazgo
-sustantivo que sólo vivía en un transcript (el análisis del homónimo, hoy entrada 19) y estuvo a
+sustantivo que sólo vivía en un transcript (el análisis del homónimo, hoy `DEBT-CONTEXT-DISAMBIGUATION`) y estuvo a
 semanas de perderse. Si se prefiere la otra vía, hay que subir `cleanupPeriodDays` en
 `~/.claude/settings.json`, pero eso conserva el transcript, no lo vuelve encontrable.
 
@@ -83,7 +83,7 @@ uno por sesión. Dos advertencias al auditarlos:
 
 ## Mejoras estructurales
 
-### 1. Capa de acceso a datos
+### DEBT-DATA-ACCESS-LAYER — Capa de acceso a datos
 
 Hoy el SQL crudo está repartido en 8 módulos y `sqlite3` se importa en cada uno. Funciona, pero
 tiene dos costos: migrar a otro motor sería un barrido manual por todos ellos (~13 lugares con
@@ -91,31 +91,31 @@ SQL específico de SQLite: `executescript`, `IFNULL`, `SUM(status = 'done')`, `j
 `sqlite3.Row`), y los tests que tocan persistencia necesitan una base real.
 
 Una capa fina de acceso a datos resuelve las dos cosas a la vez. **No es urgente**: SQLite
-alcanza de sobra para este workload y §12.2 deja Fuseki fuera de v1 explícitamente. Pero si
+alcanza de sobra para este workload y `BUILD-OUT-OF-SCOPE` deja Fuseki fuera de v1 explícitamente. Pero si
 alguna vez aparece la necesidad de Postgres, la inversión que rinde es ésta, no la migración.
 
-### 2. Paralelizar las llamadas de B1
+### DEBT-PARALLEL-EXTRACTION — Paralelizar las llamadas de `ITER-EXTRACT`
 
 Una pasada de `extract` sobre 100 documentos son ~1.320 llamadas secuenciales de varios
 segundos cada una. El cuello de botella es la latencia de red, no la base: las escrituras al
 ledger son microsegundos. Con WAL ya activado, un pool acotado de hilos es viable y el ledger
 ya serializa correctamente.
 
-### 3. Cachear el grafo inferido por versión
+### DEBT-CACHE-INFERRED-GRAPH — Cachear el grafo inferido por versión
 
 `cq eval --infer` materializa las entailments con HermiT en cada corrida. Sobre la semilla son
 1.087 → 1.426 tripletas y tarda poco, pero es determinista dado el estado de la ontología: la
 versión ya tiene un hash de estado, así que el grafo inferido se puede guardar contra él y
 recomputar solo cuando el estado cambia.
 
-### 4. Saltear secciones de bajo rendimiento en B1
+### DEBT-SKIP-LOW-YIELD-SECTIONS — Saltear secciones de bajo rendimiento en `ITER-EXTRACT`
 
 Bibliografía y referencias son ~20% de un paper y no producen menciones útiles. Un filtro
-determinista por tipo de sección cortaría ~20% de las llamadas de B1 sin perder nada.
+determinista por tipo de sección cortaría ~20% de las llamadas de `ITER-EXTRACT` sin perder nada.
 
-### 5. Footprint de memoria: representación primero, infraestructura después
+### DEBT-MEMORY-FOOTPRINT — Footprint de memoria: representación primero, infraestructura después
 
-Todo vive en memoria: el grafo en rdflib (D17) y los vectores en un dict dentro del `Matcher`.
+Todo vive en memoria: el grafo en rdflib (`RDFLIB-IN-MEMORY`) y los vectores en un dict dentro del `Matcher`.
 La pregunta natural es si eso escala y si conviene mover cosas a almacenes externos —triplestore,
 base de vectores, Postgres—. **Medido, la respuesta corta es que a la escala declarada no hace
 falta, y que la mejora que sí rinde no es infraestructura sino representación.**
@@ -128,7 +128,7 @@ Lo medido sobre el estado actual:
 | Un vector como `list[float]` | **12,1 KB** | 1.000 documentos → **1,0 GB** |
 | El mismo en `numpy float32` | **1,5 KB** (8× menos) | 1.000 documentos → **0,13 GB** |
 
-Menciones medidas: 85 por documento. §12.2 estima que un ABox de 1.000 páginas da 5k–20k
+Menciones medidas: 85 por documento. `BUILD-OUT-OF-SCOPE` estima que un ABox de 1.000 páginas da 5k–20k
 tripletas, así que a la escala del spec —100 documentos, 30–50 clases— el grafo son ~28 MB y
 los vectores ~0,1 GB. Nada de eso justifica un servicio aparte.
 
@@ -140,13 +140,13 @@ en 130 MB en el peor caso proyectado.
 **Cuándo sí cambiaría la respuesta.** El spec ya fijó los umbrales y conviene respetarlos en vez
 de anticiparse:
 
-- **Fuseki / triplestore** (§12.2): "reconsiderar cuando el ABox no entre en memoria". Con
+- **Fuseki / triplestore** (`BUILD-OUT-OF-SCOPE`): "reconsiderar cuando el ABox no entre en memoria". Con
   1.386 B/tripleta eso son millones de tripletas, dos órdenes de magnitud más que lo previsto.
 - **Base de vectores**: el criterio análogo es cuando la búsqueda exhaustiva deje de servir.
   Hoy son 34 clases objetivo; el blocking ya acota los pares de resolución de entidades y el
   cálculo de similaridad se materializa por bloques de 512 filas, así que el pico no es n².
   Una base de vectores con ANN paga recién cuando los objetivos sean decenas de miles.
-- **Embeddings de grafos de conocimiento** (D4, §12.2): explícitamente fuera de v1 hasta que el
+- **Embeddings de grafos de conocimiento** (`KG-EMBEDDINGS-OUT-OF-SCOPE`, `BUILD-OUT-OF-SCOPE`): explícitamente fuera de v1 hasta que el
   grafo crezca uno o dos órdenes de magnitud.
 
 **Postgres es otro eje, no éste.** Migrar el store no baja el footprint: el grafo y los vectores
@@ -154,7 +154,7 @@ siguen en el proceso. Solo ayudaría si además se mueve el *cómputo* al motor 
 pgvector resolviendo la búsqueda por similaridad del lado del servidor—, y eso recién rinde a
 escalas muy superiores a ésta. Para la discusión de motor de base ver el punto 1.
 
-### 6. Medir si el prompt caching del proveedor se activa
+### DEBT-PROMPT-CACHING — Medir si el prompt caching del proveedor se activa
 
 El gateway reporta `prompt_tokens_details.cached_tokens` y los prompts ya tienen el prefijo
 estático adelante, que es la forma correcta para caching por prefijo. Nunca se midió si se
@@ -168,7 +168,7 @@ información gratis.
 Estas no son mejoras opcionales: son decisiones que hoy están apoyadas en muy poco y que
 condicionan todo lo que viene después.
 
-### 7. `matching.match_against` y `matching.use_cross_encoder` — RESUELTO
+### DEBT-MATCH-AGAINST — `matching.match_against` y `matching.use_cross_encoder` — RESUELTO
 
 **Medido sobre `craft-cl`**: 8.723 menciones gold contra 3.418 clases candidatas, no diez pares
 hechos a mano. `match_against: label` era correcto y por amplio margen — F1 **0,774** contra
@@ -181,11 +181,11 @@ quiere decir que el top-1 correcto puntúa *más bajo* que el equivocado (median
 0,258): no hay umbral que lo arregle, porque el que sube deja preferentemente los errores.
 
 Lo que sigue abierto no es el interruptor sino la mejora que lo reemplazaría: un re-ranker
-entrenado sobre los accept/reject acumulados de la zona gris (§6.3), que es un instrumento
+entrenado sobre los accept/reject acumulados de la zona gris (`ITER-TUNE`), que es un instrumento
 distinto de un re-ranker de IR genérico. Ver la entrada de LoRA más abajo.
 
 
-### 8. Los umbrales — MEDIDOS, y el punto de operación cambia con cada par
+### DEBT-THRESHOLDS — Los umbrales — MEDIDOS, y el punto de operación cambia con cada par
 
 Ya no son los defaults del spec. Sobre `craft-cl`, el 0,70 que traía aceptaba mal 3 de cada 10
 menciones (precisión 72,3%); ahora `auto_merge` está en 0,95 (precisión 97,9%) y
@@ -221,7 +221,7 @@ movió (18,0% contra 17,3% en 0,80): sólo 546 de 8.723 menciones cambiaron de l
 cifra anterior era del orden correcto por accidente, no porque el holdout no importara.
 
 
-### 8b. El catálogo de patrones de modelado tiene dos entradas
+### DEBT-PATTERN-CATALOGUE — El catálogo de patrones de modelado tiene dos entradas
 
 `branch` enumera los ejes de compromiso de modelado en vez de pedírselos a un modelo, que es lo
 correcto y lo que el spec exige. El costo es que **un eje que el código no reconoce no se
@@ -241,12 +241,12 @@ cuántos ejes espurios aparecen.
 
 Falta también lo que el spec pide después de elegir: **la regeneración del ABox no se dispara
 sola** al aplicar una rama (`regenerate` existe y hay que correrlo a mano), y el `cq_delta` de
-§8.2 queda en blanco porque las CQ no se re-corren contra el estado que la rama produciría.
+`SCHEMAS-BRANCH` queda en blanco porque las CQ no se re-corren contra el estado que la rama produciría.
 Ninguna de las dos es difícil; las dos hacen que el puntaje de la rama sea menos informativo de
 lo que el spec pretende.
 
 
-### 8c. El enriquecimiento de glosas depende de un catálogo de señales, y del par
+### DEBT-GLOSS-SIGNALS — El enriquecimiento de glosas depende de un catálogo de señales, y del par
 
 `enrich` encuentra los pasajes definitorios por patrón —doce señales enumeradas, en inglés y
 español— y ese catálogo es el techo de lo que la etapa puede ver. Una definición escrita como
@@ -256,15 +256,15 @@ anotadas; hasta entonces, cuántos pasajes se pierden es desconocido, no cero.
 
 Verificado sobre el corpus real: 1.000 bloques utilizables, y "open science" da 5 pasajes en 3
 documentos con las señales `is a` y `means`. Sobre las 34 clases de la semilla da **cero**, que
-es el desajuste temático de la entrada 9 y no una falla del filtro.
+es el desajuste temático de la `DEBT-QUALITATIVE-PAIR` y no una falla del filtro.
 
 Falta lo que cierra el bucle: **`match` no se re-ejecuta solo sobre las huérfanas cuando las
-glosas cambian**, como pide §4.3. `enrich` avisa y deja el comando escrito, pero el disparo es
+glosas cambian**, como pide `PREP-NORMALIZE`. `enrich` avisa y deja el comando escrito, pero el disparo es
 manual. Y el control de circularidad hoy sólo se consulta (`circular`); no descuenta esas
 menciones de ninguna métrica de cobertura, que es para lo que el spec lo pide.
 
 
-### 8d. Los conflictos fácticos ven un solo tipo de aserción
+### DEBT-CONFLICT-ASSERTION-TYPES — Los conflictos fácticos ven un solo tipo de aserción
 
 `conflicts` detecta el desacuerdo que este pipeline puede tener hoy: dos documentos que tipan a
 la misma entidad a dos clases. Es el único porque el ABox sólo contiene tipos y procedencia —
@@ -275,10 +275,10 @@ sólo por entidad.
 
 Dos cosas que hoy quedan a mano:
 
-- **La contextualización no está implementada.** Es la cuarta política de §6.4, la única de nivel
+- **La contextualización no está implementada.** Es la cuarta política de `ITER-CONFLICTS`, la única de nivel
   TBox, y es cara y global. `conflicts` reporta el patrón que la dispara y dice que pertenece a
   `branch`, pero el catálogo de `branch` no tiene todavía un eje `contextualize:<propiedad>` —
-  ver 8b. Es el enganche natural entre las dos etapas y está sin hacer.
+  ver `DEBT-PATTERN-CATALOGUE`. Es el enganche natural entre las dos etapas y está sin hacer.
 - **`conflict_pattern_threshold: 3` no está calibrado.** Sale de un argumento, no de una medición,
   y como todos los demás umbrales del proyecto habría que verlo contra un par de calibración.
 
@@ -289,12 +289,12 @@ declara. El comando dice cuál de los dos tests usó, precisamente para no repor
 instrumento como la ausencia del hallazgo.
 
 
-### 8e. La cadena B5 está completa, y su eslabón flojo es de dónde salen las etiquetas
+### DEBT-VALIDATION-CHAIN — La cadena `ITER-VALIDATE` está completa, y su eslabón flojo es de dónde salen las etiquetas
 
 **OntoClean (filtro 4) está, y su punto débil es de dónde salen las etiquetas.** Las cuatro
 restricciones son mecánicas y no tienen deuda; el insumo sí. Con ontología superior las
 metapropiedades se heredan, y sin ella las etiqueta el LLM — que el propio spec reconoce como
-"factible, menos confiable, y trabajo adicional que contradice parcialmente D5". Nadie ha medido
+"factible, menos confiable, y trabajo adicional que contradice parcialmente `BRANCH-ONLY-REVIEW`". Nadie ha medido
 todavía cuán confiable es: haría falta un conjunto de clases con metapropiedades anotadas a mano
 y comparar. Hasta entonces, un rechazo de este filtro es tan bueno como la etiqueta que lo
 produjo, y por eso el comando reporta cuántas subsunciones verificó y cuántas salteó.
@@ -343,13 +343,13 @@ escribir una shape: si el remedio a una violación es *escribir mejor código*, 
 remedio es *conseguir más texto*, no va.
 
 
-### 8f. Las propiedades funcionales están listas y no tienen qué mirar
+### DEBT-FUNCTIONAL-CANDIDATES — Las propiedades funcionales están listas y no tienen qué mirar
 
-La maquinaria de §6.8 está: relevamiento con la distribución, exclusión de duplicados sin
+La maquinaria de `ITER-APPLY` está: relevamiento con la distribución, exclusión de duplicados sin
 resolver, pregunta al usuario, y `--declare` corriendo el razonador para mostrar qué se
 fusionaría antes de commitear nada. **Lo que falta es el insumo**: el ABox tiene tipos y
 procedencia, no propiedades de dominio, así que hoy el relevamiento devuelve vacío en el caso de
-aplicación. Extraer propiedades es una etapa nueva de B1 y el spec la deja fuera de v1; hasta que
+aplicación. Extraer propiedades es una etapa nueva de `ITER-EXTRACT` y el spec la deja fuera de v1; hasta que
 exista, ésta es una etapa correcta sin trabajo que hacer.
 
 Dos límites del relevamiento mismo, para cuando lo tenga:
@@ -362,7 +362,7 @@ Dos límites del relevamiento mismo, para cuando lo tenga:
   útil y no es lo mismo. El comando lo dice, pero conviene tenerlo presente al leerlo.
 
 
-### 8g. `next` guía y ejecuta — RESUELTO
+### DEBT-NEXT-RUNS — `next` guía y ejecuta — RESUELTO
 
 > **Resuelto el 2026-09-10.** `next --run` corre **una** etapa, la siguiente, y frena. Frente a
 > un punto de decisión no corre nada y sale con error.
@@ -399,15 +399,15 @@ etapa** y frenar en el primer `waiting on you`.
 
 Dos cosas que `next` todavía no mira: si el `rules_hash` cambió desde la última regeneración (hoy
 siempre sugiere `regenerate`, que es conservador pero ruidoso) y si las glosas cambiaron desde el
-último `match`, que es lo que cierra el bucle de §4.3.
+último `match`, que es lo que cierra el bucle de `PREP-NORMALIZE`.
 
 
-### 8h. Las CQ generadas heredan el sesgo del corpus, y eso no se arregla acá
+### DEBT-CQ-CORPUS-BIAS — Las CQ generadas heredan el sesgo del corpus, y eso no se arregla acá
 
 Es la advertencia del propio spec y conviene tenerla escrita como deuda y no sólo como nota: las
-CQ de A3 miden completitud **respecto al corpus**. Si el corpus no habla de algo, no va a haber
+CQ de `PREP-CQ-GENERATED` miden completitud **respecto al corpus**. Si el corpus no habla de algo, no va a haber
 una CQ que lo pida, y la tasa de aprobación va a subir sin que la ontología mejore en el dominio.
-La mitigación es A4 —las CQ que el usuario escribe sin mirar las generadas, 20–30% del total— y
+La mitigación es `PREP-CQ-USER` —las CQ que el usuario escribe sin mirar las generadas, 20–30% del total— y
 hoy **no hay ninguna escrita**: `examples/competency_questions.json` tiene cinco de ejemplo. Sin
 ese 20–30%, el criterio de parada primario está midiendo el corpus contra sí mismo.
 
@@ -422,7 +422,7 @@ humana del paso 4, y conviene que quien revise lo sepa.
 
 Dos huecos concretos en la etapa:
 
-- **La regeneración de consultas bajo reorganización (D1) no está.** El spec elige "regenerar la
+- **La regeneración de consultas bajo reorganización (`SEED-REORGANIZABLE`) no está.** El spec elige "regenerar la
   consulta cuando cambian las clases involucradas", y `cq.sparql_regeneration: on_class_change`
   está en el config sin nada que lo lea. Hoy una CQ cuya clase se dividió en una iteración pasa a
   fallar por una razón que no es la que el criterio quiere medir.
@@ -431,7 +431,7 @@ Dos huecos concretos en la etapa:
   conviene saberlo antes de leer 60 candidatas.
 
 
-### 8i. Ajuste del matcher (§6.3) — HECHO, con un resultado que cambia el default
+### DEBT-MATCHER-TUNING — Ajuste del matcher (`ITER-TUNE`) — HECHO, con un resultado que cambia el default
 
 > **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
 > da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
@@ -451,7 +451,7 @@ Dos huecos concretos en la etapa:
 <details>
 <summary>Lo que decía antes de medirlo</summary>
 
-### LoRA (§6.3) — la única pieza del plan bloqueada por falta de datos, no de código
+### LoRA (`ITER-TUNE`) — la única pieza del plan bloqueada por falta de datos, no de código
 
 El spec pone el ajuste del matcher como el arreglo de la compuerta no-go: si la tasa de falsos
 huérfanos es alta, mejor modelo, mejores glosas, **LoRA con las primeras etiquetas**. Las
@@ -484,7 +484,7 @@ salvedad y pasa a ser parte del resultado: entrenar en un par y evaluar en otro 
 que hay que medir. Los pares de la tarea «más pares» son el banco para eso.
 
 
-### 9. El par cualitativo, retirado — y lo que sí dejó
+### DEBT-QUALITATIVE-PAIR — El par cualitativo, retirado — y lo que sí dejó
 
 La semilla de metodología cualitativa contra el corpus de política de ciencia abierta **está
 fuera de circulación** desde el 2026-09-09. No es un caso de aplicación al que haya que volver:
@@ -511,7 +511,7 @@ Lo que dejó, y que sigue valiendo porque es sobre el método y no sobre el par:
   es justo lo que este chequeo quería evitar.
 - **El eco léxico se hace visible cuando el par está desalineado**, y por eso este par sirvió:
   las 18 automáticas de `v5` son casi todas la palabra corriente que da nombre a la clase. Ver
-  la entrada 19.
+  la `DEBT-CONTEXT-DISAMBIGUATION`.
 
 Los datos derivados (`data/`, versiones `v0`–`v5`) quedan como están: son historia, y los
 números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md).
@@ -520,98 +520,98 @@ números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md
 
 ## Alcance pendiente del spec
 
-### 10. Sesión interactiva
+### DEBT-INTERACTIVE-SESSION — Sesión interactiva
 
-El spec tiene cinco puntos donde decide el usuario —elegir rama (§6.6), zona gris del matcher
-(§6.2), propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas (§4.3)— y los
+El spec tiene cinco puntos donde decide el usuario —elegir rama (`ITER-BRANCH`), zona gris del matcher
+(`ITER-MATCH`), propiedad funcional (`ITER-APPLY`), validación de CQ (`PREP-CQ-GENERATED`), revisión de erratas (`PREP-NORMALIZE`)— y los
 cinco tienen ahora por dónde contestarse: `branch --choose`, `grey answer`, `functional
 --declare`, `cq`, `review resolve`. Las decisiones sobreviven a re-correr en los cinco casos.
 
 Lo que falta es **una interfaz encima**, no la maquinaria. Contestar 219 pares de zona gris de a
 uno por CLI es correcto y es tedioso; el anotador de navegador del conjunto de retención ya
 demuestra que la forma existe, y aplicarla acá es trabajo conocido. Y falta que `next` pueda
-ejecutar la etapa siguiente además de nombrarla — ver 8g.
+ejecutar la etapa siguiente además de nombrarla — ver `DEBT-NEXT-RUNS`.
 
 Cuando exista, `review_items` también es donde viven las excepciones por caso de las reglas de
 mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
 
-### 11. Mundo abierto: lo que falta
+### DEBT-OPEN-WORLD — Mundo abierto: lo que falta
 
-- **Propiedades funcionales (§6.8)**: la etapa está (`functional`) y no tiene propiedades que
-  mirar — ver 8f. Lo que sí quedó resuelto es hacer visible el riesgo silencioso: `--declare`
+- **Propiedades funcionales (`ITER-APPLY`)**: la etapa está (`functional`) y no tiene propiedades que
+  mirar — ver `DEBT-FUNCTIONAL-CANDIDATES`. Lo que sí quedó resuelto es hacer visible el riesgo silencioso: `--declare`
   corre el razonador y muestra qué individuos se fusionarían antes de commitear nada.
-- **`NegativePropertyAssertion` (§6.4)**: `refuted` ya se escribe (`mark --mark refuted`) y saca
+- **`NegativePropertyAssertion` (`ITER-CONFLICTS`)**: `refuted` ya se escribe (`mark --mark refuted`) y saca
   la aserción del ABox, que es lo que el spec pide. Lo que sigue sin existir es la aserción
   negativa explícita, y con razón: bajo OWA sólo corresponde cuando **se sabe** que algo es
   falso, no cuando hay duda, y no hay propiedades donde ponerla todavía.
 - **CQ negativas**: `cq_a4_05` en los ejemplos pregunta por completitud del grafo con
-  `FILTER NOT EXISTS`, que es mundo cerrado. Sirve como diagnóstico del artefacto, pero §4.4
+  `FILTER NOT EXISTS`, que es mundo cerrado. Sirve como diagnóstico del artefacto, pero `PREP-CQ-GENERATED`
   define el tipo negativo como "mundo abierto explícito". Mal precedente para quien escriba CQ
   nuevas.
 
-### 12. Ruta VLM
+### DEBT-VLM-ROUTE — Ruta VLM
 
 Páginas `scan`/`uncertain` quedan sin parsear, las figuras sin captioning y las fórmulas sin
 extraer. El pipeline lo registra en vez de fingir que las procesó.
 
-### 13. Tablas sin bordes
+### DEBT-BORDERLESS-TABLES — Tablas sin bordes
 
 `find_tables` solo ve tablas con líneas; la estrategia por texto devuelve la página entera como
 tabla. El hueco se **mide** —columna "table gap"— pero no se cubre. La respuesta del spec es
 rutear esas páginas a MinerU.
 
-### 14. `language.py` está cableado a es/en
+### DEBT-LANGUAGE-HARDCODED — `language.py` está cableado a es/en
 
 Los marcadores de palabras función están hardcodeados. Otro idioma son ~10 líneas más, o
 apoyarse en el `/Lang` declarado del PDF.
 
-### 15. Código sin consumidor
+### DEBT-CODE-WITHOUT-CALLER — Código sin consumidor
 
 Tres cosas implementadas y probadas que nada invoca. No están rotas: están desconectadas, y
 cada una es o bien un cable que falta o bien código a borrar.
 
-- **`versioning.nearest_state`** — detección de loops *parciales* (§6.8): la rama vuelve *casi*
+- **`versioning.nearest_state`** — detección de loops *parciales* (`ITER-APPLY`): la rama vuelve *casi*
   al estado anterior, mismo compromiso de modelado con IRIs distintos, y el hash exacto no lo ve.
   Ahora sí hay dónde enchufarlo: `branch` computa el hash de cada rama y avisa cuando es un
   retorno exacto, pero usa `find_by_hash` y no esto. Falta el umbral en el config y una línea en
   el llamador.
 - **`iteration.trigger | batch_size`** — cuándo se dispara una iteración y de a cuántos
   documentos. Describen un loop automático que sigue sin existir: `next` dice qué corresponde y
-  las etapas se corren a mano, una por comando (ver 8g). `max_iterations` **sí** se consume
+  las etapas se corren a mano, una por comando (ver `DEBT-NEXT-RUNS`). `max_iterations` **sí** se consume
   ahora, como criterio duro de `stop`.
-- **`llm.B6_branching`** — `branch` no llama a ningún modelo, y no puede: la única prohibición
+- **`llm.iter_branch`** — `branch` no llama a ningún modelo, y no puede: la única prohibición
   explícita del spec para esa etapa es pedirle alternativas a un LLM. La clave quedó de cuando
   se pensaba que haría falta. Es candidata a borrar, no a cablear.
-- **`cq.sparql_regeneration`** — la política D1 de regenerar consultas cuando cambian las clases
-  involucradas. Nada la lee todavía; ver 8h.
+- **`cq.sparql_regeneration`** — la política `SEED-REORGANIZABLE` de regenerar consultas cuando cambian las clases
+  involucradas. Nada la lee todavía; ver `DEBT-CQ-CORPUS-BIAS`.
 
 Lo que hay que evitar es que crezcan en silencio: una clave de config que nadie lee afirma algo
 falso sobre lo que el sistema hace. `matching.blocking_strategy` fue el caso —decía `embedding`
 y bloqueaba por prefijo de 4 caracteres— y se resolvió haciendo que el config **rechace** un
 valor no implementado en vez de aceptarlo. Ese es el patrón para las que quedan.
 
-### 16. Multi-rama: las preguntas que el spec deja abiertas
+### DEBT-MULTI-BRANCH-QUESTIONS — Multi-rama: las preguntas que el spec deja abiertas
 
-B6 ya está implementado (`branch`). Lo que va acá es distinto: el diseño multi-rama tiene
+`ITER-BRANCH` ya está implementado (`branch`). Lo que va acá es distinto: el diseño multi-rama tiene
 preguntas que **el spec mismo declara sin resolver**, y siguen sin resolverse — implementar la
 etapa no las contesta, sólo las vuelve alcanzables.
 
-- **Expiración de rechazos (§6.7, riesgo R2).** Con semilla reorganizable un rechazo no es
+- **Expiración de rechazos (`ITER-FEEDBACK`, riesgo `RISKS-REJECTION-EXPIRY`).** Con semilla reorganizable un rechazo no es
   permanente: lo rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura
   cambió. Bloquearlo para siempre acorrala el proceso; no bloquearlo produce un loop. La
   política elegida —registrar el rechazo relativo al estado de la ontología y expirarlo cuando
   las clases involucradas se reorganizan— está marcada textualmente como **"no es una regla
   limpia, requiere ajuste empírico"**. Es la deuda más profunda del aparato y no se resuelve
   leyendo: se resuelve con iteraciones reales encima.
-- **Comparación por forma normal (§6.7).** Para detectar re-proposición hay que normalizar el
+- **Comparación por forma normal (`ITER-FEEDBACK`).** Para detectar re-proposición hay que normalizar el
   axioma antes de comparar, o el mismo compromiso vuelve con IRIs distintos y no se detecta.
   La pieza existe —`versioning.logical_axioms` canonicaliza— pero no está conectada a la tabla
   `decisions`, que es donde vive el historial de rechazos.
-- **Scoring de ramas en frío (§11).** `historical_affinity` y `parsimonia` requieren historial,
+- **Scoring de ramas en frío (`COLDSTART`).** `historical_affinity` y `parsimonia` requieren historial,
   y el spec dice explícitamente que se **omitan** en las primeras iteraciones en vez de
   calcularse con datos insuficientes. O sea: el scoring nace incompleto por diseño y hay que
   implementarlo sabiéndolo.
-- **Techo de 3–5 ramas (§6.6).** Es un número puesto a dedo contra una explosión de 2^k. El
+- **Techo de 3–5 ramas (`ITER-BRANCH`).** Es un número puesto a dedo contra una explosión de 2^k. El
   mecanismo real que lo evita es presentar los ejes independientes por separado y armar ramas
   completas sólo cuando están acoplados; el techo es la red, no la solución. **Implementado
   así**: `couple()` agrupa por axiomas compartidos y `max_branches` es sólo el corte final.
@@ -623,7 +623,7 @@ Todo esto comparte una propiedad incómoda: **no se puede calibrar contra un cor
 como sí se puede el matcher. Depende del historial de decisiones de este proyecto en particular,
 que hoy tiene cero entradas.
 
-### 17. Tipado consciente de la jerarquía
+### DEBT-HIERARCHY-AWARE-TYPING — Tipado consciente de la jerarquía
 
 Hoy el matcher rankea cada mención contra las clases como si fueran independientes: no sabe que
 `Interview ⊑ Technique`. Usar la estructura —preferir la clase más específica cuyos ancestros
@@ -634,7 +634,7 @@ No se puede medir sobre la semilla actual: 34 clases, profundidad 3, seis raíce
 par de calibración con jerarquía profunda, donde entra como una variable más del barrido de
 umbrales.
 
-### 18. `cross_language_always_grey` nunca se midió
+### DEBT-CROSS-LANGUAGE-GREY — `cross_language_always_grey` nunca se midió
 
 `matching.cross_language_always_grey: true` y la elección de un bi-encoder multilingüe son
 decisiones de config sin una sola medición detrás. El razonamiento declarado —un encoder
@@ -656,7 +656,7 @@ tabla de tareas: no está en el camino crítico de la calibración, y no convien
 Mientras tanto el default se queda como está. Lo honesto es que se queda por falta de evidencia
 en contra, no por evidencia a favor.
 
-### 19. Desambiguación por contexto: el agujero que el eco léxico deja abierto
+### DEBT-CONTEXT-DISAMBIGUATION — Desambiguación por contexto: el agujero que el eco léxico deja abierto
 
 Salió analizando el caso del homónimo —`cell` de biología contra `cell` de una organización
 clandestina—. Conviene separar dónde **no** está el problema, porque la intuición apunta al
@@ -687,14 +687,14 @@ Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
    Es el mismo hallazgo que el de las glosas: un encoder simétrico compara por forma, y
    agregarle una oración a un sintagma lo convierte en una oración. **La solución no está en la
    representación de la mención, está en el encoder** — ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.11.
-2. **Usar la jerarquía**, que es la entrada 17: preferir la clase cuyos ancestros también
+2. **Usar la jerarquía**, que es la `DEBT-HIERARCHY-AWARE-TYPING`: preferir la clase cuyos ancestros también
    puntúan. Un `cell` biológico debería activar también `Anatomical Structure`; uno clandestino,
    nada del subárbol.
 
 Lo que **no** arregla nada es tocar el esquema de IRIs. La identidad no es el problema; la
 desambiguación sí.
 
-### 20. El historial de feedback (§6.7) — RESUELTO
+### DEBT-FEEDBACK-HISTORY — El historial de feedback (`ITER-FEEDBACK`) — RESUELTO
 
 > **Resuelto el 2026-09-10.** El registro y su destino, que era lo que lo justificaba.
 >
@@ -722,355 +722,25 @@ desambiguación sí.
 <details>
 <summary>El diagnóstico original</summary>
 
-### `next` guía pero no ejecuta
-
-El orquestador contesta qué corresponde hacer y se detiene donde hace falta una persona, que es
-la parte difícil y la que importa. Lo que no hace es **correr la etapa por vos**, y no por
-diseño sino por una razón mecánica: los comandos de etapa viven dentro de sus wrappers de Typer,
-así que llamarlos desde Python pasa objetos `OptionInfo` en lugar de valores. Para tener `--run`
-hay que extraer primero cada comando en (wrapper delgado + función común), que son unos diez
-comandos.
-
-Se dejó sin hacer en vez de resolverlo a medias porque un runner que se saltea un punto de
-decisión es peor que no tener runner: los cinco puntos donde decide el usuario son justamente
-donde el sistema no debe elegir solo. Cuando se haga, `--run` tiene que avanzar **de a una
-etapa** y frenar en el primer `waiting on you`.
-
-</details>
-
-Dos cosas que `next` todavía no mira: si el `rules_hash` cambió desde la última regeneración (hoy
-siempre sugiere `regenerate`, que es conservador pero ruidoso) y si las glosas cambiaron desde el
-último `match`, que es lo que cierra el bucle de §4.3.
-
-
-### 8h. Las CQ generadas heredan el sesgo del corpus, y eso no se arregla acá
-
-Es la advertencia del propio spec y conviene tenerla escrita como deuda y no sólo como nota: las
-CQ de A3 miden completitud **respecto al corpus**. Si el corpus no habla de algo, no va a haber
-una CQ que lo pida, y la tasa de aprobación va a subir sin que la ontología mejore en el dominio.
-La mitigación es A4 —las CQ que el usuario escribe sin mirar las generadas, 20–30% del total— y
-hoy **no hay ninguna escrita**: `examples/competency_questions.json` tiene cinco de ejemplo. Sin
-ese 20–30%, el criterio de parada primario está midiendo el corpus contra sí mismo.
-
-**La cita se verifica que exista, no que sostenga.** El filtro comprueba que el número de pasaje
-citado sea uno de los que se le mostraron al modelo, y eso descarta las citas inventadas — pero
-no que el pasaje diga algo que justifique la pregunta. Observado en la primera corrida real: una
-pregunta inferencial correcta sobre `Interview ⊑ Technique ⊑ Methodological Strategy` citando un
-pasaje que anuncia las secciones del paper. La pregunta sirve; la cita no la sostiene. Verificar
-eso mecánicamente no es obvio —haría falta algo como el chequeo de solapamiento léxico entre
-pregunta y pasaje, con su propio umbral sin calibrar— así que por ahora es carga de la revisión
-humana del paso 4, y conviene que quien revise lo sepa.
-
-Dos huecos concretos en la etapa:
-
-- **La regeneración de consultas bajo reorganización (D1) no está.** El spec elige "regenerar la
-  consulta cuando cambian las clases involucradas", y `cq.sparql_regeneration: on_class_change`
-  está en el config sin nada que lo lea. Hoy una CQ cuya clase se dividió en una iteración pasa a
-  fallar por una razón que no es la que el criterio quiere medir.
-- **La deduplicación cae a texto normalizado sin encoder.** Dos preguntas que difieren en una
-  palabra sobreviven, lo que es costo de revisión y no un criterio de parada equivocado — pero
-  conviene saberlo antes de leer 60 candidatas.
-
-
-### 8i. Ajuste del matcher (§6.3) — HECHO, con un resultado que cambia el default
-
-> **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
-> da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
-> más grande que se midió acá— y **sólo sirve en su propio dominio**: el de CRAFT aplicado a MaterioMiner
-> resta 2,1 puntos. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.12.
->
-> **Ajuste completo en vez de LoRA**, apartándose de la letra del spec: LoRA existe para no tocar
-> todos los pesos de un modelo grande, y éste tiene 33 millones de parámetros y entrena en 79
-> segundos. Agregar `peft` para evitar un costo que no existe sería complejidad sin
-> contrapartida; la sustancia es la misma.
->
-> Lo que queda abierto es el circuito que el spec describe: hoy las etiquetas salen de un par
-> anotado, y la idea era que salieran solas de las decisiones de zona gris del usuario.
-> `grey labels --export` ya escribe ese formato y hay **cero** respuestas acumuladas, así que esa
-> mitad sigue esperando a que alguien conteste.
-
-<details>
-<summary>Lo que decía antes de medirlo</summary>
-
-### LoRA (§6.3) — la única pieza del plan bloqueada por falta de datos, no de código
-
-El spec pone el ajuste del matcher como el arreglo de la compuerta no-go: si la tasa de falsos
-huérfanos es alta, mejor modelo, mejores glosas, **LoRA con las primeras etiquetas**. Las
-primeras dos ya se probaron —las glosas empeoraron el matching y el encoder es el que hay— así
-que queda la tercera, y es la única del plan que no se puede escribir todavía.
-
-Lo que falta es el insumo, y ahora se sabe exactamente cuál: las respuestas de zona gris que
-`grey answer` acumula. Hoy hay **una**. `grey labels --export` ya las escribe en el formato que
-un entrenamiento necesita (mención, clase ofrecida, puntaje, si se aceptó), así que la
-infraestructura de datos está; falta que alguien conteste unos cientos de pares.
-
-**No escribir el entrenador antes de tener con qué probarlo.** Un script de fine-tuning que
-nunca corrió sobre datos reales es código que parece listo y no lo está, y el proyecto ya
-documenta esa clase de falla (la edición silenciosa de la entrada de coordinación). El orden es:
-contestar zona gris → exportar → medir el cross-encoder tuneado contra el barrido de `calibrate`
-→ recién ahí decidir si `use_cross_encoder` vuelve a `true`.
-
-Cuánto hace falta es desconocido, y el techo disponible es más bajo de lo que parecía: contra
-`v5`, que es la versión vigente, hay **131 pares** esperando respuesta, no los 219 de `v2` —esa
-versión quedó tipada contra una capa de menciones que después se volvió a extraer—. Un re-ranker
-entrenado con ciento y pico de ejemplos es una apuesta, no una medición.
-
-</details>
-
-**La fuente de etiquetas que no requiere trabajo humano, que resultó ser la buena:** el par de
-calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
-medible hoy mismo, sin que nadie conteste nada. Lo que no dice es cuánto **transfiere** a otro
-dominio, y con el entregable siendo la caracterización del sistema esa pregunta deja de ser una
-salvedad y pasa a ser parte del resultado: entrenar en un par y evaluar en otro es justamente lo
-que hay que medir. Los pares de la tarea «más pares» son el banco para eso.
-
-
-### 9. El par cualitativo, retirado — y lo que sí dejó
-
-La semilla de metodología cualitativa contra el corpus de política de ciencia abierta **está
-fuera de circulación** desde el 2026-09-09. No es un caso de aplicación al que haya que volver:
-el proyecto no tiene dominio comprometido —el entregable es el sistema y su caracterización a
-través de pares— y esa dupla fue el andamio para tener con qué probar mientras no existía un par
-anotado. Los pares publicados lo reemplazan por completo.
-
-Lo que dejó, y que sigue valiendo porque es sobre el método y no sobre el par:
-
-- **El desajuste temático es medible, y el comando `alignment` lo hace** — pero sólo cuando se
-  le nombra el vocabulario. Sobre 495.213 caracteres, `field note`, `informant`, `coding scheme`,
-  `thematic analysis` y `grounded theory` aparecen **cero veces**: 0 de 5, contra 5 de 5 sobre
-  MaterioMiner. Ésa es la parte que decide.
-
-  Lo que **no** funciona, medido: la cobertura global —qué fracción de las etiquetas de la
-  ontología aparece— no sirve de veredicto. Daba **20% sobre MaterioMiner**, un par real anotado
-  por expertos, y **50% sobre el par roto**. Es estructural: una ontología publicada cubre un
-  dominio entero y un corpus cubre una franja, así que la mayoría de las clases no tiene por qué
-  aparecer. Restringir a etiquetas multipalabra tampoco separa (9% contra 18%). Queda como
-  diagnóstico y el comando lo dice.
-
-  Lo que faltaría para decidir sin que nadie nombre términos es mirar del lado de las
-  **menciones** —¿lo que el corpus nombra tiene clase?— y eso pide anotaciones o el matcher, que
-  es justo lo que este chequeo quería evitar.
-- **El eco léxico se hace visible cuando el par está desalineado**, y por eso este par sirvió:
-  las 18 automáticas de `v5` son casi todas la palabra corriente que da nombre a la clase. Ver
-  la entrada 19.
-
-Los datos derivados (`data/`, versiones `v0`–`v5`) quedan como están: son historia, y los
-números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md).
-
----
-
-## Alcance pendiente del spec
-
-### 10. Sesión interactiva
-
-El spec tiene cinco puntos donde decide el usuario —elegir rama (§6.6), zona gris del matcher
-(§6.2), propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas (§4.3)— y los
-cinco tienen ahora por dónde contestarse: `branch --choose`, `grey answer`, `functional
---declare`, `cq`, `review resolve`. Las decisiones sobreviven a re-correr en los cinco casos.
-
-Lo que falta es **una interfaz encima**, no la maquinaria. Contestar 219 pares de zona gris de a
-uno por CLI es correcto y es tedioso; el anotador de navegador del conjunto de retención ya
-demuestra que la forma existe, y aplicarla acá es trabajo conocido. Y falta que `next` pueda
-ejecutar la etapa siguiente además de nombrarla — ver 8g.
-
-Cuando exista, `review_items` también es donde viven las excepciones por caso de las reglas de
-mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
-
-### 11. Mundo abierto: lo que falta
-
-- **Propiedades funcionales (§6.8)**: la etapa está (`functional`) y no tiene propiedades que
-  mirar — ver 8f. Lo que sí quedó resuelto es hacer visible el riesgo silencioso: `--declare`
-  corre el razonador y muestra qué individuos se fusionarían antes de commitear nada.
-- **`NegativePropertyAssertion` (§6.4)**: `refuted` ya se escribe (`mark --mark refuted`) y saca
-  la aserción del ABox, que es lo que el spec pide. Lo que sigue sin existir es la aserción
-  negativa explícita, y con razón: bajo OWA sólo corresponde cuando **se sabe** que algo es
-  falso, no cuando hay duda, y no hay propiedades donde ponerla todavía.
-- **CQ negativas**: `cq_a4_05` en los ejemplos pregunta por completitud del grafo con
-  `FILTER NOT EXISTS`, que es mundo cerrado. Sirve como diagnóstico del artefacto, pero §4.4
-  define el tipo negativo como "mundo abierto explícito". Mal precedente para quien escriba CQ
-  nuevas.
-
-### 12. Ruta VLM
-
-Páginas `scan`/`uncertain` quedan sin parsear, las figuras sin captioning y las fórmulas sin
-extraer. El pipeline lo registra en vez de fingir que las procesó.
-
-### 13. Tablas sin bordes
-
-`find_tables` solo ve tablas con líneas; la estrategia por texto devuelve la página entera como
-tabla. El hueco se **mide** —columna "table gap"— pero no se cubre. La respuesta del spec es
-rutear esas páginas a MinerU.
-
-### 14. `language.py` está cableado a es/en
-
-Los marcadores de palabras función están hardcodeados. Otro idioma son ~10 líneas más, o
-apoyarse en el `/Lang` declarado del PDF.
-
-### 15. Código sin consumidor
-
-Tres cosas implementadas y probadas que nada invoca. No están rotas: están desconectadas, y
-cada una es o bien un cable que falta o bien código a borrar.
-
-- **`versioning.nearest_state`** — detección de loops *parciales* (§6.8): la rama vuelve *casi*
-  al estado anterior, mismo compromiso de modelado con IRIs distintos, y el hash exacto no lo ve.
-  Ahora sí hay dónde enchufarlo: `branch` computa el hash de cada rama y avisa cuando es un
-  retorno exacto, pero usa `find_by_hash` y no esto. Falta el umbral en el config y una línea en
-  el llamador.
-- **`iteration.trigger | batch_size`** — cuándo se dispara una iteración y de a cuántos
-  documentos. Describen un loop automático que sigue sin existir: `next` dice qué corresponde y
-  las etapas se corren a mano, una por comando (ver 8g). `max_iterations` **sí** se consume
-  ahora, como criterio duro de `stop`.
-- **`llm.B6_branching`** — `branch` no llama a ningún modelo, y no puede: la única prohibición
-  explícita del spec para esa etapa es pedirle alternativas a un LLM. La clave quedó de cuando
-  se pensaba que haría falta. Es candidata a borrar, no a cablear.
-- **`cq.sparql_regeneration`** — la política D1 de regenerar consultas cuando cambian las clases
-  involucradas. Nada la lee todavía; ver 8h.
-
-Lo que hay que evitar es que crezcan en silencio: una clave de config que nadie lee afirma algo
-falso sobre lo que el sistema hace. `matching.blocking_strategy` fue el caso —decía `embedding`
-y bloqueaba por prefijo de 4 caracteres— y se resolvió haciendo que el config **rechace** un
-valor no implementado en vez de aceptarlo. Ese es el patrón para las que quedan.
-
-### 16. Multi-rama: las preguntas que el spec deja abiertas
-
-B6 ya está implementado (`branch`). Lo que va acá es distinto: el diseño multi-rama tiene
-preguntas que **el spec mismo declara sin resolver**, y siguen sin resolverse — implementar la
-etapa no las contesta, sólo las vuelve alcanzables.
-
-- **Expiración de rechazos (§6.7, riesgo R2).** Con semilla reorganizable un rechazo no es
-  permanente: lo rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura
-  cambió. Bloquearlo para siempre acorrala el proceso; no bloquearlo produce un loop. La
-  política elegida —registrar el rechazo relativo al estado de la ontología y expirarlo cuando
-  las clases involucradas se reorganizan— está marcada textualmente como **"no es una regla
-  limpia, requiere ajuste empírico"**. Es la deuda más profunda del aparato y no se resuelve
-  leyendo: se resuelve con iteraciones reales encima.
-- **Comparación por forma normal (§6.7).** Para detectar re-proposición hay que normalizar el
-  axioma antes de comparar, o el mismo compromiso vuelve con IRIs distintos y no se detecta.
-  La pieza existe —`versioning.logical_axioms` canonicaliza— pero no está conectada a la tabla
-  `decisions`, que es donde vive el historial de rechazos.
-- **Scoring de ramas en frío (§11).** `historical_affinity` y `parsimonia` requieren historial,
-  y el spec dice explícitamente que se **omitan** en las primeras iteraciones en vez de
-  calcularse con datos insuficientes. O sea: el scoring nace incompleto por diseño y hay que
-  implementarlo sabiéndolo.
-- **Techo de 3–5 ramas (§6.6).** Es un número puesto a dedo contra una explosión de 2^k. El
-  mecanismo real que lo evita es presentar los ejes independientes por separado y armar ramas
-  completas sólo cuando están acoplados; el techo es la red, no la solución. **Implementado
-  así**: `couple()` agrupa por axiomas compartidos y `max_branches` es sólo el corte final.
-- **El umbral de `nearest_state`.** Lo que menciona el punto 15 como cable faltante tiene además
-  un parámetro sin calibrar: cuánta distancia de Jaccard cuenta como "casi el mismo estado". No
-  hay forma de fijarlo sin iteraciones reales, igual que la expiración de rechazos.
-
-Todo esto comparte una propiedad incómoda: **no se puede calibrar contra un corpus externo**,
-como sí se puede el matcher. Depende del historial de decisiones de este proyecto en particular,
-que hoy tiene cero entradas.
-
-### 17. Tipado consciente de la jerarquía
-
-Hoy el matcher rankea cada mención contra las clases como si fueran independientes: no sabe que
-`Interview ⊑ Technique`. Usar la estructura —preferir la clase más específica cuyos ancestros
-también puntúan, penalizar una cuyos hermanos puntúan idéntico— es el mecanismo natural contra
-el eco léxico, que es el modo de falla que ningún umbral filtra (punto 7).
-
-No se puede medir sobre la semilla actual: 34 clases, profundidad 3, seis raíces. Sí sobre un
-par de calibración con jerarquía profunda, donde entra como una variable más del barrido de
-umbrales.
-
-### 18. `cross_language_always_grey` nunca se midió
-
-`matching.cross_language_always_grey: true` y la elección de un bi-encoder multilingüe son
-decisiones de config sin una sola medición detrás. El razonamiento declarado —un encoder
-monolingüe empujaría todo par es/en a la zona gris por idioma solo— es plausible y nunca se
-verificó, y la regla que lo acompaña es fuerte: manda a revisión humana *todo* par en idiomas
-distintos, sin importar el score.
-
-**Ningún par de calibración disponible la toca**, porque todos son en inglés. La única vía
-encontrada son los corpus clínicos del BSC —**SympTEMIST**, **DisTEMIST**, **MedProcNER**: 1.000
-casos clínicos en español cada uno, anotados y normalizados a SNOMED CT, en standoff BRAT, que
-`calibration.read_brat` ya lee—. SNOMED CT es lo más axiomatizado disponible (EL++, definiciones
-lógicas en casi todo el vocabulario) y **Argentina es país miembro de SNOMED International**, con
-lo cual la Affiliate License es gratuita.
-
-Lo que cuesta: la licencia hay que tramitarla, y SNOMED son ~360k conceptos, así que hay que
-subsetear y documentar el criterio como pide la fase 0 del plan. Por eso está acá y no en la
-tabla de tareas: no está en el camino crítico de la calibración, y no conviene que bloquee las tareas de calibración.
-
-Mientras tanto el default se queda como está. Lo honesto es que se queda por falta de evidencia
-en contra, no por evidencia a favor.
-
-### 19. Desambiguación por contexto: el agujero que el eco léxico deja abierto
-
-Salió analizando el caso del homónimo —`cell` de biología contra `cell` de una organización
-clandestina—. Conviene separar dónde **no** está el problema, porque la intuición apunta al
-lugar equivocado:
-
-- **No está en cómo se acuñan los IRIs.** El `uuid5` se computa sobre el **id de la mención**,
-  que es único por ocurrencia, no sobre la forma superficial: verificado sobre la base,
-  `researchers` aparece 12 veces y tiene 12 ids distintos. Nunca se computa `uuid5("cell")`.
-- **No está en la resolución de entidades.** Dos menciones homónimas terminan en el mismo
-  individuo sólo si algo decide fusionarlas, y las reglas ya cubren el caso: nombre propio
-  idéntico fusiona **sólo si además tipan a la misma clase**, y si no, la decisión es
-  `identical_name_different_class` y va a zona gris. Un sintagma genérico de una palabra en
-  minúscula se separa sin preguntar. El homónimo genérico ni siquiera llega a evaluarse.
-
-**Está en el tipado.** Nada impide que `cell` en sentido de célula clandestina tipe a la clase
-`Cell` de biología con coseno alto: es eco léxico puro, es el modo de falla que el barrido midió
-—11 de 24 clases sobre umbral en la semilla, y las 32 automáticas del corpus real— y ningún
-umbral lo filtra, porque la palabra coincide con el nombre de la clase y **el contexto no entra
-en la comparación**.
-
-Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
-
-1. ~~**Meter contexto en la comparación.**~~ **Probado y descartado el 2026-09-10.** Se midió en
-   cuatro formas sobre MaterioMiner (n=2.229) y en dos sobre CRAFT (n=8.723): concatenar la
-   oración hunde @1 de 25,3% a 11,3% —y en CRAFT de 69,8% a **14,3%**—, una ventana angosta da
-   7,4%, y la fusión de puntajes, que es la única que no rompe la forma del sintagma, aporta
-   +0,4 puntos en @1 y pierde uno en @5. Reproducible con `calibrate --context sentence`.
-   Es el mismo hallazgo que el de las glosas: un encoder simétrico compara por forma, y
-   agregarle una oración a un sintagma lo convierte en una oración. **La solución no está en la
-   representación de la mención, está en el encoder** — ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.11.
-2. **Usar la jerarquía**, que es la entrada 17: preferir la clase cuyos ancestros también
-   puntúan. Un `cell` biológico debería activar también `Anatomical Structure`; uno clandestino,
-   nada del subárbol.
-
-Lo que **no** arregla nada es tocar el esquema de IRIs. La identidad no es el problema; la
-desambiguación sí.
-
-### 20. El historial de feedback (§6.7) — unificado; falta llevarlo al prompt
-
-> **Parcialmente resuelto el 2026-09-10.** `decisions` ya se escribe: una fila por (rama, eje)
-> con las seis categorías fijas, el estado `invalid` separado de `rejected`, el comentario y el
-> hash del estado contra el que se decidió. `branches` sigue existiendo como cola de propuestas
-> —que es su trabajo— y dejó de ser el registro. `branching.precedents(categoría)` devuelve los
-> casos anteriores.
->
-> **Lo que falta es lo que justifica todo esto:** inyectar esos precedentes en el prompt de la
-> iteración siguiente. Hoy `precedents` no tiene llamador. Y sigue faltando la comparación por
-> forma normal: `versioning.logical_axioms` canonicaliza y `decisions.normalized_axioms` guarda
-> los ids de axioma, no la forma normal, así que el mismo compromiso vuelve con IRIs distintos y
-> no se detecta.
-
-<details>
-<summary>El diagnóstico original</summary>
-
 `branch --choose` graba qué rama se eligió y marca rechazadas a sus hermanas, que es la mitad que
 importa —lo aceptado ya está en la ontología, lo rechazado no está en ningún otro lado—. Lo que
 falta es todo lo que el spec quiere hacer **con** ese registro.
 
-**El esquema D9 existe y nadie lo escribe.** La tabla `decisions` está en `db.py` con exactamente
-los campos que pide §6.7 —`status`, `axis`, `comment`, `normalized_axioms`, `ontology_state`— y
+**El esquema `GRADED-FEEDBACK` existe y nadie lo escribe.** La tabla `decisions` está en `db.py` con exactamente
+los campos que pide `ITER-FEEDBACK` —`status`, `axis`, `comment`, `normalized_axioms`, `ontology_state`— y
 **cero filas**: `branching` guarda su propia versión más pobre en `branches.status` y
 `branches.note`. Son dos lugares para lo mismo, y el que se usa es el que menos guarda:
 
-- `status` en `branches` es `chosen`/`rejected`; D9 distingue además **`invalid`**, y esa
+- `status` en `branches` es `chosen`/`rejected`; `GRADED-FEEDBACK` distingue además **`invalid`**, y esa
   distinción es el punto — separa la señal fuerte ("esto está mal") del rechazo blando ("elegí
   otra"), que colapsadas se pierden.
-- `axis` en `branches` es el id del eje detectado (`attribute_as_class:6c6b32…`); D9 quiere una de
+- `axis` en `branches` es el id del eje detectado (`attribute_as_class:6c6b32…`); `GRADED-FEEDBACK` quiere una de
   **seis categorías fijas** (`granularity`, `division_criterion`, `property_vs_class`,
   `directionality`, `scope`, `terminology`), que es lo que hace comparables dos decisiones de
   iteraciones distintas.
 - `comment` sí está, y el spec dice que **es el campo que más rinde**.
 
-**Falta el destino del feedback, que es lo que lo justifica.** §6.7 es explícito en que con
+**Falta el destino del feedback, que es lo que lo justifica.** `ITER-FEEDBACK` es explícito en que con
 decenas o pocos cientos de decisiones no se ajusta un modelo: se hace **recuperación de ejemplos
 en contexto** —ante una propuesta nueva, traer las 3–5 decisiones históricas más parecidas por
 embedding e inyectarlas en el prompt con el comentario del usuario—. Nada de eso existe. Hoy
@@ -1080,7 +750,7 @@ ver qué casos usó.
 
 **Y falta conectar la forma normal.** `versioning.logical_axioms` ya canonicaliza, pero no está
 enchufado a `decisions`, así que el mismo compromiso vuelve con IRIs distintos y no se detecta
-como re-proposición. Ver también la entrada 16, que reúne las preguntas que el spec deja abiertas
+como re-proposición. Ver también la `DEBT-MULTI-BRANCH-QUESTIONS`, que reúne las preguntas que el spec deja abiertas
 sobre este mismo aparato.
 
 Orden razonable si se retoma: ~~unificar en `decisions`~~ → ~~mapear el eje a las seis
@@ -1088,7 +758,7 @@ categorías~~ → ~~recuperación por embedding~~ → ~~forma normal~~. Los cuat
 
 </details>
 
-### 21. El hash de estado no escalaba a una ontología con axiomas de verdad — RESUELTO
+### DEBT-STATE-HASH — El hash de estado no escalaba a una ontología con axiomas de verdad — RESUELTO
 
 > **Resuelto el 2026-09-09.** `logical_axioms` etiqueta los nodos en blanco por su estructura en
 > vez de canonicalizar el grafo entero: `cl-base.owl` pasó de **no terminar en 7 minutos** a
@@ -1108,7 +778,7 @@ Y `normalize-seed` lo llama **tres veces**: dos para el hash de estado y una má
 
 **No alcanza con sacarlo.** La canonicalización está por una razón: dos grafos que difieren sólo
 en los identificadores de sus nodos en blanco son el mismo estado, y de ese hash depende la
-detección de loops del §6.8. Sin ella, re-serializar la misma ontología produciría un estado
+detección de loops del `ITER-APPLY`. Sin ella, re-serializar la misma ontología produciría un estado
 "nuevo" y el DAG se llenaría de versiones que no cambian nada.
 
 La salida es canonicalizar sólo lo que lo necesita. En una ontología OWL casi todo nodo en blanco
@@ -1131,7 +801,7 @@ conjunto — o sea, de los identificadores que rdflib repartió al parsear, que 
 hash. La actualización tiene que ser **sincrónica**: todo lo de una vuelta se calcula contra las
 etiquetas de la anterior.
 
-### 22. Ontologías que importan otras ontologías
+### DEBT-ONTOLOGY-IMPORTS — Ontologías que importan otras ontologías
 
 Una ontología publicada casi nunca viene sola: declara `owl:imports` hacia otras por IRI, y ese
 IRI puede no responder. La Materials Mechanics Ontology importa `https://w3id.org/pmd/co/2.0.4`,
@@ -1160,7 +830,7 @@ falla que este proyecto encontró tres veces y no conviene sumar la cuarta.
 Mientras tanto conviene leer los veredictos del razonador sobre una ontología con imports rotos
 sabiendo que son sobre menos axiomas. `validate` lo dice arriba de la tabla.
 
-### 23. La extracción confunde el metalenguaje académico con el dominio — BAJO ESFUERZO, ALTA PRIORIDAD
+### DEBT-ACADEMIC-METALANGUAGE — La extracción confunde el metalenguaje académico con el dominio — BAJO ESFUERZO, ALTA PRIORIDAD
 
 De 45 clases inducidas sobre MaterioMiner, tres salieron de vocabulario sobre el paper y no
 sobre la mecánica de materiales:
@@ -1197,7 +867,7 @@ tiene nada que objetarle a una clase nueva sin padre. Pasan los siete filtros.
 
 Empezar por la 2, medir sobre el mismo par, y recién ahí decidir si hace falta la 1.
 
-### 24. El tercer punto de la curva de tamaño — BAJO ESFUERZO, ALTA PRIORIDAD
+### DEBT-SIZE-CURVE-THIRD-POINT — El tercer punto de la curva de tamaño — BAJO ESFUERZO, ALTA PRIORIDAD
 
 Hay dos puntos medidos: 428 clases (MaterioMiner) y 3.418 (CRAFT/CL), y el comportamiento cambia
 tanto entre ellos —recall@1 de 21,5% contra 68,5%— que dos puntos no dan una forma, dan una
@@ -1209,10 +879,10 @@ corpus, escribir un `pair.yml` y correr el barrido. Es la tarea de mejor relaci�
 cuesta y lo que responde, porque **caracterizar el sistema a través de pares es el entregable**.
 
 Ojo con una cosa antes de correrlo: con ~40k clases el hash de estado y la carga de la ontología
-entran en un régimen que no se probó. El hash ya está arreglado (entrada 21), pero 40k clases es
+entran en un régimen que no se probó. El hash ya está arreglado (`DEBT-STATE-HASH`), pero 40k clases es
 diez veces `cl-base.owl`.
 
-### 25. Disparos automáticos que hoy hay que recordar — BAJO ESFUERZO, ALTA PRIORIDAD
+### DEBT-AUTOMATIC-TRIGGERS — Disparos automáticos que hoy hay que recordar — BAJO ESFUERZO, ALTA PRIORIDAD
 
 Tres lugares donde el pipeline sabe que algo quedó viejo y no hace nada:
 
@@ -1222,7 +892,7 @@ Tres lugares donde el pipeline sabe que algo quedó viejo y no hace nada:
 - **`metaproperties` después de inducir clases nuevas.** Las clases nuevas llegan sin etiquetar,
   así que OntoClean saltea sus subsunciones — que son justamente las que acaba de proponer el
   sistema y las que más conviene revisar.
-- **`match` después de cambiar las glosas.** Es el que cierra el bucle autocorrectivo de §4.3:
+- **`match` después de cambiar las glosas.** Es el que cierra el bucle autocorrectivo de `PREP-NORMALIZE`:
   mejor glosa, mejor matching, menos falsos huérfanos. Hoy `enrich` deja escrito el comando y
   nadie lo corre.
 

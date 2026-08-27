@@ -1,16 +1,16 @@
-"""B3 — class induction from orphan mentions (spec 6.1, 6.6, 3.1).
+"""ITER-INDUCE — class induction from orphan mentions (ITER-EXTRACT, 6.6, 3.1).
 
 The division of labour is the pipeline's governing principle: **the code clusters, the model
 names.** Grouping mentions by similarity is arithmetic and belongs in code; deciding what a
 group of surface forms is called, and what distinguishes it, is the judgement the model is for.
-The stage's model setting is called `B3_naming` for that reason.
+The stage's model setting is called `iter_induce` for that reason.
 
 Clustering here is legitimate where it would not be one layer up. Spec 3.1 permits graph
 algorithms over the *orphan mention graph* — raw ABox — and forbids them over the TBox
 serialization, because disjointness inverts its sign under structural similarity: two classes
 declared incompatible come out looking connected.
 
-Two guards against the generator's known bias of over-producing hierarchy (spec 6.1, 6.6):
+Two guards against the generator's known bias of over-producing hierarchy (ITER-EXTRACT, 6.6):
 
 - A cluster below `min_support` is not a class. One mention proposing a class is noise, and the
   validator rejects levels with a single subclass anyway.
@@ -18,8 +18,10 @@ Two guards against the generator's known bias of over-producing hierarchy (spec 
   neighbours. A proposal without one is rejected here rather than at the reasoner, because 6.6
   makes "sin criterio de división declarado" a rejection condition in its own right.
 
-Nothing is applied. B3 proposes; axiomatizing and applying are later stages, and the nearest
-existing class is recorded as a *candidate* parent for B4 to decide on rather than a subsumption
+Nothing is applied. ITER-INDUCE proposes; axiomatizing and applying are later stages, and the
+nearest
+existing class is recorded as a *candidate* parent for ITER-AXIOMATIZE to decide on rather than a
+subsumption
 asserted here.
 """
 
@@ -37,7 +39,7 @@ from typing import Any
 from .llm import Prompt
 from .matching import dot
 
-STAGE = "B3_naming"
+STAGE = "iter_induce"
 
 PROPOSED = "proposed"
 REJECTED = "rejected"
@@ -112,7 +114,8 @@ CREATE TABLE IF NOT EXISTS proposed_classes (
   label         TEXT NOT NULL,
   gloss         TEXT,
   criterion     TEXT,               -- what separates it; 6.6 rejects a class without one
-  nearest_iri   TEXT,               -- a candidate parent for B4, not an asserted subsumption
+  nearest_iri   TEXT,               -- a candidate parent for ITER-AXIOMATIZE,
+                                    -- not an asserted subsumption
   nearest_score REAL,
   support       INTEGER NOT NULL,
   status        TEXT NOT NULL,      -- proposed | rejected
@@ -225,7 +228,8 @@ def redundant(
 ) -> dict[str, str]:
     """Propuestas cuyo nombre ya es el de una clase de la ontología.
 
-    Es el camino que la compuerta no-go de §12.1 nombra —un falso huérfano se vuelve una clase
+    Es el camino que la compuerta no-go de BUILD-NO-GO-GATE nombra —un falso huérfano se vuelve una
+    clase
     espuria— y acá se lo puede atajar barato, porque para cuando la inducción **nombró** el
     cluster ya hay contra qué comparar. El matcher falló sobre las menciones sueltas
     ("specimen", "the specimens") y el nombre del grupo sí coincide: medido sobre MaterioMiner,

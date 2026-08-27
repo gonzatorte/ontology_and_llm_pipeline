@@ -1,4 +1,4 @@
-"""Branch construction — the exceptional path, not the default (spec 6.6).
+"""Branch construction — the exceptional path, not the default (ITER-BRANCH).
 
 What the user described is belief revision with multiple extensions: when a set of candidate
 axioms cannot all be kept, the maximal consistent subsets are the coherent alternatives. The
@@ -21,7 +21,8 @@ are a defect report; two branches it cannot separate are a decision, and every l
 depends on which one was taken.
 
 **Grouping is by axis, not by axiom.** A user who is shown thirty axioms to accept or reject is
-doing by hand exactly the work the pipeline exists to avoid (D21), and the choices are not
+doing by hand exactly the work the pipeline exists to avoid (AUTO-APPLY-WHEN-NO-AXES), and the
+choices are not
 independent anyway. Axes that share no axiom are presented separately — k independent binary
 axes are k questions, not 2^k branches — and only coupled ones are expanded into full branches.
 
@@ -49,12 +50,13 @@ KIND_MODELLING = "modelling"
 PROPOSED = "proposed"
 CHOSEN = "chosen"
 REJECTED = "rejected"
-# La cuarta del esquema D9 (§6.7), y la que hace que el registro sirva: separa la señal fuerte
+# La cuarta del esquema GRADED-FEEDBACK (ITER-FEEDBACK), y la que hace que el registro sirva: separa
+# la señal fuerte
 # —"esto está mal"— del rechazo blando —"elegí otra"—. Colapsadas, se pierde.
 INVALID = "invalid"
 SETTLED = (CHOSEN, REJECTED, INVALID)
 
-# Las seis categorías fijas de §6.7. El eje detectado es específico de la iteración
+# Las seis categorías fijas de ITER-FEEDBACK. El eje detectado es específico de la iteración
 # (`attribute_as_class:6c6b32f28f86`); esto es lo que hace comparables dos decisiones de
 # iteraciones distintas, que es para lo que el historial existe.
 GRANULARITY = "granularity"
@@ -132,7 +134,7 @@ class Axis:
 @dataclass
 class Score:
     """Scoring a branch is not scoring its axioms: a branch of individually sound axioms can
-    still be a bad global compromise (spec 6.6).
+    still be a bad global compromise (ITER-BRANCH).
 
     The last two need history. `historical_affinity` is undefined until something has been
     accepted or rejected before, and `parsimony` is a ratio whose value means nothing without
@@ -350,7 +352,7 @@ def _axioms_of(situation: Situation, proposal_ids: Iterable[str]) -> frozenset[s
 
 
 def attribute_as_class(situation: Situation, *, min_group: int = 2) -> list[Axis]:
-    """`RedProduct` as a class, or `hasColor red` as a value (spec 6.6, the amber node).
+    """`RedProduct` as a class, or `hasColor red` as a value (ITER-BRANCH, the amber node).
 
     Detected exactly, not guessed: a proposed class whose label is the parent's label with a
     modifier in front — *Startup* Company under Company, *Semi-Structured* Interview under
@@ -417,7 +419,7 @@ def division_criterion(
     min_separation: float = 0.10,
     min_group: int = 2,
 ) -> list[Axis]:
-    """A parent being divided along two criteria at once (spec 8.2's own example).
+    """A parent being divided along two criteria at once (SCHEMAS-BRANCH's own example).
 
     Induction makes every proposal declare what distinguishes it, and the validator already
     rejects one that does not. That turns a modelling commitment nothing can see in the OWL
@@ -698,7 +700,7 @@ def _name(axiom_id: str, axioms: Sequence[Axiom], labels: dict[str, str]) -> str
 
 def install(conn: sqlite3.Connection) -> None:
     """`branches` es de este módulo; `decisions` la crea `db.connect`, porque es el registro
-    de §6.7 y no una tabla de la etapa de ramas."""
+    de ITER-FEEDBACK y no una tabla de la etapa de ramas."""
     conn.executescript(SCHEMA)
     conn.commit()
 
@@ -777,13 +779,14 @@ def settle(
     invalid: Sequence[str] = (), state_hash: str = "",
     normal_forms: dict[str, str] | None = None,
 ) -> dict:
-    """Elegir una rama, y grabar la decisión en `decisions`, que es el registro de §6.7.
+    """Elegir una rama, y grabar la decisión en `decisions`, que es el registro de ITER-FEEDBACK.
 
     Los rechazos son el punto. Lo aceptado ya está en la ontología; lo rechazado no está en
     ningún otro lado, y es lo que una iteración posterior necesita para no volver a proponer lo
     mismo.
 
-    `invalid` nombra hermanas que además de no elegidas están **mal**. Es la distinción que D9
+    `invalid` nombra hermanas que además de no elegidas están **mal**. Es la distinción que
+    GRADED-FEEDBACK
     pide y que colapsada se pierde: "elegí otra" y "esto no puede ser" son señales de fuerza
     distinta, y sólo la segunda sirve para descartar de entrada una propuesta parecida.
     """
@@ -823,7 +826,7 @@ def settle(
 
 
 def _record(conn: sqlite3.Connection, branch: dict, status: str, state_hash: str) -> None:
-    """Una fila por (rama, eje) en `decisions`, el esquema D9.
+    """Una fila por (rama, eje) en `decisions`, el esquema GRADED-FEEDBACK.
 
     Una fila por eje y no por rama: el historial se consulta por categoría —"¿qué se decidió
     antes sobre granularidad?"— y una rama con dos ejes acoplados responde a dos preguntas.
@@ -872,7 +875,7 @@ def precedents_like(
 ) -> list[dict]:
     """Las decisiones anteriores más parecidas a esta propuesta.
 
-    Es lo que §6.7 quiere hacer con el registro, y elige explícitamente **recuperación de
+    Es lo que ITER-FEEDBACK quiere hacer con el registro, y elige explícitamente **recuperación de
     ejemplos** sobre ajustar un modelo: con decenas o pocos cientos de decisiones no se ajusta
     nada, y esto además es inspeccionable — ante una propuesta rara se puede ver qué precedentes
     se usaron.
@@ -901,7 +904,7 @@ def precedents(
 ) -> list[dict]:
     """Las decisiones anteriores sobre esta categoría, la más reciente primero.
 
-    Es lo que §6.7 quiere hacer con el registro: ante una propuesta nueva, traer los casos
+    Es lo que ITER-FEEDBACK quiere hacer con el registro: ante una propuesta nueva, traer los casos
     parecidos y mostrárselos al modelo con el comentario del usuario. El spec elige esto sobre
     el fine-tuning por volumen —decenas de decisiones no ajustan nada— y por algo mejor: es
     **inspeccionable**, se puede ver qué precedentes se usaron.
@@ -930,7 +933,7 @@ def history(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
         SETTLED,
     ):
         # `invalid` pesa el doble que `rejected`: una es "elegí otra" y la otra "esto no puede
-        # ser", y son las dos cosas que D9 separa.
+        # ser", y son las dos cosas que GRADED-FEEDBACK separa.
         delta = weights[row["status"]]
         for entry in json.loads(row["axes"]):
             key = (entry["axis"], entry["option"])

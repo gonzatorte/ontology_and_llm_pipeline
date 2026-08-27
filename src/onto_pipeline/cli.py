@@ -100,7 +100,8 @@ ForceRegenOption = typer.Option(
     False, "--force", help="Write the ABox again even if the rules did not change."
 )
 MarkOption = typer.Option(
-    ..., "--mark", help="refuted (the document is wrong) | misextracted (B1 read it wrong)."
+    ..., "--mark",
+    help="refuted (the document is wrong) | misextracted (ITER-EXTRACT read it wrong).",
 )
 MentionsOption = typer.Option(..., "--mention", "-m", help="Repeatable: mention ids to mark.")
 ExportOption = typer.Option(
@@ -121,7 +122,7 @@ NoneOfTheseOption = typer.Option(
     False, "--none", help="None of the candidates. A real answer, not a refusal."
 )
 ExportLabelsOption = typer.Option(
-    None, "--export", help="Write the accept/reject labels to this JSONL (spec 6.3)."
+    None, "--export", help="Write the accept/reject labels to this JSONL (ITER-TUNE)."
 )
 TermOption = typer.Option(
     [], "--term",
@@ -155,7 +156,7 @@ WhyOption = typer.Option("", "--why", help="Why this branch, in your words. Kept
 InvalidOption = typer.Option(
     [], "--invalid",
     help="Repetible: hermanas que además de no elegidas están MAL. Señal más fuerte que "
-         "rechazarlas, y §6.7 las separa a propósito.",
+         "rechazarlas, y ITER-FEEDBACK las separa a propósito.",
 )
 PairOption = typer.Argument(..., help="Calibration pair: a directory under calibration_root.")
 MatchAgainstOption = typer.Option(
@@ -223,7 +224,8 @@ def ingest_cmd(
     limit: int | None = LimitOption,
     document: list[Path] | None = DocumentOption,
 ) -> None:
-    """A1+A2: classify pages, parse, populate the block store and the Markdown."""
+    """PREP-CLASSIFY+PREP-PARSE: classify pages, parse, populate the block store and the Markdown.
+    """
     config = Config.load(config_path)
     paths = [p.resolve() for p in document] if document else discover(config.paths.corpus_root)
     if not paths:
@@ -281,7 +283,7 @@ def report(
 
 @app.command("normalize-seed")
 def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
-    """A0: opaque IRIs, derived labels, typo detection, gloss contexts."""
+    """PREP-NORMALIZE: opaque IRIs, derived labels, typo detection, gloss contexts."""
     config = Config.load(config_path)
     seed = normalize_seed(
         config.paths.seed_ontology,
@@ -329,7 +331,7 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
 
     if config.llm.provider == "none":
         console.print(
-            f"[yellow]A0.4 skipped[/]: {len(contexts)} glosses need generation and "
+            f"[yellow]glosses skipped[/]: {len(contexts)} need generation and "
             "llm.provider is 'none'. Set a provider in the config to run it."
         )
         return
@@ -338,13 +340,16 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
 
 
 def _generate_glosses(config, conn, seed, contexts, target) -> None:
-    """A0.4. The gloss is what B2 matches against, so this is what closes the false-orphan
+    """PREP-NORMALIZE-GLOSSES. The gloss is what ITER-MATCH matches against, so this is what closes
+    the false-orphan
     gap the matcher shows while every class still has only a label."""
     model = llm.build(config.llm)
     stage = llm.settings(config.llm, glosses.STAGE)
     ledger = Ledger(conn, config.execution)
 
-    with console.status(f"A0.4: {len(contexts)} glosses at temperature {stage.temperature}"):
+    with console.status(
+        f"glosses: {len(contexts)} at temperature {stage.temperature}"
+    ):
         result = llm.run(
             ledger, model, glosses.PROMPT, stage,
             [(context.iri, glosses.payload(context)) for context in contexts],
@@ -359,7 +364,7 @@ def _generate_glosses(config, conn, seed, contexts, target) -> None:
     seed.graph.serialize(target, format="turtle")
 
     console.print(
-        f"[green]A0.4[/]: {len(written)} glosses ({result.executed} generated, "
+        f"[green]PREP-NORMALIZE-GLOSSES[/]: {len(written)} glosses ({result.executed} generated, "
         f"{result.cached} cached, {len(result.failures)} failed) · "
         f"{result.in_tokens} in / {result.out_tokens} out tokens"
     )
@@ -367,8 +372,8 @@ def _generate_glosses(config, conn, seed, contexts, target) -> None:
         console.print(f"  [red]{iri}[/]: {error}")
 
     # A gloss changes the stored artifact but not the logical state, so the new version keeps
-    # its parent's hash: a re-glossing is not a new state to reason about (spec 6.8), while
-    # the gloss itself is still versioned and travels in the DAG (spec 4.3).
+    # its parent's hash: a re-glossing is not a new state to reason about (ITER-APPLY), while
+    # the gloss itself is still versioned and travels in the DAG (PREP-NORMALIZE).
     parent = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
     next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
     version = versioning.commit(
@@ -418,7 +423,7 @@ def extract_cmd(
     doc_id: str | None = DocIdOption,
     include_held_out: bool = IncludeHeldOutOption,
 ) -> None:
-    """B1: extract candidate mentions from every chunk (spec 6.1).
+    """ITER-EXTRACT: extract candidate mentions from every chunk.
 
     Held-out documents are skipped unless asked for: they are the retention set, and running
     the process over them would measure the pipeline against its own input.
@@ -464,7 +469,7 @@ def extract_cmd(
         if not chunks:
             continue
 
-        with console.status(f"B1 · {identifier[:40]} · {len(chunks)} chunks"):
+        with console.status(f"ITER-EXTRACT · {identifier[:40]} · {len(chunks)} chunks"):
             result = llm.run(
                 ledger, model, extraction.PROMPT, stage,
                 [(chunk.id, extraction.payload(chunk)) for chunk in chunks],
@@ -502,7 +507,7 @@ def coref_cmd(
     doc_id: str | None = DocIdOption,
     include_held_out: bool = IncludeHeldOutOption,
 ) -> None:
-    """B1b: intra-document coreference over the mentions B1 extracted (spec 6.1b).
+    """ITER-COREFER: intra-document coreference over the mentions ITER-EXTRACT extracted.
 
     The model groups mention identifiers, never spans, so its answer can be checked: a marker
     that does not exist or is claimed twice is rejected instead of silently linking the wrong
@@ -530,7 +535,7 @@ def coref_cmd(
             markdown_path(config, identifier).read_text(encoding="utf-8"), mentions
         )
 
-        with console.status(f"B1b · {identifier[:40]} · {len(mentions)} mentions"):
+        with console.status(f"ITER-COREFER · {identifier[:40]} · {len(mentions)} mentions"):
             result = llm.run(
                 ledger, model, coreference.PROMPT, stage,
                 [(identifier, coreference.payload(marked))], coreference.parse,
@@ -578,7 +583,7 @@ def bridge_cmd(
     config_path: Path = ConfigOption,
     version: str | None = VersionOption,
 ) -> None:
-    """B2b: relate orphans to seed classes by world knowledge (spec 6.2b).
+    """ITER-BRIDGE: relate orphans to seed classes by world knowledge.
 
     Runs between `match` and `induce`, and running it is not optional if `induce` is going to
     run: every mention the seed did cover but the matcher failed to connect would otherwise
@@ -621,7 +626,7 @@ def bridge_cmd(
 
     model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
     stage = llm.settings(config.llm, bridging.STAGE)
-    with console.status(f"B2b · {len(items)} phrases from {len(orphans)} orphan mentions"):
+    with console.status(f"ITER-BRIDGE · {len(items)} phrases from {len(orphans)} orphan mentions"):
         result = llm.run(
             Ledger(conn, config.execution), model, bridging.PROMPT, stage,
             [(item.id, bridging.payload(item)) for item in items],
@@ -762,15 +767,18 @@ def axiomatize_cmd(
         proposals, judgements, base_iri=config.seed.base_iri,
         label_to_iri=label_to_iri, support=support,
     )
-    # B5 filter 6, before anything is stored: a `textual` axiom must cite the mentions it came
+    # ITER-VALIDATE filter 6, before anything is stored: a `textual` axiom must cite the mentions it
+    # came
     # from. Applied to `world_knowledge` it would delete exactly the bridges that make the seed
     # useful, so it is not applied to them (6.2b).
     assembly.axioms, uncited = validation.evidence(assembly.axioms)
     axiomatization.persist(conn, version_id, assembly.axioms)
 
     # Re-proposición: lo mismo que ya se descartó, volviendo con otros IRIs. Se avisa y no se
-    # bloquea — con semilla reorganizable un rechazo no es permanente (§6.7), y bloquearlo para
-    # siempre acorrala el proceso. Que expire solo es problema abierto, ver la deuda 16.
+    # bloquea — con semilla reorganizable un rechazo no es permanente (ITER-FEEDBACK), y bloquearlo
+    # para
+    # siempre acorrala el proceso. Que expire solo es problema abierto, ver la
+    # DEBT-MULTI-BRANCH-QUESTIONS.
     repeats = {
         proposal_id: previous
         for proposal_id, shape in shapes.items()
@@ -883,7 +891,7 @@ def grey_list(
     limit: int | None = LimitOption,
     as_json: bool = JsonOption,
 ) -> None:
-    """Grey-zone pairs still unanswered (spec 6.2).
+    """Grey-zone pairs still unanswered (ITER-MATCH).
 
     The conservative policy of 6.2 does not type these, and nothing downstream treats them as
     typed. They wait here rather than being decided by a threshold, which is the whole reason
@@ -960,7 +968,7 @@ def grey_labels(
     config_path: Path = ConfigOption,
     export: Path | None = ExportLabelsOption,
 ) -> None:
-    """The accept/reject labels these answers have accumulated (spec 6.3).
+    """The accept/reject labels these answers have accumulated (ITER-TUNE).
 
     Nobody annotates them on purpose: they are a by-product of someone doing their work, and
     they are the only training signal this design ever produces for tuning the re-ranker. The
@@ -996,7 +1004,7 @@ def alignment_cmd(
     limit: int | None = LimitOption,
     terms: list[str] = TermOption,
 ) -> None:
-    """¿El corpus habla de lo que la semilla nombra? (deuda 9)
+    """¿El corpus habla de lo que la semilla nombra? (DEBT-QUALITATIVE-PAIR)
 
     Un par desalineado no se ve en la tasa de huérfanas: da alta, igual que un matcher malo
     sobre un par bien alineado. Las dos causas piden cosas opuestas —cambiar el corpus, o
@@ -1173,7 +1181,7 @@ def stop_cmd(
     iteration: int = IterationOption,
     curve: bool = CurveOption,
 ) -> None:
-    """Should this stop? The four criteria of spec 10.3, with their roles.
+    """Should this stop? The four criteria of EVAL-STOPPING, with their roles.
 
     Competency questions are primary and the only criterion that says *what* is missing.
     Novelty saturation is secondary and automatic. The accumulation curve is a diagnostic and
@@ -1230,7 +1238,8 @@ def functional_cmd(
     yes: bool = YesOption,
     limit: int | None = LimitOption,
 ) -> None:
-    """Survey the ABox for functional-property candidates, and ask (spec 6.8, D2).
+    """Survey the ABox for functional-property candidates, and ask (ITER-APPLY,
+    DL-WITH-FUNCTIONALS).
 
     Nothing here declares a property functional on its own. Detecting functionality from the
     ABox is invalid in principle under the open-world assumption: every entity having one value
@@ -1342,7 +1351,7 @@ def _declare_functional(config, conn, version_id, graph, abox, property_iri, yes
     next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
     committed = versioning.commit(
         conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
-        note=f"{name} declared functional (user decision, spec 6.8)",
+        note=f"{name} declared functional (user decision, ITER-APPLY)",
     )
     console.print(f"[green]committed[/] {committed.id} (parent {version_id})")
     _publish_diff(config, conn, committed.id)
@@ -1370,7 +1379,7 @@ def metaproperties_cmd(
     limit: int | None = LimitOption,
     refresh: bool = RefreshOption,
 ) -> None:
-    """Label each class for OntoClean, so B5's filter 4 has something to check.
+    """Label each class for OntoClean, so ITER-VALIDATE's filter 4 has something to check.
 
     The model is asked four plain questions — can one stop being this? can two of them be told
     apart? is each one a whole? does each need something else to exist? — and never asked for
@@ -1437,7 +1446,7 @@ def conflicts_cmd(
     version: str | None = VersionOption,
     limit: int | None = LimitOption,
 ) -> None:
-    """Entities two documents typed differently (spec 6.4).
+    """Entities two documents typed differently (ITER-CONFLICTS).
 
     The volume filter is the point: a conflict the reasoner would not break on is notarized
     without asking, because deciding case by case is the manual review this exists to avoid.
@@ -1508,11 +1517,12 @@ def mark_cmd(
     comment: str = CommentOption,
     export: Path | None = ExportOption,
 ) -> None:
-    """Mark an assertion false. `refuted` and `misextracted` are opposite signals (spec 6.4).
+    """Mark an assertion false. `refuted` and `misextracted` are opposite signals (ITER-CONFLICTS).
 
     `refuted`: the document asserts it and it is not true. The assertion leaves the ABox.
 
-    `misextracted`: the document never said it and the extractor misread. That is a B1 bug, it
+    `misextracted`: the document never said it and the extractor misread. That is a ITER-EXTRACT
+    bug, it
     also leaves the ABox, and it goes to the evaluation set — free extraction-error labels
     nobody had to annotate on purpose. Mixing the two loses them.
 
@@ -1576,7 +1586,7 @@ def enrich_cmd(
 
     Every enrichment records which documents contributed to it. A later match of a mention from
     a contributing document against that class is not independent evidence of coverage; the
-    `circular` command is what makes those countable (spec 4.3).
+    `circular` command is what makes those countable (PREP-NORMALIZE).
     """
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
@@ -1683,7 +1693,7 @@ def enrich_cmd(
         console.print(
             f"\n[yellow]{orphans['n']} orphan mentions[/] were typed against {version_id}. "
             f"The synonyms just added are what closes the loop, so re-run "
-            f"`match --version {committed.id}` to give them another chance (spec 4.3)."
+            f"`match --version {committed.id}` to give them another chance (PREP-NORMALIZE)."
         )
 
 
@@ -1693,7 +1703,7 @@ def circular_cmd(
     version: str | None = VersionOption,
     limit: int | None = LimitOption,
 ) -> None:
-    """Matches whose own document helped write the class they matched (spec 4.3).
+    """Matches whose own document helped write the class they matched (PREP-NORMALIZE).
 
     Not errors, and not thrown away. They are the ones that must not be counted as independent
     evidence of coverage: the class was described using that document, so the match is partly
@@ -1823,7 +1833,7 @@ def branch_cmd(
         if not config.branching.auto_apply_when_no_axis:
             console.print("[dim]branching.auto_apply_when_no_axis is off; nothing applied[/]")
             return
-        console.print("[dim]applying all of them — the usual path, per spec 6.6[/]")
+        console.print("[dim]applying all of them — the usual path, per ITER-BRANCH[/]")
         _commit_axioms(
             config, conn, version_id, graph, axioms, apply_changes,
             note=f"{len(axioms)} axioms applied automatically: no decision axis",
@@ -1877,7 +1887,7 @@ def branch_cmd(
         console.print(table)
     console.print(
         "\n[dim]affinity is empty until something has been decided before — the cold start of "
-        "spec 11, reported as absent rather than as zero.[/]"
+        "COLDSTART, reported as absent rather than as zero.[/]"
     )
     console.print("Choose one with `onto-pipeline branch --choose <branch> --why '...'`.")
 
@@ -1928,7 +1938,8 @@ def _text_similarity(config):
 
     Two callers, both of which prefer to lose a capability over guessing at it: the
     division-criterion axis, which needs to know when two declared criteria name the same cut,
-    and A3's deduplication. Returns None when the encoder is not installed, and each caller
+    and PREP-CQ-GENERATED's deduplication. Returns None when the encoder is not installed, and each
+    caller
     says what it does without one.
     """
     from .embeddings import EncoderUnavailable, SentenceTransformerEncoder
@@ -2081,10 +2092,11 @@ def induce_cmd(
     config_path: Path = ConfigOption,
     version: str | None = VersionOption,
 ) -> None:
-    """B3: turn orphan mentions into proposed classes (spec 6.1, 6.6).
+    """ITER-INDUCE: turn orphan mentions into proposed classes (ITER-EXTRACT, 6.6).
 
     The code clusters, the model names. Nothing is applied: a proposal records the nearest
-    existing class as a *candidate* parent for B4 to rule on, not as an asserted subsumption.
+    existing class as a *candidate* parent for ITER-AXIOMATIZE to rule on, not as an asserted
+    subsumption.
     """
     from .matching import Matcher
 
@@ -2141,7 +2153,9 @@ def induce_cmd(
 
     model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
     stage = llm.settings(config.llm, induction.STAGE)
-    with console.status(f"B3 · naming {len(clusters)} clusters from {len(orphans)} orphans"):
+    with console.status(
+        f"naming {len(clusters)} clusters from {len(orphans)} orphans"
+    ):
         result = llm.run(
             Ledger(conn, config.execution), model, induction.PROMPT, stage,
             [(item.id, induction.payload(
@@ -2170,7 +2184,7 @@ def induce_cmd(
     # El nombre del cluster contra el inventario, ahora que existe. El matcher falló sobre las
     # menciones sueltas; si el nombre del grupo coincide con una clase que ya está, esas
     # menciones eran falsos huérfanos y la clase propuesta sería un duplicado — el camino que la
-    # compuerta de §12.1 nombra.
+    # compuerta de BUILD-NO-GO-GATE nombra.
     existing = [target.label for target in labels.values()]
     duplicates = induction.redundant(
         proposals, existing,
@@ -2204,9 +2218,9 @@ def induce_cmd(
         console.print(
             "[dim]Quedan propuestas a propósito: que la inducción reencuentre una clase que ya "
             "está es un diagnóstico sobre el matcher, y borrarlo en silencio pierde la única "
-            "señal de que pasó. B4 decide.[/]"
+            "señal de que pasó. ITER-AXIOMATIZE decide.[/]"
         )
-    console.print("[dim]nothing applied; B4 decides the axioms[/]")
+    console.print("[dim]nothing applied; ITER-AXIOMATIZE decides the axioms[/]")
 
 
 def _table_exists(conn, name: str) -> bool:
@@ -2232,7 +2246,7 @@ def match_cmd(
     version: str | None = VersionOption,
     include_held_out: bool = IncludeHeldOutOption,
 ) -> None:
-    """B2: type the mentions against an ontology version, then resolve entities (spec 6.2).
+    """ITER-MATCH: type the mentions against an ontology version, then resolve entities.
 
     This is the pipeline's quality bottleneck, and it is uncalibrated: the thresholds it reads
     have not been set from data. Treat the numbers as a first look, not as the no-go decision
@@ -2329,7 +2343,7 @@ def tune_cmd(
     eval_on: str | None = EvalOnOption,
     out: Path | None = OutOption,
 ) -> None:
-    """Ajusta el cross-encoder con las anotaciones de un par (spec 6.3).
+    """Ajusta el cross-encoder con las anotaciones de un par (ITER-TUNE).
 
     El bi-encoder recupera y el cross-encoder reordena, así que el techo de esta etapa es la
     diferencia entre acertar en el primer puesto y acertar en los primeros k. El comando la
@@ -2613,7 +2627,7 @@ def annotate_cmd(
     config_path: Path = ConfigOption,
     doc_id: str | None = DocIdOption,
 ) -> None:
-    """Build the annotation tool for the held-out documents (spec 10.1).
+    """Build the annotation tool for the held-out documents (EVAL-PIPELINE).
 
     Offsets index the parser's Markdown, so the tool embeds it verbatim; the corpus never
     leaves the machine.
@@ -2655,7 +2669,7 @@ def annotate_cmd(
     )
 
 
-review_app = typer.Typer(help="Findings from A0 that are waiting for a decision.")
+review_app = typer.Typer(help="Findings from PREP-NORMALIZE that are waiting for a decision.")
 app.add_typer(review_app, name="review")
 
 
@@ -2712,10 +2726,11 @@ def hold_out(
     config_path: Path = ConfigOption,
     release: bool = ReleaseOption,
 ) -> None:
-    """Mark documents as the retention set: parsed, but never fed to the process (spec 10.1).
+    """Mark documents as the retention set: parsed, but never fed to the process (EVAL-PIPELINE).
 
-    They have to be parsed — the annotation offsets index the Markdown A2 produces — but they
-    must not reach B1, or the evaluation measures the pipeline against its own input.
+    They have to be parsed — the annotation offsets index the Markdown PREP-PARSE produces — but
+    they
+    must not reach ITER-EXTRACT, or the evaluation measures the pipeline against its own input.
     """
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
@@ -2770,7 +2785,8 @@ def validate(
     config_path: Path = ConfigOption,
     version: str | None = VersionOption,
 ) -> None:
-    """B5's reasoner filters over an ontology version, plus A0.0's profile detection.
+    """ITER-VALIDATE's reasoner filters over an ontology version, plus PREP-NORMALIZE-PROFILE's
+    profile detection.
 
     ELK never returns an approval: an inconsistency it finds is real, but its silence only
     means the offending axiom may have been ignored, so the verdict is INCONCLUSIVE.
@@ -2801,7 +2817,7 @@ def validate(
     profile = reasoners.profile(ontology)
     table = Table("check", "result", "detail")
     table.add_row(
-        "A0.0 profile",
+        "PREP-NORMALIZE-PROFILE profile",
         profile.detected,
         f"target {config.owl_profile.target} · "
         + ", ".join(f"{name} {count}" for name, count in sorted(profile.violations.items())),
@@ -2850,7 +2866,7 @@ def validate(
 
 
 def _shape_and_smell(config, conn, version_id, graph) -> list[validation.Verdict]:
-    """B5 filters 3 and 5. Neither needs a model and only the first can reject.
+    """ITER-VALIDATE filters 3 and 5. Neither needs a model and only the first can reject.
 
     SHACL runs over the ABox, not the TBox: shape constraints are about the instance data.
     With no shapes written it reports that it did not run, which is not the same as passing.
@@ -2886,7 +2902,7 @@ def _shape_and_smell(config, conn, version_id, graph) -> list[validation.Verdict
 
 
 def _ontoclean(conn, version_id, graph) -> validation.Verdict:
-    """B5 filter 4. Reports what it could check, never what it assumed."""
+    """ITER-VALIDATE filter 4. Reports what it could check, never what it assumed."""
     labels = ontoclean.load(conn, version_id)
     if not labels:
         return validation.Verdict(
@@ -2981,7 +2997,7 @@ def diff_cmd(
     against: str | None = AgainstOption,
     limit: int = DiffLimitOption,
 ) -> None:
-    """Semantic diff between two ontology versions (spec 6.8).
+    """Semantic diff between two ontology versions (ITER-APPLY).
 
     Canonical logical axioms with canonicalized blank nodes, annotations in a lane of their
     own: a reordered serialization is not a change, and a rename is a label change rather
@@ -3090,7 +3106,7 @@ def chunks(
     doc_id: str,
     config_path: Path = ConfigOption,
 ) -> None:
-    """Show B1's extraction units for one document. Derived, never stored."""
+    """Show ITER-EXTRACT's extraction units for one document. Derived, never stored."""
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     document_chunks = chunk_document(
@@ -3121,7 +3137,7 @@ def cq_import(
     path: Path,
     config_path: Path = ConfigOption,
 ) -> None:
-    """A4: load questions written by the user, each paired with its SPARQL."""
+    """PREP-CQ-USER: load questions written by the user, each paired with its SPARQL."""
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     questions = cq.read_file(path)
@@ -3135,11 +3151,12 @@ def cq_propose(
     per_stratum: int = PerStratumOption,
     seed: int = SeedOption,
 ) -> None:
-    """A3: generate competency questions from the corpus, filtered before you read them.
+    """PREP-CQ-GENERATED: generate competency questions from the corpus, filtered before you read
+    them.
 
     **They measure completeness with respect to the corpus, not to the domain.** That is the
     same limitation as novelty saturation and it cannot be fixed from inside; the mitigation is
-    A4 — the questions you write without looking at these.
+    PREP-CQ-USER — the questions you write without looking at these.
 
     Sampling is stratified because the strata are what make the question types possible: a
     passage saying "must not" is where a restrictive question comes from, and it is invisible
@@ -3226,7 +3243,7 @@ def cq_propose(
         )
     console.print(
         "\n[dim]These measure completeness against the corpus, not the domain. Write your own "
-        "(A4) before reading them, or that limitation goes unmitigated.[/]"
+        "(PREP-CQ-USER) before reading them, or that limitation goes unmitigated.[/]"
     )
     console.print("Review them with `onto-pipeline cq list --status proposed`.")
 
@@ -3259,7 +3276,7 @@ def cq_accept(
     config_path: Path = ConfigOption,
     discard: bool = DiscardOption,
 ) -> None:
-    """Accept (or `--discard`) proposed questions. The third action of A3's review,
+    """Accept (or `--discard`) proposed questions. The third action of PREP-CQ-GENERATED's review,
     reformulating, is an edit and goes back through `cq import`."""
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
@@ -3291,7 +3308,7 @@ def cq_eval(
     _, graph = versioning.load(conn, version_id)
 
     # SPARQL reads triples, and an entailment is not a triple until something writes it down.
-    # The inferential type is a mandatory quota in spec 4.4 whose stated point is that the
+    # The inferential type is a mandatory quota in PREP-CQ-GENERATED whose stated point is that the
     # reasoner contributes; over the asserted graph alone such a question can never pass.
     asserted = len(graph)
     if infer:

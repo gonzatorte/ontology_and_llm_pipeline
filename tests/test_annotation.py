@@ -55,7 +55,7 @@ def test_false_and_genuine_orphans_are_counted_apart(document):
     """Aggregated, the orphan rate says nothing: one is an error, the other is the pipeline
     working as designed."""
     report = annotation.score(document, {"m1": None, "m2": None})
-    assert report.genuine_orphans == ["m1"]  # the seed does not cover it; this feeds B3
+    assert report.genuine_orphans == ["m1"]  # the seed does not cover it; this feeds ITER-INDUCE
     assert report.false_orphans == ["m2"]  # the class existed and the matcher missed it
     assert report.false_orphan_rate == 1.0
 

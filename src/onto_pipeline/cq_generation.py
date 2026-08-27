@@ -1,9 +1,9 @@
-"""A3 — assisted generation of competency questions (spec 4.4).
+"""PREP-CQ-GENERATED — assisted generation of competency questions.
 
 **The circularity warning comes first, because it is the whole caveat of this stage.** Questions
 derived from the corpus measure completeness *with respect to the corpus*, not with respect to
 the domain. It is the same limitation as novelty saturation, and it is not fixable from inside:
-the mitigation is A4, the questions the user writes without looking at these.
+the mitigation is PREP-CQ-USER, the questions the user writes without looking at these.
 
 Four steps, and three of them are mechanical.
 
@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from .cq import GENERATED, TYPES, CompetencyQuestion, MalformedQuery, validate
 from .llm import Prompt
 
-STAGE = "A3_cq_generation"
+STAGE = "prep_cq_generated"
 
 PROPOSED = "proposed"
 

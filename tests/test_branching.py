@@ -31,7 +31,7 @@ def situation(children: dict[str, tuple[str, str]], parent: str = PARENT) -> br.
 
 def test_no_axis_means_no_question():
     """Multi-branch is the exceptional path. Asking on every iteration without a real
-    conflict is the manual work the pipeline exists to avoid (D21)."""
+    conflict is the manual work the pipeline exists to avoid (AUTO-APPLY-WHEN-NO-AXES)."""
     result = br.plan([], [subclass("c:A")])
     assert result.automatic and result.decisions == []
 
@@ -406,7 +406,7 @@ def test_a_settled_decision_is_not_re_opened_by_proposing_again(tmp_path):
     assert {row["status"] for row in br.load(conn, "v1")} == {br.CHOSEN, br.REJECTED}
 
 
-# ─────────────  el registro de decisiones (§6.7, esquema D9)  ─────────────
+# ─────────────  el registro de decisiones (ITER-FEEDBACK, esquema GRADED-FEEDBACK)  ─────────────
 
 
 def settled(tmp_path, **kwargs):
@@ -462,7 +462,7 @@ def test_an_unknown_axis_lands_in_a_generic_category_not_an_invented_one():
 
 
 def test_the_comment_travels_with_the_decision(tmp_path):
-    """§6.7 dice que es el campo que más rinde en recuperación."""
+    """ITER-FEEDBACK dice que es el campo que más rinde en recuperación."""
     conn, _ = settled(tmp_path)
     assert any(row["comment"] == "porque sí" for row in rows(conn))
 

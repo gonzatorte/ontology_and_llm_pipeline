@@ -1,4 +1,4 @@
-"""Mapping rules and ABox regeneration (spec 3, 6.4, 6.8; see plan_reglas_de_mapeo.md).
+"""Mapping rules and ABox regeneration (LAYERS, 6.4, 6.8; see plan_reglas_de_mapeo.md).
 
 The spec names "mapping rules" in five places and defines them in none, while resting its
 central claim on them: because the ABox derives from the mention layer and not from outside
@@ -191,7 +191,7 @@ def anchors(rows: list[MentionRow], rules: MappingRules) -> dict[str, list[Menti
     """Group the mentions into individuals, keyed by the anchor mention's id.
 
     A mention no merge decision touched is its own entity: separate individuals until confirmed
-    (D10) is the default, and a singleton group is what that looks like here.
+    (SEPARATE-UNTIL-CONFIRMED) is the default, and a singleton group is what that looks like here.
     """
     groups: dict[str, list[MentionRow]] = {}
     for row in rows:

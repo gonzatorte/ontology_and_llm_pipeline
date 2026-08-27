@@ -1,4 +1,4 @@
-"""¿El corpus habla de lo que la semilla nombra? (deuda 9)
+"""¿El corpus habla de lo que la semilla nombra? (DEBT-QUALITATIVE-PAIR)
 
 Un par (ontología, corpus) desalineado no se ve mirando la tasa de huérfanas: da alta, y "alta"
 es también lo que da un matcher malo sobre un par bien alineado. Las dos causas piden cosas

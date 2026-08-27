@@ -126,7 +126,7 @@ def test_reproposing_against_the_same_version_replaces(tmp_path):
     assert [row["label"] for row in induction.load(conn, "v1")] == ["Digital Repository"]
 
 
-# ────────  el falso huérfano que se vuelve clase espuria (§12.1)  ────────
+# ────────  el falso huérfano que se vuelve clase espuria (BUILD-NO-GO-GATE)  ────────
 
 
 def proposal(label: str, cluster: str = "c1"):

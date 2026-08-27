@@ -1,7 +1,8 @@
-"""Findings that are waiting for a human decision (spec 4.3, 6.7).
+"""Findings that are waiting for a human decision (PREP-NORMALIZE, 6.7).
 
 These used to be a JSON file, which meant nothing recorded whether a decision had been made:
-re-running A0 rewrote the file and any judgement already formed was gone. They are state, so
+re-running PREP-NORMALIZE rewrote the file and any judgement already formed was gone. They are
+state, so
 they live in the store with the rest of it.
 
 Two properties this has to have, and both come from the spec's treatment of rejection (6.7):
@@ -183,7 +184,7 @@ def counts(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
 
 
 def findings_from_seed(seed) -> list[Finding]:
-    """A0's divergences and typos as reviewable items."""
+    """PREP-NORMALIZE's divergences and typos as reviewable items."""
     findings = []
     for entity in seed.entities:
         if entity.divergence_reason is None:

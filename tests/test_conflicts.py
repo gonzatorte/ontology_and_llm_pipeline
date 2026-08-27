@@ -60,7 +60,8 @@ def test_only_the_pairs_that_collided_are_asked_about():
 
 
 def test_a_conflict_the_reasoner_would_not_break_on_is_only_a_fact():
-    """The volume filter: deciding case by case is the manual review D5 rules out."""
+    """The volume filter: deciding case by case is the manual review BRANCH-ONLY-REVIEW rules out.
+    """
     assert not detect({"m1": (A, "auto"), "m2": (B, "auto")})[0].breaks_reasoner
 
 

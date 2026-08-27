@@ -8,7 +8,7 @@ from onto_pipeline.parse import PARAGRAPH, parse_document
 
 
 def test_spans_index_the_markdown_exactly(two_column_pdf, config):
-    """The central provenance guarantee: mention offsets (spec 8.1) are anchored on these
+    """The central provenance guarantee: mention offsets (SCHEMAS-MENTIONS) are anchored on these
     spans, and `markdown_hash` validates them on reimport."""
     parsed = parse_document(two_column_pdf, config)
     for block in parsed.blocks:

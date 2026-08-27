@@ -1,8 +1,8 @@
 # Plan: calibrar contra corpus publicados anotados
 
-Enmienda al §12 (secuencia de construcción) de `especificacion_pipeline_ontologia.md`. Los
+Enmienda al `BUILD` (secuencia de construcción) de `especificacion_pipeline_ontologia.md`. Los
 resultados de los barridos que este plan hizo posibles están en
-[`HALLAZGOS.md`](HALLAZGOS.md) §1.1–1.2.
+[`HALLAZGOS.md`](HALLAZGOS.md) `SCOPE-WHAT`–1.2.
 
 > Este documento se llamaba "separar el corpus de calibración del corpus de aplicación" y esa
 > separación resultó ser una premisa equivocada: no hay corpus de aplicación. Ver la nota de
@@ -10,12 +10,12 @@ resultados de los barridos que este plan hizo posibles están en
 
 ## Problema
 
-El paso 3 del §12 hace pivotar la decisión no-go sobre la **tasa de falsos huérfanos**, medida
+El paso 3 del `BUILD` hace pivotar la decisión no-go sobre la **tasa de falsos huérfanos**, medida
 contra el conjunto de retención: 5 documentos del corpus de ciencia abierta anotados a mano
 contra la semilla de metodología cualitativa. Tres hallazgos hacen que esa medición no pueda
 sostener la decisión.
 
-**1. El par corpus/semilla está desalineado.** Medido sobre las 1.311 menciones únicas que B1
+**1. El par corpus/semilla está desalineado.** Medido sobre las 1.311 menciones únicas que `ITER-EXTRACT`
 extrajo de Caulfield 2012, contra las 34 clases de la semilla:
 
 - 24/34 clases superan el umbral de 0,70, pero **11 de esas 24 son eco léxico** — la mención es
@@ -37,11 +37,11 @@ confiadamente equivocados **a 0,99**. Subirle el umbral no los saca.
 **3. Dos decisiones centrales de config descansan en n=10.** Según los comentarios de
 `config/default.yaml`: `match_against: label` (7/10 contra 2/10 recall@1) y
 `use_cross_encoder: false`. Ambas medidas sobre diez pares, sobre el par desalineado. Si
-etiqueta-vs-glosa está mal resuelto, toda la etapa A0.4 de generación de glosas es trabajo tirado.
+etiqueta-vs-glosa está mal resuelto, toda la etapa `PREP-NORMALIZE-GLOSSES` de generación de glosas es trabajo tirado.
 
-**4. ~~B2 no está cableado.~~** *Superado por `a4df6f0`.* Al escribirse este plan, `Matcher`
+**4. ~~`ITER-MATCH` no está cableado.~~** *Superado por `a4df6f0`.* Al escribirse este plan, `Matcher`
 solo lo ejercitaban los tests. Hoy `cli.py:434` (`match`) construye `Target`, persiste los
-`Typing` y lee todos los umbrales de config. La compuerta del §12.1 ya corre end-to-end; lo que
+`Typing` y lee todos los umbrales de config. La compuerta del `BUILD-NO-GO-GATE` ya corre end-to-end; lo que
 sigue faltando es contra qué medirla, que es de lo que trata el resto de este documento.
 
 ## Decisión
@@ -96,7 +96,7 @@ Criterios, en orden de importancia:
 **Par primario: CRAFT `CL+extensions`.** Licencia CC BY 3.0. Release v5.0.2 (2022-07). 97
 artículos, 11 módulos, cada uno en variante propia y `+extensions`. Formato: `articles/txt/*.txt`
 texto plano + Knowtator XML standoff (`<span start end>` + `<mentionClass id>`), offsets sobre el
-texto plano — confirma el argumento de la fase 2 contra el §12.2. Muestreo de un artículo: 104
+texto plano — confirma el argumento de la fase 2 contra el `BUILD-OUT-OF-SCOPE`. Muestreo de un artículo: 104
 anotaciones CL sobre 8 clases.
 
 **El repo de CRAFT distribuye las ontologías en OBO básico, sin axiomas lógicos.** Medido:
@@ -168,15 +168,15 @@ no conviene que eso bloquee las tareas de calibración. Queda registrado como **
 Salida de la fase: un directorio con el corpus, su ontología en RDF, y una nota de una página
 sobre formato de anotación y criterio de subseteo si lo hubo.
 
-### Fase 1 — Cablear B2 — **HECHA** (`a4df6f0`)
+### Fase 1 — Cablear `ITER-MATCH` — **HECHA** (`a4df6f0`)
 
 Era el prerrequisito de todo lo demás y ya está:
 
 - `Target` se construye desde la versión de ontología vía `typing_store.targets_from(graph,
   config.matching.match_against)`.
 - Comando CLI `match` (`cli.py:434`): corre `type_mentions`, persiste `Typing` y las entidades
-  resueltas en SQLite (§8.1).
-- Todos los umbrales salen de config; no hay ninguno en el código (§7).
+  resueltas en SQLite (`SCHEMAS-MENTIONS`).
+- Todos los umbrales salen de config; no hay ninguno en el código (`CONFIG`).
 
 El propio comando imprime `uncalibrated` al terminar. Esa advertencia es lo que las fases 2–4
 existen para poder borrar.
@@ -188,13 +188,13 @@ existen para poder borrar.
 - Construir `Target` desde la ontología del corpus vía `seed.normalize_seed`, que ya acepta
   cualquier RDF con clases OWL y `rdfs:label`.
 - **Saltear ingest/parse/chunking/extracción por completo.** El corpus ya es texto y ya trae las
-  menciones; B1 no interviene.
+  menciones; `ITER-EXTRACT` no interviene.
 
-Nota sobre el §12.2, que deja el importador fuera de v1: la razón declarada es que los formatos
+Nota sobre el `BUILD-OUT-OF-SCOPE`, que deja el importador fuera de v1: la razón declarada es que los formatos
 estándar anclan offsets en texto plano mientras los del pipeline apuntan al Markdown del parser,
 así que un cambio de versión del parser los corre. **Ese argumento no aplica acá** — al saltear
 el parser, el texto es su propia referencia y `markdown_hash` no entra en juego. La fila del
-§12.2 se refiere a reimportar exports propios desde BRAT, que sigue fuera de v1.
+`BUILD-OUT-OF-SCOPE` se refiere a reimportar exports propios desde BRAT, que sigue fuera de v1.
 
 Estimación: ~100 líneas + ~40 de CLI.
 
@@ -214,16 +214,16 @@ Estimación: ~120 líneas.
 Con n = 8.723 en lugar de n = 10, las dos quedaron resueltas y los comentarios de
 `config/default.yaml` reescritos. Ver [Resultados del par primario](#resultados-de-c4-2026-09-09).
 
-La pregunta condicional que dejaba abierta esta fase —«si `gloss` gana acá, revisar A0.4»— se
-respondió al revés y con margen: `gloss` no gana, pierde por 9× y con separación negativa. **A0.4
-no se toca, pero deja de justificarse por B2**: la etapa genera glosas que el matcher no usa y no
-hay evidencia de que deba. Su justificación queda siendo B4b y la lectura humana.
+La pregunta condicional que dejaba abierta esta fase —«si `gloss` gana acá, revisar `PREP-NORMALIZE-GLOSSES`»— se
+respondió al revés y con margen: `gloss` no gana, pierde por 9× y con separación negativa. **`PREP-NORMALIZE-GLOSSES`
+no se toca, pero deja de justificarse por `ITER-MATCH`**: la etapa genera glosas que el matcher no usa y no
+hay evidencia de que deba. Su justificación queda siendo `ITER-AXIOMATIZE-ENRICH` y la lectura humana.
 
 ### Fase 5 — Volver al corpus de aplicación
 
 > **Corregido el 2026-09-09.** Lo que sigue en esta sección describía "volver al par de
 > aplicación", y ese marco era equivocado: **no hay par de aplicación**. El entregable del
-> proyecto es el sistema y su caracterización, sin dominio comprometido (§1.4 del spec: "sin
+> proyecto es el sistema y su caracterización, sin dominio comprometido (`SCOPE-PURPOSE` del spec: "sin
 > tarea downstream comprometida"), así que **todos los pares son instrumentos** y el par
 > cualitativo era andamio para tener con qué probar mientras no había otra cosa. Queda archivado
 > abajo lo que decía, porque explica de dónde salió la tarea «volver al par de aplicación» y por qué se retiró.
@@ -232,8 +232,8 @@ hay evidencia de que deba. Su justificación queda siendo B4b y la lectura human
 <summary>Lo que decía antes (archivado)</summary>
 
 - Aplicar la config calibrada a la semilla cualitativa + corpus de ciencia abierta.
-- Correr la curva de acumulación del §10.3 sobre ese par.
-- Evaluar la compuerta del §12.1 sabiendo que el matcher está calibrado.
+- Correr la curva de acumulación del `EVAL-STOPPING` sobre ese par.
+- Evaluar la compuerta del `BUILD-NO-GO-GATE` sabiendo que el matcher está calibrado.
 
 Con el desajuste ya medido, el resultado esperado es tasa alta. Eso deja de ser un no-go del
 sistema y pasa a ser un resultado sobre el caso de aplicación: la salida es cambiar el corpus de
@@ -241,7 +241,7 @@ aplicación o cambiar la semilla.
 
 </details>
 
-**Lo que reemplaza a eso.** Sin dominio comprometido, la compuerta del §12.1 no es un semáforo
+**Lo que reemplaza a eso.** Sin dominio comprometido, la compuerta del `BUILD-NO-GO-GATE` no es un semáforo
 del proyecto: una tasa alta de falsos huérfanos sobre un par es un resultado *sobre ese par*, y
 lo que califica al sistema es cómo se comporta **a través** de pares. Eso mueve el centro de
 gravedad del plan a la tarea «más pares» —la curva de tamaño de inventario— y agrega una tarea que antes no tenía
@@ -267,7 +267,7 @@ inventario de **3.418 clases, 3.281 con definición (96%)**. Cuatro corridas,
 equivocado, en desvíos estándar agrupados. Es la pregunta que va **antes** de dónde poner el
 umbral: si las distribuciones se pisan, ningún umbral ayuda.
 
-**`match_against: label` queda resuelto, y en contra del §6.2.** No por poco: 69,8% contra 7,9%.
+**`match_against: label` queda resuelto, y en contra del `ITER-MATCH`.** No por poco: 69,8% contra 7,9%.
 Y la condición era favorable a la glosa —96% del inventario trae definición real escrita por
 curadores, no glosas generadas por un LLM—, así que la hipótesis del spec se probó donde debía
 ganar. Lo que decide no es el recall sino el signo: **con glosas la separación es negativa**, los
@@ -275,12 +275,12 @@ errores puntúan más alto que los aciertos. Un umbral más exigente ahí conser
 equivocado. La explicación sigue siendo la de forma: una mención es un sintagma corto y una
 etiqueta también; una glosa es una oración. Se revisa con un encoder asimétrico, no con un umbral.
 
-Consecuencia para A0.4: la etapa de generación de glosas **no alimenta al matcher** y no hay
-evidencia de que deba. Sigue justificada por B4b y por lectura humana, no por B2.
+Consecuencia para `PREP-NORMALIZE-GLOSSES`: la etapa de generación de glosas **no alimenta al matcher** y no hay
+evidencia de que deba. Sigue justificada por `ITER-AXIOMATIZE-ENRICH` y por lectura humana, no por `ITER-MATCH`.
 
 **`use_cross_encoder: false` queda resuelto.** Re-rankeando el top-5 del bi-encoder, el recall@1
 cae de 6.090 a 2.220 y la separación se va a −0,56. No es solo que aplaste la escala —que la
-aplasta, todo entre 0,1 y 0,3, que es exactamente R1—: además ordena peor. El reranker genérico de
+aplasta, todo entre 0,1 y 0,3, que es exactamente `RISKS-FALSE-ORPHANS`—: además ordena peor. El reranker genérico de
 IR es el instrumento equivocado acá.
 
 ### Los umbrales
@@ -288,7 +288,7 @@ IR es el instrumento equivocado acá.
 El F1 de tipado tiene su máximo en 0,774 con el corte en 0,90, así que **0,92 del spec está
 prácticamente en el óptimo**. Lo que el F1 esconde es el intercambio: en 0,90 la tasa de falsos
 huérfanos es 26,3% con 563 mal tipados; en 0,70 es 4,7% con 2.300 mal tipados. Cuál duele más es
-decisión de diseño —un falso huérfano induce clases espurias en B3— y no algo que el barrido
+decisión de diseño —un falso huérfano induce clases espurias en `ITER-INDUCE`— y no algo que el barrido
 resuelva.
 
 **Limitación que hay que nombrar:** el barrido usa un corte, el pipeline usa dos. Lo medido es el
@@ -320,7 +320,7 @@ solo cuando el inventario es grande de verdad.
 Con `--holdout 0.2` (683 clases retenidas, determinista): separación +1,69, y la fila de huérfanos
 genuinos deja de ser cero — 415 en el corte 0,90 contra 2.154 falsos. El matcher **sí** se abstiene
 más sobre clases que no están en el inventario que sobre las que sí. Es evidencia débil pero es la
-primera que hay sobre esa mitad de la compuerta del §12.1.
+primera que hay sobre esa mitad de la compuerta del `BUILD-NO-GO-GATE`.
 
 ### Efecto colateral: el tipado no escalaba
 
@@ -332,7 +332,7 @@ realista.
 
 ## Qué NO se tira
 
-- Las 1.725 menciones de B1 y las anotaciones ya hechas: siguen siendo el conjunto de retención
+- Las 1.725 menciones de `ITER-EXTRACT` y las anotaciones ya hechas: siguen siendo el conjunto de retención
   del corpus de **aplicación**, y el insumo de la fase 5.
 - `annotation.py` completo: el modelo de datos, las métricas de huérfanos y el exportador BRAT no
   cambian. `in_seed` es el campo correcto y sigue siéndolo.
@@ -369,12 +369,12 @@ son medición y decisión.
 
 ## Tareas pendientes
 
-Registro de trabajo a ejecutar, en el mismo espíritu que el §14.2 de la spec (T1–T4). la tarea «cablear el matcher»–la tarea «par primario» y la tarea «re-decidir el encoder»
+Registro de trabajo a ejecutar, en el mismo espíritu que el `DELIVERABLES-PENDING` de la spec. la tarea «cablear el matcher»–la tarea «par primario» y la tarea «re-decidir el encoder»
 están hechas; queda la tarea «más pares», la tarea «volver al par de aplicación» y la tarea «dónde parte `auto`».
 
 | Tarea | Qué | Fase | Bloqueada por | Estimación |
 |---|---|---|---|---|
-| ~~cablear-b2~~ | ~~Cablear B2~~ — **hecha** en `a4df6f0`: `Target`, comando `match`, persistencia y umbrales desde config | 1 | — | — |
+| ~~cablear-b2~~ | ~~Cablear `ITER-MATCH`~~ — **hecha** en `a4df6f0`: `Target`, comando `match`, persistencia y umbrales desde config | 1 | — | — |
 | ~~importador~~ | ~~Importador de corpus anotado~~ — **hecha**: `calibration.py`, readers `knowtator` y `brat` tras un registro, `pair.yml` por par, offsets validados contra el texto fuente en los 97 documentos | 2 | — | — |
 | ~~banco~~ | ~~Banco de calibración~~ — **hecha**: comando `calibrate`, una pasada de encoding por variante y los umbrales aplicados encima, distribución de scores y separación reportadas aparte del agregado | 3 | importador | — |
 | ~~par-primario~~ | ~~Par primario CRAFT `CL+extensions`~~ — **hecha**, cuatro corridas. Ver [Resultados del par primario](#resultados-de-c4-2026-09-09) | 3 | banco | — |

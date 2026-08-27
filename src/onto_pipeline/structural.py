@@ -1,14 +1,14 @@
-"""B5 filter 7 — structural metrics over the TBox (spec 6.6).
+"""ITER-VALIDATE filter 7 — structural metrics over the TBox (ITER-BRANCH).
 
 Rejection, not warning. Two of these also intercept a known bias of the generator rather than
-merely describing the ontology (spec 6.1): a model over-generates hierarchy, so a level with a
+merely describing the ontology (ITER-EXTRACT): a model over-generates hierarchy, so a level with a
 single subclass and a class introduced with no declared division criterion are both rejected
 here, in the validator, instead of being argued with in the prompt.
 
 This operates on the TBox as logic, not as a graph. No graph algorithm — clustering,
 communities, structural similarity — is applied to the RDF serialization of the TBox:
 disjointness inverts its sign under structural similarity, since two classes declared
-incompatible appear connected (spec 3.1).
+incompatible appear connected (LAYERS-ONTOLOGY-NOT-GRAPH).
 """
 
 from __future__ import annotations

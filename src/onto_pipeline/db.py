@@ -1,4 +1,4 @@
-"""Persistent stores: mention layer (spec 8.1), work units (8.3), decisions (8.4).
+"""Persistent stores: mention layer (SCHEMAS-MENTIONS), work units (8.3), decisions (8.4).
 
 The mention layer is the central persistent artifact; everything else is regenerated from it.
 """
@@ -30,9 +30,10 @@ CREATE TABLE IF NOT EXISTS documents (
   path          TEXT, content_hash TEXT,
   n_pages       INTEGER, parser_used TEXT, parser_version TEXT,
   markdown_hash TEXT,
-  -- Retention set (spec 10.1): parsed, because the annotation offsets index the Markdown A2
+  -- Retention set (EVAL-PIPELINE): parsed, because the annotation offsets index
+  -- the Markdown PREP-PARSE
   -- produces, but never fed to the process. Without this flag the held-out documents leak
-  -- into B1 and the evaluation measures the pipeline against its own training material.
+  -- into ITER-EXTRACT and the evaluation measures the pipeline against its own training material.
   held_out      INTEGER NOT NULL DEFAULT 0
 );
 
@@ -43,7 +44,8 @@ CREATE TABLE IF NOT EXISTS page_classification (
   PRIMARY KEY (document_id, page)
 );
 
--- A2 output. Mentions (B1) are anchored on these spans; the spec's mention row carries
+-- PREP-PARSE output. Mentions (ITER-EXTRACT) are anchored on these spans; the
+-- spec's mention row carries
 -- page/bbox/block_type/language, which have to come from somewhere.
 CREATE TABLE IF NOT EXISTS blocks (
   id             TEXT PRIMARY KEY,
@@ -97,7 +99,8 @@ def connect(work_dir: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # WAL: one writer and any number of concurrent readers, instead of a lock that excludes
     # both. The pipeline is sequential by design — the ledger puts a barrier between stages —
-    # but B1 makes hundreds of API calls whose latency dwarfs a write, so parallelising those
+    # but ITER-EXTRACT makes hundreds of API calls whose latency dwarfs a write, so parallelising
+    # those
     # only needs readers not to block. It is also more robust to an interrupted run.
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")

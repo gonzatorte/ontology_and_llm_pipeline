@@ -11,56 +11,86 @@ qué conviene rehacer— y [`CLAUDE.md`](CLAUDE.md), el índice y los invariante
 El sistema opera en inglés (prompts, esquemas, logs). El corpus y las glosas son bilingües
 es/en con etiqueta de idioma.
 
-## Las etapas, por nombre
+## Índice
 
-El spec las llama A0…B8 y esos códigos siguen siendo la referencia cruzada canónica, pero los
-códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y los módulos.
+Cada parte del diseño tiene un nombre, y el nombre es el identificador que se usa en todos lados:
+en el spec, acá, en la deuda técnica y en el código. **El id de una sección lleva el de su
+padre**, así que `PREP-NORMALIZE-IRIS` se lee como lo que es, una sub-etapa de `PREP-NORMALIZE`.
+Donde hay un número es porque el orden importa y los hermanos son pasos de una secuencia
+(`ITER-VALIDATE-1-ELK` a `ITER-VALIDATE-7-STRUCTURE`).
 
-| Código | Nombre | Qué hace |
+Este índice existe para encontrar las cosas, no para traducirlas: **no hay códigos que traducir.**
+
+### Preparación, una sola vez — `PREP`
+
+| Id | Qué es | Comando |
 |---|---|---|
-| A0.0 | **profile** | Detecta el perfil OWL de la semilla (EL/QL/RL/DL) |
-| A0.1–A0.3 | **normalize** | IRIs opacos, etiquetas derivadas, detección de erratas |
-| A0.4 | **gloss** | Escribe una definición para cada clase |
-| A1 | **classify** | Decide por página: born-digital, escaneada o incierta |
-| A2 | **parse** | Extrae bloques con procedencia y arma el Markdown |
-| — | **chunk** | Agrupa bloques en unidades de extracción sin partir tablas |
-| A3 | **cq propose** | Genera competency questions desde el corpus |
-| A4 | **cq import** | Carga las competency questions que escribís vos |
-| B1 | **extract** | Saca menciones de concepto de cada chunk |
-| B1b | **corefer** | Agrupa las menciones que hablan del mismo individuo |
-| B2 | **match** · **grey** | Tipa cada mención contra una clase, y resuelve entidades |
-| B2b | **bridge** | Conecta huérfanas con la semilla por conocimiento del mundo |
-| 6.4 | **conflicts** · **mark** | Documentos que se contradicen; notarizar, forzar, refutar |
-| 6.8 | **functional** | Candidatas a propiedad funcional, y qué fusionaría declararlas |
-| 10.3 | **stop** | Los cuatro criterios de parada, con su rol |
-| — | **next** | Qué corresponde correr, y qué está esperándote a vos |
-| — | **alignment** | ¿El corpus habla de lo que la ontología nombra? |
-| B3 | **induce** | Convierte huérfanas en clases nuevas |
-| B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
-| B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
-| B5 | **validate** · **metaproperties** | Cadena de filtros: ELK, HermiT, SHACL, OntoClean, pitfalls, evidencia, estructura |
-| B6 | **branch** | Arma las alternativas coherentes entre las que elegís |
-| B7–B8 | **apply** | Aplica la rama, versiona en el DAG, detecta loops |
-| — | **regenerate** | Recomputa el ABox desde las menciones |
+| `PREP-CLASSIFY` | Decide por página: born-digital, escaneada o incierta | `classify` |
+| `PREP-PARSE` | Extrae bloques con procedencia y arma el Markdown | `parse` |
+| `PREP-NORMALIZE` | Deja la semilla en condiciones de recibir axiomas | — |
+| `PREP-NORMALIZE-PROFILE` | Detecta el perfil OWL de la semilla (EL/QL/RL/DL) | `profile` |
+| `PREP-NORMALIZE-IRIS` | Acuña IRIs opacos y guarda el original como procedencia | `normalize` |
+| `PREP-NORMALIZE-LABELS` | Deriva etiquetas es/en y marca las divergentes | `normalize` |
+| `PREP-NORMALIZE-TYPOS` | Cuatro detectores de erratas, sin modelo | `normalize` |
+| `PREP-NORMALIZE-GLOSSES` | Escribe una definición para cada clase | `gloss` |
+| `PREP-CQ-GENERATED` | Genera competency questions desde el corpus | `cq propose` |
+| `PREP-CQ-USER` | Carga las competency questions que escribís vos | `cq import` |
 
-Los comandos del CLI ya usan estos nombres (`extract`, `coref`, `match`, `validate`), y los
-módulos también (`extraction.py`, `coreference.py`, `matching.py`).
+### Iteración — `ITER`
+
+| Id | Qué es | Comando |
+|---|---|---|
+| `ITER-EXTRACT` | Saca menciones de concepto de cada chunk | `extract` |
+| `ITER-COREFER` | Agrupa las menciones que hablan del mismo individuo | `corefer` |
+| `ITER-MATCH` | Tipa cada mención contra una clase, y resuelve entidades | `match` · `grey` |
+| `ITER-BRIDGE` | Conecta huérfanas con la semilla por conocimiento del mundo | `bridge` |
+| `ITER-INDUCE` | Convierte huérfanas en clases nuevas | `induce` |
+| `ITER-TUNE` | Ajusta el matcher con las etiquetas acumuladas | `tune` |
+| `ITER-CONFLICTS` | Documentos que se contradicen; notarizar, forzar, refutar | `conflicts` · `mark` |
+| `ITER-AXIOMATIZE` | Propone axiomas; el código arma el OWL | `axiomatize` |
+| `ITER-AXIOMATIZE-ENRICH` | Mejora las glosas con pasajes definicionales del corpus | `enrich` |
+| `ITER-VALIDATE` | La cadena de siete filtros | `validate` · `metaproperties` |
+| `ITER-BRANCH` | Arma las alternativas coherentes entre las que elegís | `branch` |
+| `ITER-FEEDBACK` | Qué se decidió antes, y cómo vuelve al prompt | — |
+| `ITER-APPLY` | Aplica la rama, versiona en el DAG, detecta loops | `apply` |
+| `ITER-APPLY-FUNCTIONAL` | Candidatas a propiedad funcional, y qué fusionaría declararlas | `functional` |
+| `ITER-APPLY-REGENERATE` | Recomputa el ABox desde las menciones | `regenerate` |
+
+Sin sección propia en el spec, pero son comandos: `chunk` (agrupa bloques sin partir tablas),
+`next` (qué corresponde correr), `alignment` (¿el corpus habla de lo que la ontología nombra?).
+
+### El resto del diseño
+
+| Id | Qué es |
+|---|---|
+| `SCOPE` | Qué construye, con qué entra y qué sale. Incluye `SCOPE-PURPOSE` (sin tarea downstream), `SCOPE-EXPRESSIVITY` y `SCOPE-SCALE` |
+| `DECISIONS` | Las 26 decisiones vinculantes, cada una con su nombre |
+| `LAYERS` | Las cuatro capas y por qué no se mezclan. `LAYERS-ONTOLOGY-NOT-GRAPH` prohíbe los algoritmos de grafo sobre la TBox |
+| `REORG` | Por qué la semilla es reorganizable y qué cuesta: `REORG-PATH-DEPENDENCE` |
+| `CONFIG` | Toda la superficie de configuración |
+| `SCHEMAS` | Las tablas: `SCHEMAS-MENTIONS`, `SCHEMAS-BRANCH`, `SCHEMAS-WORK-UNITS`, `SCHEMAS-DECISIONS` |
+| `REASONING` | `REASONING-STACK` y `REASONING-ELK-ASYMMETRY`, que es la que más se cita |
+| `EVAL` | `EVAL-PIPELINE` (conjunto de retención), `EVAL-ANNOTATION-FORMAT`, `EVAL-STOPPING` |
+| `COLDSTART` | Por qué las primeras iteraciones son peores justo cuando más importan |
+| `BUILD` | `BUILD-STEP-1` a `BUILD-STEP-5`, con `BUILD-NO-GO-GATE` entre el 3 y el 4 |
+| `RISKS` | Los diez riesgos conocidos, del `RISKS-FALSE-ORPHANS` para abajo |
+| `DELIVERABLES` | Lo entregado y `DELIVERABLES-PENDING` |
 
 ## Estado
 
-El spec define una secuencia de construcción de 5 pasos (§12) y prohíbe explícitamente armar
+El spec define una secuencia de construcción de 5 pasos (`BUILD`) y prohíbe explícitamente armar
 el pipeline completo antes de ver datos. **Los cinco pasos están dados**, con una salvedad en el
 3 que decide qué se puede hacer después:
 
 | Paso | Qué pedía | Estado |
 |---|---|---|
-| 1 | A1–A2 sobre 5 documentos + script de evaluación del parser (T1) | **hecho** — `ingest`, `report` |
-| 2 | A0 + A3–A4: normalización, CQ generadas y validadas | **hecho** — `normalize-seed`, `cq propose`, `cq import`. Falta llegar a las 40–60 CQ aceptadas que el paso pide: hay **5**, todas escritas a mano (A4), ninguna generada aún |
-| 3 | B1–B2 + evaluación contra el conjunto de retención | **hecho, con la compuerta abierta** — ver abajo |
-| 4 | B4–B5 sin ramas, aplicación directa | **hecho** — `axiomatize` + la cadena de siete filtros |
-| 5 | B6–B8: ramas, scoring, DAG completo | **hecho** — `branch`, `versions`, `diff` |
+| `BUILD-STEP-1` | De `PREP-CLASSIFY` a `PREP-PARSE` sobre 5 documentos + script de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`) | **hecho** — `ingest`, `report` |
+| `BUILD-STEP-2` | `PREP-NORMALIZE`, `PREP-CQ-GENERATED` y `PREP-CQ-USER` | **hecho** — `normalize-seed`, `cq propose`, `cq import`. Falta llegar a las 40–60 CQ aceptadas que el paso pide: hay **5**, todas escritas a mano (`PREP-CQ-USER`), ninguna generada aún |
+| `BUILD-STEP-3` | De `ITER-EXTRACT` a `ITER-MATCH`, con evaluación contra el conjunto de retención | **hecho, con la compuerta abierta** — ver abajo |
+| `BUILD-STEP-4` | De `ITER-AXIOMATIZE` a `ITER-VALIDATE` sin ramas, aplicación directa | **hecho** — `axiomatize` + la cadena de siete filtros |
+| `BUILD-STEP-5` | De `ITER-BRANCH` a `ITER-APPLY-REGENERATE`: ramas, scoring, DAG completo | **hecho** — `branch`, `versions`, `diff` |
 
-**Sobre la compuerta no-go del paso 3 (§12.1).** El spec dice: si la tasa de falsos huérfanos es
+**Sobre la compuerta no-go del paso 3 (`BUILD-NO-GO-GATE`).** El spec dice: si la tasa de falsos huérfanos es
 alta, no seguir construyendo, porque cada falso huérfano se vuelve una clase espuria en la
 inducción y con multi-rama se estaría eligiendo entre variantes de ruido. Eso está escrito
 suponiendo un dominio objetivo, y **este proyecto no tiene uno**: el entregable es el sistema y su
@@ -70,8 +100,8 @@ sigue abierto es la mejora que el spec propone para bajarla: de sus tres vías �
 mejores glosas, **ajuste del matcher**— las dos primeras se midieron y la tercera está bloqueada
 por falta de etiquetas.
 
-Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `calibrate`, T3
-`export-annotations`, T4 la telemetría en `work_units` desde el principio.
+Las cuatro tareas de `DELIVERABLES-PENDING` están: `DELIVERABLES-PENDING-PARSER-EVAL` es `report`, `DELIVERABLES-PENDING-EXTRACTION-TESTCASE` el banco de `calibrate`, `DELIVERABLES-PENDING-BRAT-EXPORTER`
+`export-annotations`, `DELIVERABLES-PENDING-TELEMETRY` la telemetría en `work_units` desde el principio.
 
 ### En cola
 
@@ -80,60 +110,60 @@ existe para que no se pierdan entre las entradas.
 
 | # | Qué | Por qué | Detalle |
 |---|---|---|---|
-| 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [hallazgo 1.11](HALLAZGOS.md), [1.14](HALLAZGOS.md) |
-| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [deuda 24](DEUDA_TECNICA.md) |
-| 3 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Bajo esfuerzo, alta prioridad: los tres son comparar un hash contra el registrado, y `next` es el lugar. El último cierra el bucle de §4.3 | [deuda 25](DEUDA_TECNICA.md) |
-| 4 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — el metalenguaje de escribir un paper, no el dominio del que habla. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [deuda 23](DEUDA_TECNICA.md), [hallazgo 1.13](HALLAZGOS.md) |
-| 5 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [deuda 22](DEUDA_TECNICA.md) |
-| 6 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita. Sólo sobre lo que el pipeline mismo escribió: shapes sobre verdades del dominio chocan con el mundo abierto | [deuda 8e](DEUDA_TECNICA.md) |
+| 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](HALLAZGOS.md), [`FINDINGS-MEASURED-FULL-RUN`](HALLAZGOS.md) |
+| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](DEUDA_TECNICA.md) |
+| 3 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Bajo esfuerzo, alta prioridad: los tres son comparar un hash contra el registrado, y `next` es el lugar. El último cierra el bucle de `PREP-NORMALIZE` | [`DEBT-AUTOMATIC-TRIGGERS`](DEUDA_TECNICA.md) |
+| 4 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — el metalenguaje de escribir un paper, no el dominio del que habla. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [`DEBT-ACADEMIC-METALANGUAGE`](DEUDA_TECNICA.md), [`FINDINGS-MEASURED-SPURIOUS-CLASS`](HALLAZGOS.md) |
+| 5 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [`DEBT-ONTOLOGY-IMPORTS`](DEUDA_TECNICA.md) |
+| 6 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita. Sólo sobre lo que el pipeline mismo escribió: shapes sobre verdades del dominio chocan con el mundo abierto | [`DEBT-VALIDATION-CHAIN`](DEUDA_TECNICA.md) |
 
 <details>
 <summary>Lo que estaba en cola y se cerró</summary>
 
 | # | Qué | Por qué ahora | Detalle |
 |---|---|---|---|
-| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [hallazgo 1.12](HALLAZGOS.md) |
-| ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
-| ~~3~~ | ~~El registro de decisiones~~ — **cerrado entero**: una tabla, seis categorías fijas, `invalid` separado de `rejected`, la forma normal guardada, y los precedentes inyectados en el prompt de axiomatización | Lo rechazado no está en ningún otro lado, y guardarlo sólo rinde si vuelve al prompt | [deuda 20](DEUDA_TECNICA.md) |
-| ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [deuda 8g](DEUDA_TECNICA.md) |
-| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [hallazgo 1.14](HALLAZGOS.md) |
-| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
-| ~~7~~ | ~~Comparación por forma normal~~ — **hecha**: `normal_form` nombra por etiquetas, saltea la glosa, y `already_rejected` la consulta antes de juzgar | Sin ella el mismo compromiso vuelve con otros IRIs y no se detecta como re-proposición | [deuda 20](DEUDA_TECNICA.md) |
+| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [`FINDINGS-MEASURED-TUNED-RERANKER`](HALLAZGOS.md) |
+| ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](HALLAZGOS.md) |
+| ~~3~~ | ~~El registro de decisiones~~ — **cerrado entero**: una tabla, seis categorías fijas, `invalid` separado de `rejected`, la forma normal guardada, y los precedentes inyectados en el prompt de axiomatización | Lo rechazado no está en ningún otro lado, y guardarlo sólo rinde si vuelve al prompt | [`DEBT-FEEDBACK-HISTORY`](DEUDA_TECNICA.md) |
+| ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [`DEBT-NEXT-RUNS`](DEUDA_TECNICA.md) |
+| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [`FINDINGS-MEASURED-FULL-RUN`](HALLAZGOS.md) |
+| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [`DEBT-QUALITATIVE-PAIR`](DEUDA_TECNICA.md) |
+| ~~7~~ | ~~Comparación por forma normal~~ — **hecha**: `normal_form` nombra por etiquetas, saltea la glosa, y `already_rejected` la consulta antes de juzgar | Sin ella el mismo compromiso vuelve con otros IRIs y no se detecta como re-proposición | [`DEBT-FEEDBACK-HISTORY`](DEUDA_TECNICA.md) |
 
 </details>
 
 | Etapa | Estado |
 |---|---|
-| A0.0 detección de perfil OWL | listo |
-| A0.1–A0.3 IRIs opacos, etiquetas, erratas | listo; la semilla puede venir en OWL, Turtle o **OBO** |
-| A0.4 glosas | listo (requiere proveedor LLM) |
-| A1 clasificación por página | listo |
-| A2 parseo e ingesta | listo: PDF born-digital y **texto plano**; falta la ruta VLM |
-| A3 generación de CQ | listo (`cq propose`) |
-| A4 CQ del usuario | listo |
+| `PREP-NORMALIZE-PROFILE` detección de perfil OWL | listo |
+| `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas | listo; la semilla puede venir en OWL, Turtle o **OBO** |
+| `PREP-NORMALIZE-GLOSSES` glosas | listo (requiere proveedor LLM) |
+| `PREP-CLASSIFY` clasificación por página | listo |
+| `PREP-PARSE` parseo e ingesta | listo: PDF born-digital y **texto plano**; falta la ruta VLM |
+| `PREP-CQ-GENERATED` generación de CQ | listo (`cq propose`) |
+| `PREP-CQ-USER` CQ del usuario | listo |
 | Chunking estructura-consciente | listo |
-| B1 extracción de candidatos | listo |
-| B1b correferencia intra-documento | listo |
-| B2 matching y resolución de entidades | cableado y calibrado contra CRAFT (ver Calibración) |
+| `ITER-EXTRACT` extracción de candidatos | listo |
+| `ITER-COREFER` correferencia intra-documento | listo |
+| `ITER-MATCH` matching y resolución de entidades | cableado y calibrado contra CRAFT (ver Calibración) |
 | Zona gris: cola, respuestas y etiquetas | listo (`grey`) |
 | Conjunto de retención: hold-out, anotador, exportador | listo |
 | Banco de calibración contra corpus publicado | listo (`calibrate`) |
-| B2b puenteo por conocimiento del mundo | listo (`bridge`) |
-| B3 inducción de clases | listo (`induce`) |
-| B4 axiomatización | listo (`axiomatize`) |
-| B4b enriquecimiento de glosas | listo (`enrich`, `circular`) |
-| B5 filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
-| B5 filtro 3 (SHACL) | listo (`--extra validation`); las shapes se escriben a mano |
-| B5 filtro 4 (OntoClean) | listo (`metaproperties` + `validate`) |
-| B5 filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
-| B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
-| B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
-| Ajuste del matcher (§6.3) | listo (`tune`), completo o LoRA según el tamaño del modelo |
-| Registro de decisiones (§6.7) | **a medias**: esquema D9 completo y consultable; falta inyectar los precedentes en el prompt y la forma normal. Ver deuda 20 |
-| B7–B8 DAG de versiones, hash de estado, loops | listo |
-| Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
-| Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
-| Criterios de parada (§10.3) | listo (`stop`); los cuatro |
+| `ITER-BRIDGE` puenteo por conocimiento del mundo | listo (`bridge`) |
+| `ITER-INDUCE` inducción de clases | listo (`induce`) |
+| `ITER-AXIOMATIZE` axiomatización | listo (`axiomatize`) |
+| `ITER-AXIOMATIZE-ENRICH` enriquecimiento de glosas | listo (`enrich`, `circular`) |
+| `ITER-VALIDATE` filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
+| `ITER-VALIDATE` filtro 3 (SHACL) | listo (`--extra validation`); las shapes se escriben a mano |
+| `ITER-VALIDATE` filtro 4 (OntoClean) | listo (`metaproperties` + `validate`) |
+| `ITER-VALIDATE` filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
+| `ITER-VALIDATE` filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
+| `ITER-BRANCH` construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
+| Ajuste del matcher (`ITER-TUNE`) | listo (`tune`), completo o LoRA según el tamaño del modelo |
+| Registro de decisiones (`ITER-FEEDBACK`) | **a medias**: esquema `GRADED-FEEDBACK` completo y consultable; falta inyectar los precedentes en el prompt y la forma normal. Ver `DEBT-FEEDBACK-HISTORY` |
+| `ITER-APPLY`: DAG de versiones, hash de estado, loops | listo |
+| Conflictos fácticos (`ITER-CONFLICTS`) | listo (`conflicts`, `mark`) |
+| Propiedades funcionales (`ITER-APPLY`) | listo (`functional`); sin propiedades que mirar todavía |
+| Criterios de parada (`EVAL-STOPPING`) | listo (`stop`); los cuatro |
 | Guía de iteración | listo (`next`); no ejecuta, ver deuda |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 
@@ -145,24 +175,24 @@ flowchart TB
 
   subgraph FA["FASE A · preparación, una sola vez"]
     direction TB
-    A1["A1 · clasificación por página"]
-    A2["A2 · parseo e ingesta"]
+    `PREP-CLASSIFY`["A1 · clasificación por página"]
+    `PREP-PARSE`["A2 · parseo e ingesta"]
     CHK["chunking estructura-consciente"]
-    A0["A0 · normalización de la semilla<br/>IRIs opacos · etiquetas · erratas · glosas"]
-    A3["A3 · generación de CQ"]
-    A4["A4 · CQ del usuario"]
+    `PREP-NORMALIZE`["A0 · normalización de la semilla<br/>IRIs opacos · etiquetas · erratas · glosas"]
+    `PREP-CQ-GENERATED`["A3 · generación de CQ"]
+    `PREP-CQ-USER`["A4 · CQ del usuario"]
   end
 
   subgraph FB["FASE B · iteración"]
     direction TB
-    B1["B1 · extracción de candidatos"]
-    B1b["B1b · correferencia intra-documento"]
-    B2["B2 · matching y resolución de entidades"]
-    B2b["B2b · puenteo por conocimiento del mundo"]
-    B3["B3 · inducción de clases"]
-    B4["B4 · axiomatización"]
-    B5["B5 · cadena de 7 filtros"]
-    B6["B6 · construcción de ramas"]
+    `ITER-EXTRACT`["B1 · extracción de candidatos"]
+    `ITER-COREFER`["B1b · correferencia intra-documento"]
+    `ITER-MATCH`["B2 · matching y resolución de entidades"]
+    `ITER-BRIDGE`["B2b · puenteo por conocimiento del mundo"]
+    `ITER-INDUCE`["B3 · inducción de clases"]
+    `ITER-AXIOMATIZE`["B4 · axiomatización"]
+    `ITER-VALIDATE`["B5 · cadena de 7 filtros"]
+    `ITER-BRANCH`["B6 · construcción de ramas"]
     B78["B7-B8 · aplicación · DAG · hash de estado"]
   end
 
@@ -171,28 +201,28 @@ flowchart TB
   OUT[/"TBox versionada + ABox derivado"/]
   HOLD["conjunto de retención<br/>nunca entra al proceso"]
 
-  corpus --> A1 --> A2 --> CHK --> B1 --> B1b --> B2
-  A2 -.-> HOLD
-  seed --> A0 --> B2
-  A0 --> B5
-  A2 --> A3 --> A4 --> CQE
-  B2 -->|"mención tipada"| ABOX
-  B2 -->|"huérfana"| B2b --> B3 --> B4 --> B5 --> B6 --> B78
+  corpus --> `PREP-CLASSIFY` --> `PREP-PARSE` --> CHK --> `ITER-EXTRACT` --> `ITER-COREFER` --> `ITER-MATCH`
+  `PREP-PARSE` -.-> HOLD
+  seed --> `PREP-NORMALIZE` --> `ITER-MATCH`
+  `PREP-NORMALIZE` --> `ITER-VALIDATE`
+  `PREP-PARSE` --> `PREP-CQ-GENERATED` --> `PREP-CQ-USER` --> CQE
+  `ITER-MATCH` -->|"mención tipada"| ABOX
+  `ITER-MATCH` -->|"huérfana"| `ITER-BRIDGE` --> `ITER-INDUCE` --> `ITER-AXIOMATIZE` --> `ITER-VALIDATE` --> `ITER-BRANCH` --> B78
   B78 --> ABOX --> OUT
-  B78 -->|"iteración siguiente"| B1
+  B78 -->|"iteración siguiente"| `ITER-EXTRACT`
   B78 --> CQE
-  CQE -->|"bajo el umbral"| B1
+  CQE -->|"bajo el umbral"| `ITER-EXTRACT`
   CQE -->|"umbral alcanzado"| OUT
-  HOLD -.->|"mide falsos huérfanos"| B2
+  HOLD -.->|"mide falsos huérfanos"| `ITER-MATCH`
 
   classDef ok fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
   classDef partial fill:#fdf0ce,stroke:#b7791f,color:#4a3208
   classDef todo fill:#fbdcdc,stroke:#c53030,color:#4d1414
   classDef io fill:#e6e8eb,stroke:#6b7280,color:#1f2937
 
-  class A1,CHK,A0,A4,B1,B1b,B2b,B3,B78,CQE,HOLD,ABOX ok
-  class A2,B2,B5 partial
-  class A3,B4,B6 todo
+  class `PREP-CLASSIFY`,CHK,`PREP-NORMALIZE`,`PREP-CQ-USER`,`ITER-EXTRACT`,`ITER-COREFER`,`ITER-BRIDGE`,`ITER-INDUCE`,B78,CQE,HOLD,ABOX ok
+  class `PREP-PARSE`,`ITER-MATCH`,`ITER-VALIDATE` partial
+  class `PREP-CQ-GENERATED`,`ITER-AXIOMATIZE`,`ITER-BRANCH` todo
   class corpus,seed,OUT io
 ```
 
@@ -203,17 +233,17 @@ implementado, que hoy son el ajuste del matcher y la mitad que falta del registr
 ramificado— y la semilla hasta una TBox normalizada, glosada y enriquecida desde el corpus.
 
 **No hay sesión interactiva.** Hoy esto es un CLI de comandos discretos. El spec tiene varios
-puntos donde el usuario decide —elegir rama (§6.6), zona gris del matcher (§6.2), pregunta por
-propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas en bloque (§4.3)— y
+puntos donde el usuario decide —elegir rama (`ITER-BRANCH`), zona gris del matcher (`ITER-MATCH`), pregunta por
+propiedad funcional (`ITER-APPLY`), validación de CQ (`PREP-CQ-GENERATED`), revisión de erratas en bloque (`PREP-NORMALIZE`)— y
 ninguno tiene interfaz todavía. Lo que sí existe es la maquinaria que **produce** esas
-preguntas: quedan en archivos JSON bajo `data/review/` y en los objetos `Decision` de B2.
+preguntas: quedan en archivos JSON bajo `data/review/` y en los objetos `Decision` de `ITER-MATCH`.
 
 ## Instalación
 
 ```bash
 uv sync --extra dev                      # base + pytest/ruff
 uv sync --extra dev --extra reasoning    # + JPype (ELK, HermiT)
-uv sync --extra dev --extra matching     # + sentence-transformers (B2)
+uv sync --extra dev --extra matching     # + sentence-transformers (`ITER-MATCH`)
 ```
 
 El razonador necesita jars que no se versionan:
@@ -226,7 +256,7 @@ Baja Maven a `.tools/` si no lo tenés instalado. Requiere Java 11+.
 
 ## Configuración
 
-Un solo archivo central, `config/default.yaml` (§7 del spec). Todo umbral vive ahí; nada está
+Un solo archivo central, `config/default.yaml` (`CONFIG` del spec). Todo umbral vive ahí; nada está
 hardcodeado. Las rutas relativas se resuelven contra el archivo de config, así que los
 comandos funcionan desde cualquier directorio.
 
@@ -306,7 +336,7 @@ flowchart LR
   as[/"data/assets/"/]
   on[/"data/ontology/seed_normalized.ttl"/]
   rv[/"data/review/seed_review.json"/]
-  rp[/"data/reports/ · T1"/]
+  rp[/"data/reports/ · `DELIVERABLES-PENDING-PARSER-EVAL`"/]
   an[/"data/annotate/ · data/brat/"/]
   di["diagnóstico: perfil · ELK · HermiT · métricas"]
   pr["tasa de aprobación por iteración"]
@@ -332,7 +362,7 @@ flowchart LR
 ```
 
 
-### 1. Ingesta del corpus (A1 + A2)
+### 1. Ingesta del corpus (`PREP-CLASSIFY` + `PREP-PARSE`)
 
 ```bash
 uv run onto-pipeline ingest --limit 5      # primeros 5 documentos
@@ -349,7 +379,7 @@ extraída — el parser born-digital sólo ve tablas con líneas.
 Es cacheable: re-ingestar un documento sin cambios no reprocesa nada. Cambiar un umbral del
 config invalida el caché de esa etapa.
 
-### 2. Normalización de la semilla (A0)
+### 2. Normalización de la semilla (`PREP-NORMALIZE`)
 
 ```bash
 uv run onto-pipeline --env-file opencode.env normalize-seed
@@ -374,7 +404,7 @@ duplica nada ni reabre lo ya decidido: lo que rechazaste queda rechazado. Y si u
 de aparecer porque cambiaste la semilla, pasa a `superseded` en vez de quedar colgado como
 pendiente.
 
-Sin proveedor configurado saltea A0.4 y te dice cuántas glosas quedaron pendientes.
+Sin proveedor configurado saltea `PREP-NORMALIZE-GLOSSES` y te dice cuántas glosas quedaron pendientes.
 
 ### 3. ¿Y ahora qué? (`next`)
 
@@ -389,9 +419,9 @@ separa un consejo de una lista.
 
 **Una decisión pendiente le gana a cualquier etapa que podría correr**, porque todo lo que viene
 después estaría construido sobre una respuesta que nadie dio. Este diseño tiene cinco puntos que
-decide el usuario —zona gris del matcher (§6.2), rama (§6.6), propiedad funcional (§6.8),
-validación de CQ (§4.4), errata en la semilla (§4.3)— y un runner que los pasara de largo los
-estaría decidiendo por default, que es la falla que D5 y D21 nombran desde los dos lados: no
+decide el usuario —zona gris del matcher (`ITER-MATCH`), rama (`ITER-BRANCH`), propiedad funcional (`ITER-APPLY`),
+validación de CQ (`PREP-CQ-GENERATED`), errata en la semilla (`PREP-NORMALIZE`)— y un runner que los pasara de largo los
+estaría decidiendo por default, que es la falla que `BRANCH-ONLY-REVIEW` y `AUTO-APPLY-WHEN-NO-AXES` nombran desde los dos lados: no
 preguntar nunca y que el sistema elija el modelado en silencio, o preguntar todo y volverse el
 trabajo manual que vino a reemplazar.
 
@@ -405,13 +435,13 @@ nada y sale con error: cruzarlo sería decidirlo por default. Lo ejecuta como su
 comando que imprime— así que la salida, los errores y el código de retorno son los del comando,
 no una reimplementación.
 
-### 4. Iteración sobre el corpus (B1 → B3)
+### 4. Iteración sobre el corpus (`ITER-EXTRACT` → `ITER-INDUCE`)
 
 ```bash
 uv run onto-pipeline --env-file opencode.env extract    # menciones por chunk
 uv run onto-pipeline --env-file opencode.env coref      # agrupar las del mismo individuo
 uv run onto-pipeline match                              # tipar contra la semilla
-uv run onto-pipeline --env-file opencode.env bridge     # puentear huérfanas (§6.2b)
+uv run onto-pipeline --env-file opencode.env bridge     # puentear huérfanas (`ITER-BRIDGE`)
 uv run onto-pipeline --env-file opencode.env induce     # las que quedan, a clases nuevas
 ```
 
@@ -420,7 +450,7 @@ pregunta si se relaciona con una clase que la semilla ya tiene *aunque ningún d
 diga*: el corpus escribe "focus group" y la semilla tiene `Technique`. Sin esa etapa, cada
 mención que la semilla sí cubría pero el matcher no conectó se vuelve una clase inducida
 espuria — el falso huérfano alimentando al inductor, que es justo lo que la compuerta no-go de
-§12.1 quiere evitar. `induce` avisa si no encuentra puentes para esa versión.
+`BUILD-NO-GO-GATE` quiere evitar. `induce` avisa si no encuentra puentes para esa versión.
 
 Al modelo **nunca se le pide OWL**: recibe un sintagma y una lista corta de clases candidatas, y
 responde un juicio atómico —ejemplo de, tipo de, o ninguna—. Una clase que no estaba en la lista
@@ -428,7 +458,7 @@ es respuesta rechazada, no puente; se verifica mecánicamente, igual que `coref`
 todo id agrupado exista.
 
 Los puentes quedan marcados `world_knowledge`, y esa marca tiene consecuencia: **el filtro de
-evidencia de B5 no se les aplica**. Sin la distinción, "todo axioma sin cita se descarta"
+evidencia de `ITER-VALIDATE` no se les aplica**. Sin la distinción, "todo axioma sin cita se descarta"
 mataría exactamente los puentes que hacen útil a la semilla. Pasan igual por el razonador y por
 OntoClean, y te llegan marcados como lo que son.
 
@@ -436,7 +466,7 @@ Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403
 cubren el 70% de las huérfanas; bajarlo a 0,30 son 582 preguntas y el 98%. El umbral no está
 calibrado, como todos los demás.
 
-#### La zona gris (§6.2)
+#### La zona gris (`ITER-MATCH`)
 
 ```bash
 uv run onto-pipeline grey list                                   # lo que espera respuesta
@@ -445,7 +475,7 @@ uv run onto-pipeline grey answer <mención> --none                # ninguna de e
 uv run onto-pipeline grey labels --export data/labels.jsonl
 ```
 
-La política conservadora de §6.2 **no tipa** estos pares y nada aguas abajo los trata como
+La política conservadora de `ITER-MATCH` **no tipa** estos pares y nada aguas abajo los trata como
 tipados: esperan una respuesta en vez de que un umbral los decida, que es exactamente para lo que
 existe la zona.
 
@@ -456,12 +486,12 @@ inducción, que es donde va un concepto genuinamente nuevo.
 `mention_typing` —que el matcher reescribe entera cada corrida— porque volver a preguntar lo
 mismo todas las veces es cómo un sistema entrena a alguien a dejar de contestar.
 
-Y son, sin ninguna épica, **las etiquetas accept/reject que §6.3 quiere** para tunear el
+Y son, sin ninguna épica, **las etiquetas accept/reject que `ITER-TUNE` quiere** para tunear el
 re-ranker. Nadie las anota a propósito: salen de alguien haciendo su trabajo, y son la única
 señal de entrenamiento que este diseño produce. El cross-encoder de fábrica midió separación
 −0,50; eso es el argumento para necesitarlas, no contra re-rankear.
 
-### 5. Axiomatización, enriquecimiento y ramas (B4 + B4b + B6)
+### 5. Axiomatización, enriquecimiento y ramas (`ITER-AXIOMATIZE` + `ITER-AXIOMATIZE-ENRICH` + `ITER-BRANCH`)
 
 ```bash
 uv run onto-pipeline --env-file opencode.env axiomatize   # propuestas -> axiomas
@@ -472,7 +502,7 @@ uv run onto-pipeline branch --choose b_fceba3e2 --why "el medio es el corte"
 `axiomatize` le hace al modelo **una sola pregunta atómica** por propuesta —¿es un tipo de esa
 clase, un ejemplo de esa clase, o ninguna?— y el código escribe el OWL. Un modelo que sólo
 responde eso no puede confundir subsunción con instanciación, porque nunca escribe el axioma;
-esa confusión es el primer sesgo que lista §6.1. "Ejemplo de" **rechaza** la propuesta en vez de
+esa confusión es el primer sesgo que lista `ITER-EXTRACT`. "Ejemplo de" **rechaza** la propuesta en vez de
 colgarla: no era una clase. "Ninguna" la deja raíz, porque un padre forzado es peor que ninguno.
 
 `branch` busca qué hay que decidir entre esos axiomas. **A ningún modelo se le piden
@@ -487,13 +517,13 @@ devuelve tres correlacionadas. Los ejes salen de dos lados y nada más:
   porque los dos lados son consistentes. Hoy tiene dos entradas con detector mecánico:
   `attribute_as_class` (varias subclases que son el padre calificado por un modificador:
   ¿`Semi-Structured Interview` es una clase, o `schedule` es una dimensión de `Interview`?) y
-  `division_criterion` (un padre partido por dos criterios a la vez, §8.2). Una tercera queda
+  `division_criterion` (un padre partido por dos criterios a la vez, `SCHEMAS-BRANCH`). Una tercera queda
   catalogada y sin detector a propósito —reificar vs. propiedad directa— para que el hueco se
   vea en vez de insinuarse.
 
 Lo normal es que no haya ningún eje: entonces aplica todo y lo dice. **El multi-rama es el
 camino excepcional.** Preguntar en cada iteración sin conflicto real es exactamente el trabajo
-manual que el pipeline existe para evitar (D21).
+manual que el pipeline existe para evitar (`AUTO-APPLY-WHEN-NO-AXES`).
 
 Los ejes que no comparten axiomas se presentan **por separado**: k ejes binarios son k
 preguntas, no 2^k ramas. Sólo los acoplados se expanden en ramas completas, con techo de cinco.
@@ -501,19 +531,19 @@ preguntas, no 2^k ramas. Sólo los acoplados se expanden en ramas completas, con
 Cada rama trae su puntaje —cobertura de huérfanas, costo de reorganización, costo de
 regeneración del ABox— y el hash del estado que produciría, así que una rama que vuelve a una
 versión ya visitada te lo avisa antes de elegirla. La afinidad histórica llega vacía hasta que
-haya algo decidido: es el cold start de §11, reportado como ausente y no como cero.
+haya algo decidido: es el cold start de `COLDSTART`, reportado como ausente y no como cero.
 
 `--invalid <rama>` marca una hermana que además de no elegida está **mal**. Es la distinción que
-§6.7 pide y que colapsada se pierde: "elegí otra" y "esto no puede ser" son señales de fuerza
+`ITER-FEEDBACK` pide y que colapsada se pierde: "elegí otra" y "esto no puede ser" son señales de fuerza
 distinta, y sólo la segunda sirve para descartar de entrada una propuesta parecida. Pesa el doble
 en la afinidad histórica.
 
 Elegir una rama es lo que **graba los rechazos**. Lo aceptado ya está en la ontología; lo
 rechazado no está en ningún otro lado, y es lo que una iteración posterior lee para no volver a
-proponer lo mismo (§6.7). Se graba después de aplicar, no antes: el razonador todavía puede
+proponer lo mismo (`ITER-FEEDBACK`). Se graba después de aplicar, no antes: el razonador todavía puede
 rechazar la rama, y una decisión registrada sobre un estado que nunca se aplicó sería mentira.
 
-#### Enriquecimiento de glosas (B4b)
+#### Enriquecimiento de glosas (`ITER-AXIOMATIZE-ENRICH`)
 
 ```bash
 uv run onto-pipeline enrich --dry-run                     # qué pasajes hay, sin preguntar nada
@@ -521,8 +551,8 @@ uv run onto-pipeline --env-file opencode.env enrich       # mejorar glosas y cos
 uv run onto-pipeline circular                             # los matches que no cuentan como evidencia
 ```
 
-La glosa no es un valor fijo de A0: se arranca desde el vecindario estructural y cada iteración
-la mejora con lo que el corpus efectivamente dice. Eso cierra el bucle autocorrectivo de §4.3
+La glosa no es un valor fijo de `PREP-NORMALIZE`: se arranca desde el vecindario estructural y cada iteración
+la mejora con lo que el corpus efectivamente dice. Eso cierra el bucle autocorrectivo de `PREP-NORMALIZE`
 —mejor glosa → mejor matching → menos falsos huérfanos— y una mención huérfana en la iteración 3
 puede tiparse bien en la 8.
 
@@ -545,7 +575,7 @@ Dos cosas propias de este pipeline cambian cómo corre ese bucle, y conviene dec
   con una procedencia que no se cumple — y el control de circularidad se apoya en que esa
   procedencia diga la verdad.
 
-**Control de circularidad (§4.3).** Cada enriquecimiento registra qué documentos contribuyeron.
+**Control de circularidad (`PREP-NORMALIZE`).** Cada enriquecimiento registra qué documentos contribuyeron.
 Si después una mención de uno de esos documentos matchea contra esa clase, ese match no es
 evidencia independiente: la clase se describió usando ese documento, así que el match es en
 parte el pipeline reconociendo su propia escritura. `circular` los cuenta. No son errores y no
@@ -555,7 +585,7 @@ Sobre el par actual el resultado es cero pasajes para las 34 clases de la semill
 exactamente lo que predice el desajuste temático documentado más abajo: no es una falla de la
 etapa, es la etapa reportando que el corpus no define nada de lo que la semilla nombra.
 
-### 6. Conflictos fácticos (§6.4)
+### 6. Conflictos fácticos (`ITER-CONFLICTS`)
 
 ```bash
 uv run onto-pipeline conflicts                       # ¿quién se contradice con quién?
@@ -570,7 +600,7 @@ entidad es su tipo, así que el desacuerdo es una entidad tipada a dos clases po
 distintos.
 
 **El filtro de volumen es el diseño.** Decidir caso por caso es la revisión manual que el
-pipeline existe para evitar (D5), así que la división es mecánica:
+pipeline existe para evitar (`BRANCH-ONLY-REVIEW`), así que la división es mecánica:
 
 | El conflicto… | Destino |
 |---|---|
@@ -596,7 +626,7 @@ un eje de `branch` y nunca una decisión por caso.
 interfaz y son señales opuestas:
 
 - `refuted`: el documento lo afirma y no es cierto. La aserción sale del ABox.
-- `misextracted`: el documento nunca dijo eso, el extractor leyó mal. **Es un bug de B1**, sale
+- `misextracted`: el documento nunca dijo eso, el extractor leyó mal. **Es un bug de `ITER-EXTRACT`**, sale
   igual del ABox, y además va al conjunto de evaluación con `--export`. Son etiquetas de error
   de extracción que nadie anotó a propósito: la única fuente gratuita que el sistema tiene.
 
@@ -607,7 +637,7 @@ decisión que no cambiara ninguna regla sería una decisión que el ABox nunca n
 Bajo mundo abierto, no asertar X y asertar ¬X son cosas distintas: la primera es silencio, la
 segunda es conocimiento. Marcar algo falso **no** escribe una aserción negativa en la ontología.
 
-### 7. Validación (A0.0 + B5)
+### 7. Validación (`PREP-NORMALIZE-PROFILE` + `ITER-VALIDATE`)
 
 ```bash
 uv run onto-pipeline validate                    # última versión
@@ -615,7 +645,7 @@ uv run onto-pipeline validate --version v0
 ```
 
 La cadena está apilada y **sólo lo que la sobrevive llega a formar ramas**. El usuario nunca ve
-un axioma individual (D5): ve ramas, y la cadena decide qué entra en ellas.
+un axioma individual (`BRANCH-ONLY-REVIEW`): ve ramas, y la cadena decide qué entra en ellas.
 
 | # | Filtro | Tipo | Estado |
 |---|---|---|---|
@@ -631,7 +661,7 @@ Tres cosas de la cadena que no son obvias:
 
 - **El filtro 6 se aplica a una procedencia y no a la otra.** La regla "todo axioma sin cita se
   descarta" borraría justamente los puentes que hacen útil a la semilla: un axioma
-  `world_knowledge` no tiene cita por construcción (§6.2b), y eso es para lo que existe.
+  `world_knowledge` no tiene cita por construcción (`ITER-BRIDGE`), y eso es para lo que existe.
   Aplicárselo no es una política más estricta, es otra y equivocada.
 - **El filtro 5 nunca rechaza.** Un pitfall es un olor —una clase sin definición, una propiedad
   sin dominio, un ciclo en la jerarquía— y algunos son deliberados. Lo que hay implementado es
@@ -671,7 +701,7 @@ la jerarquía estaría reportando un resultado limpio que nunca estableció.
 
 Es la parte más débil de la cadena y el spec lo dice: con ontología superior las metapropiedades
 se heredan; sin ella las etiqueta el LLM, que es "factible, menos confiable, y trabajo adicional
-que contradice parcialmente D5".
+que contradice parcialmente `BRANCH-ONLY-REVIEW`".
 
 Instalación del filtro 3: `uv sync --extra validation`.
 
@@ -681,11 +711,11 @@ Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 encontró nada, pero puede haber ignorado el axioma culpable), nunca `OK`. Si la cobertura EL
 cae por debajo del umbral, devuelve `SKIPPED`.
 
-### 8. Competency questions (A3 + A4)
+### 8. Competency questions (`PREP-CQ-GENERATED` + `PREP-CQ-USER`)
 
 ```bash
-uv run onto-pipeline cq import examples/competency_questions.json   # A4: las tuyas, primero
-uv run onto-pipeline --env-file opencode.env cq propose             # A3: desde el corpus
+uv run onto-pipeline cq import examples/competency_questions.json   # `PREP-CQ-USER`: las tuyas, primero
+uv run onto-pipeline --env-file opencode.env cq propose             # `PREP-CQ-GENERATED`: desde el corpus
 uv run onto-pipeline cq list --status proposed
 uv run onto-pipeline cq accept cq_ab12cd34ef cq_9f8e7d6c5b
 uv run onto-pipeline cq eval --iteration 3
@@ -697,10 +727,10 @@ aprobación, que es el criterio de parada primario.
 
 **Advertencia de circularidad, primero.** Las CQ generadas miden completitud **respecto al
 corpus**, no respecto al dominio. Es la misma limitación que la saturación de novedad y no se
-arregla desde adentro: la mitigación es A4, las que escribís vos **sin mirar** las generadas. Por
+arregla desde adentro: la mitigación es `PREP-CQ-USER`, las que escribís vos **sin mirar** las generadas. Por
 eso `cq import` va antes en la lista de arriba.
 
-`cq propose` hace los cuatro pasos de §4.4 y tres son mecánicos:
+`cq propose` hace los cuatro pasos de `PREP-CQ-GENERATED` y tres son mecánicos:
 
 1. **Muestreo estratificado**, no el corpus entero. Definiciones, tablas, enumeraciones,
    restricciones y procedimientos, 10–15 pasajes por estrato. Los estratos son lo que hace
@@ -720,7 +750,7 @@ eso `cq import` va antes en la lista de arriba.
 4. **Validación tuya**, sobre lo que sobrevivió. Es **trabajo de una sola vez**, no por
    iteración.
 
-### 9. Propiedades funcionales (§6.8)
+### 9. Propiedades funcionales (`ITER-APPLY`)
 
 ```bash
 uv run onto-pipeline functional                                   # ¿qué candidatas hay?
@@ -754,14 +784,14 @@ propiedad es funcional en el dominio, y esto sólo muestra cuánto costaría el 
 
 La pregunta lleva la **distribución**, no sólo la conclusión: "1 valor en 3 individuos" y "1
 valor en 400" son la misma señal cualitativa y decisiones opuestas. Y los individuos marcados
-`possible_duplicate_unresolved` quedan **fuera del conteo** (§6.2): dos duplicados con un valor
+`possible_duplicate_unresolved` quedan **fuera del conteo** (`ITER-MATCH`): dos duplicados con un valor
 cada uno se ven exactamente como confirmación de funcionalidad, que es la única forma en que este
 relevamiento podría fabricar su propia evidencia.
 
 Hoy no encuentra nada, y con razón: el pipeline extrae tipos y procedencia, no propiedades. La
 etapa está lista para cuando las haya.
 
-### 10. ¿Cuándo parar? (§10.3)
+### 10. ¿Cuándo parar? (`EVAL-STOPPING`)
 
 ```bash
 uv run onto-pipeline stop                 # los cuatro criterios
@@ -808,7 +838,7 @@ escribe en `data/ontology/<version>.abox.trig`. **No es una migración**: como e
 de las menciones y no de fuentes externas, reorganizar la TBox nunca necesita una — cambian las
 reglas y esto se corre de nuevo.
 
-La función es pura y **sólo lee** la capa de menciones, que es el invariante de §3 y lo único
+La función es pura y **sólo lee** la capa de menciones, que es el invariante de `LAYERS` y lo único
 que esta etapa podría romper por descuido. Las reglas de mapeo salen de `mapping:` en el config;
 el contrato completo está en [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md). Dos cosas que
 conviene saber al leer la salida:
@@ -825,8 +855,8 @@ con las mismas reglas no hace nada y lo dice.
 ### 12. Inspección
 
 ```bash
-uv run onto-pipeline report                 # T1: HTML por documento
-uv run onto-pipeline chunks <doc_id>        # unidades de extracción de B1
+uv run onto-pipeline report                 # `DELIVERABLES-PENDING-PARSER-EVAL`: HTML por documento
+uv run onto-pipeline chunks <doc_id>        # unidades de extracción de `ITER-EXTRACT`
 uv run onto-pipeline blocks <doc_id> -p 3   # bloques con procedencia, JSON
 uv run onto-pipeline versions               # el DAG
 uv run onto-pipeline diff                   # qué cambió la última versión
@@ -835,7 +865,7 @@ uv run onto-pipeline status                 # telemetría: llamadas y tokens por
 uv run onto-pipeline hold-out --help        # qué documentos están retenidos
 ```
 
-**El diff es semántico, no textual** (§6.8): compara conjuntos canónicos de axiomas lógicos con
+**El diff es semántico, no textual** (`ITER-APPLY`): compara conjuntos canónicos de axiomas lógicos con
 los blank nodes canonicalizados, así que reordenar la serialización no es un cambio y un
 renombre aparece como cambio de anotación, no como axiomas que van y vienen. En pantalla se lee
 por etiquetas —con IRIs opacos, un diff de IRIs crudos no es revisable— y el JSON que queda en
@@ -845,12 +875,12 @@ Cada comando que commitea una versión lo emite solo: además de la ontología e
 diff contra la versión inmediatamente anterior del DAG. Una versión raíz lo dice y no genera
 archivo.
 
-El **reporte T1** es el criterio de avance del paso 1: un HTML autocontenido por documento con
+El **reporte `DELIVERABLES-PENDING-PARSER-EVAL`** es el criterio de avance del paso 1: un HTML autocontenido por documento con
 el render de cada página al lado de lo que el parser entendió, mostrando clase de página con
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 13. Ajustar el matcher (§6.3)
+### 13. Ajustar el matcher (`ITER-TUNE`)
 
 ```bash
 uv run onto-pipeline tune craft-cl --out data/models/reranker-craft
@@ -891,8 +921,8 @@ Para usarlo: apuntar `matching.cross_encoder` al directorio guardado y poner
 
 ### 14. Conjunto de retención
 
-Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
-la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
+Son 5–10 documentos anotados por vos que **nunca entran al proceso** (`EVAL-PIPELINE`). Sirven para medir
+la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de `BUILD-NO-GO-GATE`.
 
 ```bash
 uv run onto-pipeline ingest -d ruta/al/doc.pdf      # 1. parsear
@@ -902,8 +932,8 @@ uv run onto-pipeline export-annotations doc.jsonl   # 4. validar e ir a BRAT
 ```
 
 Hay que parsearlos aunque no entren al proceso: los offsets de la anotación indexan el
-Markdown que produce A2, así que sin parsear no hay a qué anclarlos. `hold-out` marca la
-diferencia; sin esa marca el conjunto se filtra a B1 y la evaluación mediría el pipeline contra
+Markdown que produce `PREP-PARSE`, así que sin parsear no hay a qué anclarlos. `hold-out` marca la
+diferencia; sin esa marca el conjunto se filtra a `ITER-EXTRACT` y la evaluación mediría el pipeline contra
 su propio insumo. La marca sobrevive a una re-ingesta.
 
 **La herramienta de anotación** (paso 3) es un HTML autocontenido por documento en
@@ -917,7 +947,7 @@ que descansa toda la métrica y es demasiado fácil de errar si es un checkbox.
 | Acción en la herramienta | `gold_class` | `in_seed` | Qué significa si el matcher no la tipa |
 |---|---|---|---|
 | Clase de la semilla | el label | `true` | **falso huérfano** — un error del matcher |
-| Clase nueva | lo que escribas | `false` | **huérfano genuino** — alimenta B3 |
+| Clase nueva | lo que escribas | `false` | **huérfano genuino** — alimenta `ITER-INDUCE` |
 | Sin clase asignable | `null` | `false` | no cuenta: no es falla del matcher |
 
 
@@ -931,12 +961,12 @@ flowchart TB
   S --> R{"¿el matcher la tipó?"}
   R -->|"sí"| HIT["acierto"]
   R -->|"no"| FO["FALSO HUÉRFANO<br/>error del matcher"]
-  N --> GO["huérfano genuino<br/>alimenta B3"]
+  N --> GO["huérfano genuino<br/>alimenta `ITER-INDUCE`"]
   X --> NC["no cuenta"]
 
   FO --> RATE["tasa de falsos huérfanos"]
   HIT --> RATE
-  RATE --> GATE{"§12.1"}
+  RATE --> GATE{"`BUILD-NO-GO-GATE`"}
   GATE -->|"alta"| STOP["no seguir construyendo:<br/>arreglar el matcher primero"]
   GATE -->|"aceptable"| GO2["seguir al paso 4"]
 
@@ -994,7 +1024,7 @@ data/                 gitignoreado; todo es derivado y regenerable
   pipeline.sqlite3    menciones, bloques, work_units, decisiones, versiones, CQs
   markdown/           un .md por documento; los spans de los bloques indexan esto
   assets/             recortes de figuras
-  reports/            HTML de evaluación del parser (T1)
+  reports/            HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
   ontology/           la semilla normalizada, el diff y el ABox de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
@@ -1009,7 +1039,7 @@ lib/                  jars del razonador (gitignoreado)
 
 ## Caché, checkpoint y telemetría
 
-Son **un solo mecanismo**, la tabla `work_units` (§8.3). La clave incluye etapa, versión del
+Son **un solo mecanismo**, la tabla `work_units` (`SCHEMAS-WORK-UNITS`). La clave incluye etapa, versión del
 prompt, temperatura y hash del input, así que editar un prompt invalida el caché de esa etapa.
 Cada etapa enumera todas sus unidades antes de emitir nada; reanudar es volver a correr el
 comando. Los fallos reintentan con backoff y quedan registrados sin frenar la etapa, salvo que
@@ -1041,12 +1071,12 @@ conversaciones que trabajan sobre este repo.
   Una tasa de falsos huérfanos medida sobre este par no sería mala: sería sin significado,
   porque mediría el desajuste temático y no la calidad del matcher.
 
-- **Corrido sobre datos reales, B2 tipa mal.** De 1.725 menciones: 32 automáticas, 219 en zona
+- **Corrido sobre datos reales, `ITER-MATCH` tipa mal.** De 1.725 menciones: 32 automáticas, 219 en zona
   gris, 1.474 huérfanas (85%). Y las 32 automáticas son **todas** eco léxico — `question` 0.998,
   `information` 0.998, `support` 0.993, `subject` 0.992 — el nombre de la clase apareciendo como
   palabra corriente, ninguna una instanciación real. Con el par corpus/semilla desalineado ese
   85% no es un veredicto sobre el matcher.
-- **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice §6.2.**
+- **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice `ITER-MATCH`.**
   Ya no es provisional. Medido sobre CRAFT/CL —8.723 menciones gold contra 3.418 clases, 96% con
   definición escrita por curadores— recall@1: etiqueta 69,8%, etiqueta+glosa 13,3%, glosa 7,9%.
   Y lo que decide no es el recall sino el signo de la separación entre aciertos y errores:
@@ -1066,12 +1096,12 @@ conversaciones que trabajan sobre este repo.
   depende del tamaño del inventario, que acá son 3.418 clases contra las 34 de la semilla.
 - **El cross-encoder viene apagado, ahora con evidencia.** Re-rankeando el top-5 del bi-encoder
   sobre CRAFT/CL, el recall@1 cae de 6.090 a 2.220 y la separación se va a **−0,56**: no solo
-  aplasta los puntajes a ~0,1–0,3 —que es el falso huérfano que nombra R1— sino que además
-  ordena peor. Recién sirve tuneado con LoRA sobre etiquetas acumuladas (§6.3).
+  aplasta los puntajes a ~0,1–0,3 —que es el falso huérfano que nombra `RISKS-FALSE-ORPHANS`— sino que además
+  ordena peor. Recién sirve tuneado con LoRA sobre etiquetas acumuladas (`ITER-TUNE`).
 - **Tablas sin bordes salen como prosa.** `find_tables` sólo ve tablas con líneas; la
   estrategia por texto devuelve la página entera como tabla. El pipeline reporta el hueco en
   vez de adivinar. La respuesta del spec es rutear esas páginas a MinerU.
 - **No hay ruta VLM.** Páginas `scan`/`uncertain`, captioning de figuras y fórmulas quedan sin
   procesar.
-- **Fuera de v1** (§12.2): embeddings de grafos, minería de reglas, herramientas dedicadas de
+- **Fuera de v1** (`BUILD-OUT-OF-SCOPE`): embeddings de grafos, minería de reglas, herramientas dedicadas de
   correferencia, persistencia en Fuseki, importador desde BRAT.

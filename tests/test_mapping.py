@@ -66,7 +66,9 @@ def test_splitting_a_group_gives_the_separated_half_a_new_identity():
 
 
 def test_a_mention_no_merge_touched_is_its_own_individual():
-    """Separate individuals until confirmed (D10): a singleton group is what that looks like."""
+    """Separate individuals until confirmed (SEPARATE-UNTIL-CONFIRMED): a singleton group is what
+    that looks like.
+    """
     rows = [row("m1", "d1"), row("m2", "d2", text="NVivo")]
     result = mapping.regenerate(rows, {}, MappingRules())
 

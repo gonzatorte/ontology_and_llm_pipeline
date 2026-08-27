@@ -1,6 +1,6 @@
-"""B7–B8 — version DAG, semantic diff and loop detection (spec 6.8).
+"""ITER-APPLY–ITER-APPLY-REGENERATE — version DAG, semantic diff and loop detection.
 
-Not postponable (spec 12): even before multi-branch exists, the versioning, the history and
+Not postponable (BUILD): even before multi-branch exists, the versioning, the history and
 the state hash have to be in place. Retrofitting a DAG over fifteen already-applied iterations
 means losing that history.
 
@@ -245,7 +245,8 @@ def short_name(iri: str, labels: dict[str, str]) -> str:
 def label_index(*graphs: Graph) -> dict[str, str]:
     """IRI to preferred label, across every graph given.
 
-    A0.1 mints opaque IRIs, so a diff printed as raw IRIs is unreadable by construction. The
+    PREP-NORMALIZE-IRIS mints opaque IRIs, so a diff printed as raw IRIs is unreadable by
+    construction. The
     labels come from both sides of the comparison: a class removed in the newer version still
     has to be nameable, and its label only exists in the older one.
     """

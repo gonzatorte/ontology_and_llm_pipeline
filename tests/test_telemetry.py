@@ -32,8 +32,8 @@ def test_resume_skips_done_units(ledger):
         calls.append(payload["i"])
         return UnitResult(output=payload["i"] * 2)
 
-    first = ledger.run("B1", payloads(3), worker)
-    second = ledger.run("B1", payloads(3), worker)
+    first = ledger.run("ITER-EXTRACT", payloads(3), worker)
+    second = ledger.run("ITER-EXTRACT", payloads(3), worker)
 
     assert calls == [0, 1, 2]
     assert first.executed == 3 and second.cached == 3
@@ -47,14 +47,14 @@ def test_interrupted_stage_resumes_at_the_failed_unit(ledger):
             raise RuntimeError("upstream timeout")
         return UnitResult(output=payload["i"])
 
-    ledger.run("B1", payloads(20), flaky)
+    ledger.run("ITER-EXTRACT", payloads(20), flaky)
     calls = []
 
     def recovered(payload):
         calls.append(payload["i"])
         return UnitResult(output=payload["i"])
 
-    result = ledger.run("B1", payloads(20), recovered)
+    result = ledger.run("ITER-EXTRACT", payloads(20), recovered)
     assert calls == [1]
     assert result.cached == 19
 
@@ -65,7 +65,7 @@ def test_exhausted_retries_land_as_failed_without_stopping_the_stage(ledger):
             raise RuntimeError("boom")
         return UnitResult(output=payload["i"])
 
-    result = ledger.run("B1", payloads(20), worker)
+    result = ledger.run("ITER-EXTRACT", payloads(20), worker)
     assert set(result.failures) == {"u0"}
     assert len(result.outputs) == 19
 
@@ -75,7 +75,7 @@ def test_stage_aborts_above_the_failure_rate(ledger):
         raise RuntimeError("boom")
 
     with pytest.raises(StageAborted):
-        ledger.run("B1", payloads(20), worker)
+        ledger.run("ITER-EXTRACT", payloads(20), worker)
 
 
 def test_barrier_blocks_while_units_are_unfinished(ledger):
@@ -83,9 +83,9 @@ def test_barrier_blocks_while_units_are_unfinished(ledger):
         raise RuntimeError("boom")
 
     with pytest.raises(StageAborted):
-        ledger.run("B1", payloads(20), worker)
+        ledger.run("ITER-EXTRACT", payloads(20), worker)
     with pytest.raises(BarrierViolation):
-        ledger.barrier("B1")
+        ledger.barrier("ITER-EXTRACT")
 
 
 def test_failed_units_do_not_block_the_next_stage(ledger):
@@ -94,23 +94,23 @@ def test_failed_units_do_not_block_the_next_stage(ledger):
             raise RuntimeError("boom")
         return UnitResult(output=payload["i"])
 
-    ledger.run("B1", payloads(20), worker)
-    ledger.barrier("B1")
+    ledger.run("ITER-EXTRACT", payloads(20), worker)
+    ledger.barrier("ITER-EXTRACT")
 
 
 def test_editing_a_prompt_invalidates_the_cache():
-    first = unit_key("B4", "v1", 0.7, {"chunk": "text"})
-    assert first != unit_key("B4", "v2", 0.7, {"chunk": "text"})
-    assert first != unit_key("B4", "v1", 0.0, {"chunk": "text"})
+    first = unit_key("ITER-AXIOMATIZE", "v1", 0.7, {"chunk": "text"})
+    assert first != unit_key("ITER-AXIOMATIZE", "v2", 0.7, {"chunk": "text"})
+    assert first != unit_key("ITER-AXIOMATIZE", "v1", 0.0, {"chunk": "text"})
 
 
 def test_token_counts_are_recorded_per_stage(ledger):
     def worker(payload):
         return UnitResult(output="ok", in_tokens=100, out_tokens=25)
 
-    result = ledger.run("B4", payloads(3), worker)
+    result = ledger.run("ITER-AXIOMATIZE", payloads(3), worker)
     assert (result.in_tokens, result.out_tokens) == (300, 75)
-    assert ledger.stage_report("B4")["in_tokens"] == 300
+    assert ledger.stage_report("ITER-AXIOMATIZE")["in_tokens"] == 300
 
 
 def test_switching_model_invalidates_the_cache(ledger):
@@ -125,15 +125,16 @@ def test_switching_model_invalidates_the_cache(ledger):
         calls.append(payload["i"])
         return UnitResult(output="x")
 
-    ledger.run("B1", payloads(2), worker, settings=medium)
-    ledger.run("B1", payloads(2), worker, settings=medium)
+    ledger.run("ITER-EXTRACT", payloads(2), worker, settings=medium)
+    ledger.run("ITER-EXTRACT", payloads(2), worker, settings=medium)
     assert len(calls) == 2, "same settings, cache hit"
 
-    ledger.run("B1", payloads(2), worker, settings=small)
+    ledger.run("ITER-EXTRACT", payloads(2), worker, settings=small)
     assert len(calls) == 4, "different model, recomputed"
 
 
 def test_reasoning_effort_is_part_of_the_key(ledger):
     base = {"tier": "small", "temperature": 0.0, "reasoning_effort": None}
     low = {"tier": "small", "temperature": 0.0, "reasoning_effort": "low"}
-    assert unit_key("B1", "v1", base, {"c": 1}) != unit_key("B1", "v1", low, {"c": 1})
+    assert (unit_key("ITER-EXTRACT", "v1", base, {"c": 1})
+            != unit_key("ITER-EXTRACT", "v1", low, {"c": 1}))

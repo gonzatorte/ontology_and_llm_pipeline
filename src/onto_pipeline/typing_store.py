@@ -1,7 +1,7 @@
-"""Wiring for B2: build targets from an ontology version, store what the matcher decided.
+"""Wiring for ITER-MATCH: build targets from an ontology version, store what the matcher decided.
 
 Typing is kept out of the `mentions` table on purpose. The mention layer is immutable except
-by extension (spec 3); a typing is derived from one ontology version and is recomputed whenever
+by extension (LAYERS); a typing is derived from one ontology version and is recomputed whenever
 the TBox or the glosses change, which is the self-correcting loop of 4.3 — a mention orphaned
 at iteration 3 can be typed at 8. Writing it onto the mention would blur the layer boundary the
 design calls its central invariant.
@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_typing_version ON mention_typing(version_id, zone
 
 -- Grey-zone answers. Kept apart from `mention_typing` because that table is rewritten every
 -- time the matcher runs, and an answer that a re-match erased would be an answer the user gave
--- twice. They are also, unglamorously, the accept/reject labels spec 6.3 wants for tuning the
+-- twice. They are also, unglamorously, the accept/reject labels ITER-TUNE wants for tuning the
 -- re-ranker: the only source of them this design ever has.
 CREATE TABLE IF NOT EXISTS grey_decisions (
   mention_id  TEXT PRIMARY KEY,
@@ -57,7 +57,7 @@ RETYPED = "retyped"
 
 @dataclass
 class OrphanSplit:
-    """The aggregate orphan rate says nothing (spec 6.2b); only the split is informative.
+    """The aggregate orphan rate says nothing (ITER-BRIDGE); only the split is informative.
 
     Without gold annotations the two kinds cannot be told apart here — that is what the
     retention set is for — so this reports what is knowable: how many were typed, how many
@@ -179,7 +179,7 @@ def decisions(conn: sqlite3.Connection) -> dict[str, str | None]:
 
 
 def labels(conn: sqlite3.Connection) -> list[dict]:
-    """The accept/reject labels, as the re-ranker would need them (spec 6.3).
+    """The accept/reject labels, as the re-ranker would need them (ITER-TUNE).
 
     A row per answer: the mention's text, the class that was offered, its score, and whether
     the user took it. This is the only place such labels ever come from — nobody annotates them
@@ -213,7 +213,7 @@ def pending(conn: sqlite3.Connection, version_id: str, limit: int = 0) -> list[d
 
 def entities_from(decisions: list[Decision]) -> dict[str, str]:
     """Union-find over the merge decisions. A mention in no merge keeps its own identity —
-    separate individuals until confirmed (D10)."""
+    separate individuals until confirmed (SEPARATE-UNTIL-CONFIRMED)."""
     parent: dict[str, str] = {}
 
     def find(item: str) -> str:

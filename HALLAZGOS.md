@@ -1,13 +1,13 @@
 # Hallazgos y decisiones de implementación
 
 Lo que se **midió** y lo que se **decidió** construyendo el pipeline, con el número que sostiene
-cada decisión. Es el complemento del registro de decisiones de diseño del spec (§2, D1–D25):
+cada decisión. Es el complemento del registro de decisiones de diseño del spec (`DECISIONS`):
 aquéllas se tomaron antes de ver datos, éstas después.
 
-**Cuatro clases de contenido, y conviene saber cuál se busca:** lo que se **midió** (§1), lo que
-se **decidió** con eso (§2), lo que se **probó y no funcionó** (§3 — experimentos conceptuales,
+**Cuatro clases de contenido, y conviene saber cuál se busca:** lo que se **midió** (`FINDINGS-MEASURED`), lo que
+se **decidió** con eso (`FINDINGS-DECIDED`), lo que se **probó y no funcionó** (`FINDINGS-FAILED` — experimentos conceptuales,
 no bugs; están para que nadie los repita) y lo que hubo que **retirar** después de haberlo
-afirmado (§4).
+afirmado (`PREP`).
 
 Tres documentos vecinos y qué contesta cada uno, para no duplicarlos acá:
 
@@ -19,7 +19,7 @@ Tres documentos vecinos y qué contesta cada uno, para no duplicarlos acá:
 población es una anécdota, y este proyecto ya se equivocó dos veces por sacar conclusiones de
 n=10 (ver *Conclusiones que hubo que retirar*).
 
-**Los valores de configuración del spec (§7) son históricos.** `auto_merge_threshold: 0.92` y
+**Los valores de configuración del spec (`CONFIG`) son históricos.** `auto_merge_threshold: 0.92` y
 `grey_zone_lower: 0.70` son los defaults con los que se escribió el diseño, antes de que hubiera
 con qué medirlos. Los valores vigentes están en `config/default.yaml` y el porqué en 1.1. El spec
 no se editó: es el registro de lo que se decidió antes de ver datos, y reescribirlo borraría
@@ -31,9 +31,9 @@ se lee del historial:
 
 | Sesión | De qué se ocupó | Dónde quedó |
 |---|---|---|
-| `f0449040` (la que escribe) | Fase B completa, cadena B5, criterios de parada, calibración con holdout | 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 y todo §2 |
+| `f0449040` (la que escribe) | Fase B completa, cadena `ITER-VALIDATE`, criterios de parada, calibración con holdout | 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 y todo `DECISIONS` |
 | `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) y `plan_cambio_corpus_calibracion.md` |
-| `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `plan_reglas_de_mapeo.md`, deuda 19, y 1.3 |
+| `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `plan_reglas_de_mapeo.md`, `DEBT-CONTEXT-DISAMBIGUATION`, y 1.3 |
 
 Hay dos transcripts más y ninguno aporta decisiones: `b8c7e99c` es **la misma conversación que
 `f0449040`, bifurcada** —mismo timestamp inicial, mismo primer mensaje— y `7994cb22` es una
@@ -48,10 +48,10 @@ sesión movió el contexto— está en la sección de coordinación de
 
 ---
 
-## 0. Para qué es todo esto
+## FINDINGS-PURPOSE — Para qué es todo esto
 
 **El entregable es el sistema y su caracterización, sin dominio comprometido.** El spec lo dice
-en §1.4 —"sin tarea downstream comprometida"— y conviene tenerlo a la vista porque durante un
+en `SCOPE-PURPOSE` —"sin tarea downstream comprometida"— y conviene tenerlo a la vista porque durante un
 tiempo la documentación de este repositorio afirmó lo contrario: que había un "caso de
 aplicación" (la semilla de metodología cualitativa) al que el proyecto debía volver después de
 calibrar. **No lo hay.** Todos los pares (corpus, ontología) son instrumentos, y lo que califica
@@ -63,9 +63,9 @@ la tarea «corrida completa», correr el pipeline entero sobre un par publicado.
 
 ---
 
-## 1. Mediciones
+## FINDINGS-MEASURED — Mediciones
 
-### 1.1 El matcher, contra CRAFT/CL — n = 8.723 menciones gold
+### FINDINGS-MEASURED-MATCHER-CRAFT — El matcher, contra CRAFT/CL — n = 8.723 menciones gold
 
 Medido sobre un par publicado —corpus anotado contra su propia ontología—, donde la respuesta
 correcta se conoce para cada mención. `onto-pipeline calibrate craft-cl`.
@@ -98,7 +98,7 @@ El recall casi no se mueve entre 0,30 y 0,90 (69,8% → 67,2%): el ranking ya es
 umbral sólo filtra mistypes. Por eso subir es casi gratis en recall y caro en huérfanas.
 `auto_merge_threshold: 0.95`, `grey_zone_lower: 0.80`.
 
-### 1.2 Huérfanas genuinas — la corrida con `--holdout 0.2`
+### FINDINGS-MEASURED-GENUINE-ORPHANS — Huérfanas genuinas — la corrida con `--holdout 0.2`
 
 Un corpus anotado contra su propia ontología **no tiene huérfanas genuinas por construcción**:
 toda clase gold está en la ontología, así que toda huérfana es falsa y la tasa no dice nada sobre
@@ -123,7 +123,7 @@ huérfanos casi no se movió** —18,0% contra 17,3% en 0,80— porque sólo 546
 cambiaron de lado: la cifra anterior era del orden correcto **por accidente**, no porque el
 holdout no importara.
 
-### 1.3 El par corpus/semilla no se corresponde — n = 495.213 caracteres
+### FINDINGS-MEASURED-PAIR-MISMATCH — El par corpus/semilla no se corresponde — n = 495.213 caracteres
 
 La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
 `field note`, `informant`, `ethnograph`, `coding scheme`, `thematic analysis`,
@@ -136,7 +136,7 @@ señales definitorias encuentra 5 pasajes en 3 documentos para "open science" y 
 Consecuencia: una tasa de falsos huérfanos medida sobre este par no sería mala, **sería sin
 significado**. Por eso el instrumento de calibración es un par publicado y separado.
 
-### 1.4 Subsunción contada como desacuerdo — 4 conflictos aparentes, 1 real
+### FINDINGS-MEASURED-SUBSUMPTION-CONFLICT — Subsunción contada como desacuerdo — 4 conflictos aparentes, 1 real
 
 Sobre el caso de prueba de `conflicts`: cuatro entidades tipadas a dos clases cada una. Tres de
 esos pares eran `Interview` y `Technique`, con la primera subclase de la segunda — un hecho
@@ -144,7 +144,7 @@ dicho a dos niveles de detalle, no un desacuerdo. Con el cierre de subclases apl
 contradicción real (`Interview` / `Organization`, incompatibles por herencia de disjointness, que
 encontró el razonador y no la disjointness asertada).
 
-### 1.5 Criterios de división: por qué el corte se elige por padre — n = 6
+### FINDINGS-MEASURED-DIVISION-CRITERIA — Criterios de división: por qué el corte se elige por padre — n = 6
 
 Similitudes entre criterios escritos a mano, con el bi-encoder configurado:
 
@@ -159,7 +159,7 @@ De ahí que el corte se elija por padre y la única constante sea `min_criterion
 cuánto más nítido tiene que ser el corte que el ruido que rompe. Ese 0,10 sale de **estos seis
 casos** y no está calibrado.
 
-### 1.6 El riesgo silencioso de una propiedad funcional, hecho visible
+### FINDINGS-MEASURED-FUNCTIONAL-RISK — El riesgo silencioso de una propiedad funcional, hecho visible
 
 Declarando `bornIn` funcional sobre un ABox donde un individuo tiene dos valores distintos, el
 razonador entiende que los dos valores son la misma cosa:
@@ -171,16 +171,16 @@ reasoner would raise no inconsistency doing it:
 ```
 
 Ninguna inconsistencia, ninguna advertencia: la ontología queda consistente diciendo en silencio
-que dos cosas son una. Es exactamente el riesgo asimétrico que el spec nombra en D2.
+que dos cosas son una. Es exactamente el riesgo asimétrico que el spec nombra en `DL-WITH-FUNCTIONALS`.
 
-### 1.7 OntoClean con etiquetas del modelo
+### FINDINGS-MEASURED-ONTOCLEAN-LABELS — OntoClean con etiquetas del modelo
 
 Sobre el caso de libro: el modelo etiquetó `Person` como **+R** y `Student` como **~R** sin que
 se le nombrara la notación, y `validate` rechazó `Person ⊑ Student` por dos restricciones
 —rigidez y dependencia—. Es la subsunción mal formada que ningún razonador puede enunciar:
 perfectamente consistente en OWL y equivocada.
 
-### 1.8 A3 sobre el corpus real
+### FINDINGS-MEASURED-CQ-ON-CORPUS — `PREP-CQ-GENERATED` sobre el corpus real
 
 Cuatro preguntas inferenciales generadas desde dos pasajes por estrato, las cuatro sobrevivieron
 el filtro mecánico. Una pregunta si unas entrevistas son Estrategias Metodológicas dado
@@ -190,18 +190,18 @@ escribe solo, y que el prompt sí consiguió.
 **Límite observado en la misma corrida:** la cita se verifica que **exista**, no que **sostenga**.
 Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del paper.
 
-### 1.9 Estado del par cualitativo — retirado el 2026-09-09
+### FINDINGS-MEASURED-QUALITATIVE-PAIR — Estado del par cualitativo — retirado el 2026-09-09
 
 Estos números son de la dupla semilla cualitativa + corpus de ciencia abierta, que **ya no se
 usa**: el proyecto no tiene dominio comprometido y todos los pares son instrumentos (ver
-[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), entrada 9). Quedan acá porque son la única corrida de
+[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), `DEBT-QUALITATIVE-PAIR`). Quedan acá porque son la única corrida de
 punta a punta que hubo hasta ahora, y porque el eco léxico que muestran es sobre el método.
 
 Contra `v5`, que era la versión vigente: 10 documentos (5 en el conjunto de retención), **848
 menciones**, de las cuales 18 tipadas automáticamente, **131 en zona gris** y 699 huérfanas
-(82%). Más 53 items de revisión abiertos de A0 —13 etiquetas divergentes, 27 chequeos semánticos
+(82%). Más 53 items de revisión abiertos de `PREP-NORMALIZE` —13 etiquetas divergentes, 27 chequeos semánticos
 pendientes, 13 erratas—. La zona gris es a la vez el trabajo pendiente del usuario y el insumo
-que falta para LoRA (§6.3): hoy hay **cero** etiquetas acumuladas.
+que falta para LoRA (`ITER-TUNE`): hoy hay **cero** etiquetas acumuladas.
 
 **Cuidado al leer números de versiones viejas.** `v2` tiene 1.725 tipados contra una capa de
 menciones que después se volvió a extraer, así que 116 de sus 219 pares de zona gris apuntan a
@@ -209,7 +209,7 @@ menciones que ya no existen. Los tipados son función de (menciones, versión) y
 los de una versión que no se volvió a matchear quedan como estaban. Al citar un número, decir
 contra qué versión.
 
-### 1.10 Eco léxico, y dónde está de verdad el problema del homónimo
+### FINDINGS-MEASURED-LEXICAL-ECHO — Eco léxico, y dónde está de verdad el problema del homónimo
 
 **El eco léxico es el modo de falla que ningún umbral filtra.** Sobre la semilla, 24 de 34 clases
 superan 0,70 y **11 de esas 24 son eco léxico**: la mención es la palabra corriente que da nombre
@@ -224,9 +224,9 @@ organización clandestina): **el riesgo no está donde parece**. El `uuid5` de u
 computa sobre el id de la mención, único por ocurrencia —`researchers` aparece 12 veces y tiene
 12 ids distintos—, y la resolución de entidades ya manda el caso peligroso a zona gris. El
 agujero está en el **tipado**, y la vía más directa para cerrarlo —meter la oración de la mención
-en la comparación— está sin implementar. Detalle completo en la deuda 19.
+en la comparación— está sin implementar. Detalle completo en la `DEBT-CONTEXT-DISAMBIGUATION`.
 
-### 1.11 El cuello es la recuperación, y meter contexto no la arregla
+### FINDINGS-MEASURED-RETRIEVAL-CEILING — El cuello es la recuperación, y meter contexto no la arregla
 
 Dos mediciones encadenadas, y la segunda cierra una línea de trabajo.
 
@@ -266,7 +266,7 @@ Lo que queda dicho es dónde **no** está la solución: no es la representación
 encoder. Un modelo asimétrico o entrenado es la vía, y es lo mismo que ya decía la conclusión
 sobre glosas.
 
-### 1.12 Ajustar el re-ranker: la mejora más grande medida, y sirve sólo en su dominio
+### FINDINGS-MEASURED-TUNED-RERANKER — Ajustar el re-ranker: la mejora más grande medida, y sirve sólo en su dominio
 
 El cross-encoder de fábrica arruinaba el orden —separación −0,50—. Ajustado con las anotaciones
 del propio par, es la mejora más grande que este pipeline midió. Partición **por documento**, y
@@ -313,9 +313,9 @@ una muestra chica: preferencias con evidencia débil, no resultados.
 es otra cosa que subir 9,9 cuando había 40. El re-ranker sólo reordena lo que la recuperación
 trajo; lo que no está en el top-k no lo alcanza.
 
-### 1.13 El falso huérfano volviéndose clase espuria, con nombre y apellido
+### FINDINGS-MEASURED-SPURIOUS-CLASS — El falso huérfano volviéndose clase espuria, con nombre y apellido
 
-La compuerta no-go de §12.1 dice que un falso huérfano se convierte en una clase espuria en la
+La compuerta no-go de `BUILD-NO-GO-GATE` dice que un falso huérfano se convierte en una clase espuria en la
 inducción. Corriendo el pipeline entero sobre MaterioMiner se lo pudo **ver**, que es distinto de
 suponerlo:
 
@@ -359,9 +359,9 @@ Confunde el metalenguaje de la escritura académica con el dominio del que se es
 Es precisión de la extracción, no del matcher, y ningún filtro de los siete lo atrapa: son
 sintagmas nominales legítimos, con soporte suficiente, y el razonador no tiene nada que objetar.
 Las tres vías para atacarlo —lista de bloqueo, instrucción en el prompt de extracción, filtro por
-distribución entre documentos— están en la [entrada 23 de deuda técnica](DEUDA_TECNICA.md).
+distribución entre documentos— están en la [`DEBT-ACADEMIC-METALANGUAGE` de deuda técnica](DEUDA_TECNICA.md).
 
-### 1.14 El pipeline entero sobre un par anotado (tarea «corrida completa»), y qué se ve al final
+### FINDINGS-MEASURED-FULL-RUN — El pipeline entero sobre un par anotado (tarea «corrida completa»), y qué se ve al final
 
 Primera corrida completa contra una respuesta conocida. MaterioMiner, 4 publicaciones:
 
@@ -372,7 +372,7 @@ Primera corrida completa contra una respuesta conocida. MaterioMiner, 4 publicac
 | extract | 1.309 menciones, 13 sin ubicar |
 | match | 124 automáticas, 305 zona gris, **880 huérfanas (67%)** |
 | bridge | 210 puentes sobre 264 menciones; 426 sintagmas que el modelo no quiso conectar |
-| induce | 616 huérfanas → 48 clusters → **45 clases**, 4 de ellas duplicados (1.13) |
+| induce | 616 huérfanas → 48 clusters → **45 clases**, 4 de ellas duplicados (`FINDINGS-MEASURED-SPURIOUS-CLASS`) |
 | axiomatize | 45 juicios: **44 `unrelated`, 1 `subclass_of`** · 181 axiomas |
 | validate | ELK SKIPPED (38% de cobertura EL), HermiT consistente, estructural **RECHAZA** |
 | branch | ningún eje de decisión — el camino normal |
@@ -400,18 +400,18 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
 
 ---
 
-## 2. Decisiones tomadas, y por qué
+## FINDINGS-DECIDED — Decisiones tomadas, y por qué
 
-### 2.1 El matcher
+### FINDINGS-DECIDED-MATCHER — El matcher
 
 - **`use_cross_encoder: false`, cerrado.** Dos mediciones independientes con separación
-  negativa. Vuelve a discutirse recién con un re-ranker tuneado sobre etiquetas propias (§6.3),
+  negativa. Vuelve a discutirse recién con un re-ranker tuneado sobre etiquetas propias (`ITER-TUNE`),
   que es un instrumento distinto de un re-ranker de IR genérico.
 - **Los umbrales no se movieron con el holdout.** Los números del inventario completo son el caso
   duro y quedan como referencia; los del holdout se anotaron aparte para que nadie compare
   precisiones entre poblaciones distintas.
 
-### 2.2 Ramas (§6.6)
+### FINDINGS-DECIDED-BRANCHES — Ramas (`ITER-BRANCH`)
 
 - **Ningún eje sale de un modelo.** Es la única prohibición explícita del spec para la etapa:
   pedir tres alternativas devuelve tres correlacionadas. Salen del razonador (hitting sets
@@ -421,14 +421,14 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
   del spec, reificar vs. propiedad directa, queda **catalogado y sin detector a propósito**, para
   que el hueco se vea en vez de insinuarse. El catálogo es el techo de lo que el sistema puede
   preguntar.
-- **El corte del criterio de división se elige por padre**, no con un umbral fijo — ver 1.5.
+- **El corte del criterio de división se elige por padre**, no con un umbral fijo — ver `DEBT-DATA-ACCESS-LAYER`.5.
 - **La rama se commitea antes de registrar la decisión.** El razonador todavía puede rechazarla, y
   una decisión registrada sobre un estado que nunca se aplicó sería mentira.
 - **Volver a proponer no reabre una decisión ya tomada.** Los ids de rama son deterministas, así
   que un reemplazo directo pisaría la rama elegida y los rechazos de sus hermanas, que son el
-  único registro de lo que se descartó (§6.7).
+  único registro de lo que se descartó (`ITER-FEEDBACK`).
 
-### 2.3 Enriquecimiento de glosas (§6.5 B4b)
+### FINDINGS-DECIDED-GLOSS-ENRICHMENT — Enriquecimiento de glosas (`ITER-AXIOMATIZE` `ITER-AXIOMATIZE-ENRICH`)
 
 - **Los pasajes se encuentran mecánicamente**, por señal definitoria, no preguntándole a un modelo
   cuáles son definitorios: un corpus tiene muchos más párrafos que presupuesto tiene pedidos, y un
@@ -437,17 +437,17 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
   quedaría grabado con una procedencia que no se cumple, y el control de circularidad se apoya en
   que esa procedencia diga la verdad.
 - **Lo que realimenta al matching es el `altLabel`, no la `definition`** — consecuencia directa de
-  1.1. El bucle autocorrectivo de §4.3 existe, pero pasa por los sinónimos.
+  1.1. El bucle autocorrectivo de `PREP-NORMALIZE` existe, pero pasa por los sinónimos.
 - **`circular` cuenta, no descuenta.** Los matches contra documentos que escribieron la glosa no
   son evidencia independiente; hacerlos visibles es el primer paso, restarlos de una métrica de
   cobertura es trabajo pendiente.
 
-### 2.4 Conflictos fácticos (§6.4)
+### FINDINGS-DECIDED-CONFLICTS — Conflictos fácticos (`ITER-CONFLICTS`)
 
 - **Notarizar es el default silencioso** porque es la única política que no destruye información.
   Sólo los conflictos que rompen al razonador llegan a revisión; decidir caso por caso es la
-  revisión manual que el pipeline existe para evitar (D5).
-- **La subsunción no es desacuerdo** — ver 1.4. Sin ese filtro el reporte se llena de la jerarquía
+  revisión manual que el pipeline existe para evitar (`BRANCH-ONLY-REVIEW`).
+- **La subsunción no es desacuerdo** — ver `DEBT-DATA-ACCESS-LAYER`.4. Sin ese filtro el reporte se llena de la jerarquía
   discutiendo consigo misma.
 - **Un patrón sobre un par de clases es una pregunta sobre la TBox, no N casos.** Contextualizar
   una propiedad cambia la forma de todas las consultas sobre ella, las SPARQL de las CQ incluidas,
@@ -458,7 +458,7 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
   decisión que no cambiara ninguna regla sería una decisión que el ABox nunca nota, porque
   `regenerate` es idempotente sobre (estado, reglas).
 
-### 2.5 La cadena de validación (§6.6 B5)
+### FINDINGS-DECIDED-VALIDATION — La cadena de validación (`ITER-BRANCH` `ITER-VALIDATE`)
 
 - **El filtro de evidencia se aplica a `textual` y a nada más.** "Todo axioma sin cita se descarta"
   borraría justamente los puentes que hacen útil a la semilla: un axioma `world_knowledge` no
@@ -475,20 +475,20 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
   salteó, porque un filtro que revisara en silencio un décimo de la jerarquía estaría reportando un
   resultado limpio que nunca estableció.
 
-### 2.6 Propiedades funcionales (§6.8)
+### FINDINGS-DECIDED-FUNCTIONAL — Propiedades funcionales (`ITER-APPLY`)
 
 - **Nada se declara solo.** Detectar funcionalidad desde el ABox es inválido en principio bajo
   mundo abierto: un valor por entidad prueba que no se observó contraejemplo, no que no exista.
   La única dirección sólida es la opuesta —**un contraejemplo refuta**— y es la única conclusión
   que la etapa saca por su cuenta.
-- **`--declare` muestra qué fusionaría antes de commitear** — ver 1.6.
+- **`--declare` muestra qué fusionaría antes de commitear** — ver `DEBT-DATA-ACCESS-LAYER`.6.
 - **La distribución va en la pregunta**, no sólo la conclusión: "1 valor en 3 individuos" y "1 valor
   en 400" son la misma señal cualitativa y decisiones opuestas.
 - **Los duplicados sin resolver quedan fuera del conteo**: dos duplicados con un valor cada uno se
   ven exactamente como confirmación de funcionalidad, que es la única forma en que el relevamiento
   podría fabricar su propia evidencia.
 
-### 2.7 Criterios de parada (§10.3)
+### FINDINGS-DECIDED-STOPPING — Criterios de parada (`EVAL-STOPPING`)
 
 - **La cobertura de menciones no es criterio, a propósito.** El sistema optimiza lo que se mide, y
   una clase paraguas maximiza cobertura destruyendo el valor conceptual.
@@ -498,7 +498,7 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
 - **Con menos de dos ventanas dice "desconocido", no "aplanó".** La cola *es* el principio, y
   compararlas es comparar un número consigo mismo.
 
-### 2.8 Orquestación
+### FINDINGS-DECIDED-ORCHESTRATION — Orquestación
 
 - **`next` guía pero no ejecuta.** Una decisión pendiente le gana a cualquier etapa que podría
   correr, porque todo lo posterior estaría construido sobre una respuesta que nadie dio. Que
@@ -508,10 +508,10 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
   reescribe entera cada corrida. Volver a preguntar lo mismo todas las veces es cómo un sistema
   entrena a alguien a dejar de contestar.
 
-### 2.9 Competency questions (§4.4)
+### FINDINGS-DECIDED-CQ — Competency questions (`PREP-CQ-GENERATED`)
 
 - **La advertencia de circularidad va primero.** Las CQ generadas miden completitud respecto al
-  corpus; la mitigación es A4 y por eso `cq import` va antes que `cq propose` en la documentación.
+  corpus; la mitigación es `PREP-CQ-USER` y por eso `cq import` va antes que `cq propose` en la documentación.
 - **El muestreo es estratificado y con semilla.** Los estratos son lo que hace posibles los tipos de
   pregunta; y "los primeros N" serían los abstracts de los primeros documentos, que producen
   preguntas sobre abstracts.
@@ -520,7 +520,7 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
 - **La SPARQL se parsea antes de juzgar su forma.** Contar patrones de tripleta en algo que no es
   una consulta no mide nada.
 
-### 2.10 LoRA (§6.3) — decidido no escribirlo todavía
+### FINDINGS-DECIDED-LORA — LoRA (`ITER-TUNE`) — decidido no escribirlo todavía
 
 Es la única pieza del plan bloqueada por **datos**, no por código. `grey labels --export` ya
 escribe el formato; hay una etiqueta. Un script de fine-tuning que nunca corrió sobre datos reales
@@ -529,7 +529,7 @@ re-ranker tuneado contra `calibrate` → recién ahí decidir si `use_cross_enco
 
 ---
 
-## 3. Lo que se probó y no funcionó
+## FINDINGS-FAILED — Lo que se probó y no funcionó
 
 **Un experimento conceptual que falla es un hallazgo, y éste es su lugar.** No están acá los
 bugs —eso se arregla y se olvida— sino las ideas que se probaron sobre datos y no dieron: cada
@@ -538,11 +538,11 @@ vuelve a intentar.
 
 Ordenadas por cuánto cierran.
 
-### 3.1 Cerradas: no volver a intentarlas con este encoder
+### FINDINGS-FAILED-CLOSED — Cerradas: no volver a intentarlas con este encoder
 
 | Idea | Por qué parecía buena | Qué dio | n |
 |---|---|---|---|
-| **Comparar contra la glosa** en vez de la etiqueta | Es lo que dice el spec (§6.2): una definición tiene más señal que un nombre | recall@1 **7,9%** contra 69,8%, y separación **−0,42**: los errores puntúan más alto que los aciertos | 8.723 |
+| **Comparar contra la glosa** en vez de la etiqueta | Es lo que dice el spec (`ITER-MATCH`): una definición tiene más señal que un nombre | recall@1 **7,9%** contra 69,8%, y separación **−0,42**: los errores puntúan más alto que los aciertos | 8.723 |
 | **Etiqueta + glosa** | Lo mejor de los dos | 13,3%, separación −0,49 | 8.723 |
 | **Cross-encoder de fábrica** re-rankeando el top-5 | Es para lo que existen los re-rankers | Separación **−0,50**, F1 0,127 contra 0,774. Ordena peor que no hacer nada | 8.723 |
 | **Mención + su oración**, concatenadas | Desambigua por definición: `lifetime` en contexto llega a `FatigueLifetime` | @1 de 25,3% a **11,3%**; en CRAFT de 69,8% a **14,3%** | 2.229 |
@@ -556,7 +556,7 @@ forma: una mención es un sintagma corto, una etiqueta también, y todo lo que a
 queda establecido es dónde **no** está la solución: no está en qué texto se compara. Está en el
 encoder, y hace falta uno asimétrico o entrenado.
 
-### 3.2 Cerradas: la idea servía, la métrica no
+### FINDINGS-FAILED-WRONG-METRIC — Cerradas: la idea servía, la métrica no
 
 | Idea | Qué dio |
 |---|---|
@@ -566,7 +566,7 @@ encoder, y hace falta uno asimétrico o entrenado.
 Lo que sí decide es preguntar por términos nombrados: 0 de 5 contra 5 de 5. La diferencia es que
 ahí el que sabe del dominio pone la hipótesis, y el chequeo sólo la verifica.
 
-### 3.3 Probadas y descartadas por no aportar
+### FINDINGS-FAILED-NO-GAIN — Probadas y descartadas por no aportar
 
 | Idea | Qué dio |
 |---|---|
@@ -575,7 +575,7 @@ ahí el que sabe del dominio pone la hipótesis, y el chequeo sólo la verifica.
 
 Ninguna de las dos hace daño; simplemente no paga la complejidad de tratarlas distinto.
 
-### 3.4 Casi descartada por medirla mal
+### FINDINGS-FAILED-BAD-MEASUREMENT — Casi descartada por medirla mal
 
 **LoRA con las mismas épocas que el ajuste completo** daba **−6,3 puntos**, peor que no ajustar,
 y con cuatro épocas **−5,4**. La conclusión fácil era "LoRA no sirve acá". Con doce épocas da
@@ -588,13 +588,13 @@ decisión sobre el tamaño, no sobre la técnica.
 
 ---
 
-## 4. Conclusiones que hubo que retirar
+## FINDINGS-RETRACTED — Conclusiones que hubo que retirar
 
 Dos veces se sacó una conclusión con evidencia insuficiente y hubo que desdecirla. Van acá porque
 el patrón importa más que los casos.
 
 1. **"Las glosas van a cerrar la brecha de falsos huérfanos."** Medido: la empeoraron. La
-   separación con glosas es negativa (1.1).
+   separación con glosas es negativa (`FINDINGS-MEASURED-MATCHER-CRAFT`).
 2. **"`match_against: label` está resuelto"**, dicho sobre diez pares hechos a mano y elegidos por
    recall. Después se verificó que las etiquetas pierden precisión por eco léxico. El barrido de
    n=8.723 terminó confirmando las etiquetas — pero la evidencia bajo la afirmación original no
@@ -604,7 +604,7 @@ el patrón importa más que los casos.
 
 ---
 
-## 5. Fallas silenciosas encontradas
+## FINDINGS-SILENT-FAILURES — Fallas silenciosas encontradas
 
 No son bugs a arreglar —ya están arreglados y fijados con test— sino una clase de falla que este
 sistema produce con facilidad: **ninguna de las cuatro lanzó un error**. Todas devolvieron un
@@ -614,7 +614,7 @@ resultado que parecía correcto.
 |---|---|---|
 | `any(graph.objects(...))` | un chequeo de anotaciones faltantes | `objects` devuelve un generador, y un generador siempre es verdadero: el chequeo no podía fallar nunca |
 | TriG parseado en `Graph` | SHACL conformando | parsear TriG en un `Graph` conserva sólo el grafo por defecto; el ABox guarda la procedencia en grafos nombrados, así que ninguna shape encontraba target |
-| subsunción contada como conflicto | 4 desacuerdos | 1 desacuerdo y 3 veces la jerarquía (1.4) |
+| subsunción contada como conflicto | 4 desacuerdos | 1 desacuerdo y 3 veces la jerarquía (`FINDINGS-MEASURED-SUBSUMPTION-CONFLICT`) |
 | `set(A) \| {b} - set(c)` | los estratos faltantes | `-` liga más fuerte que `\|`: nombraba estratos que sí se habían encontrado |
 
 Y de más atrás en el proyecto, la misma clase: propiedades de anotación SKOS sin declarar

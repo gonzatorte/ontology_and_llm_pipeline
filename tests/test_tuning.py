@@ -94,7 +94,7 @@ class Reorders:
 
 
 def test_the_comparison_is_paired_over_the_same_mentions():
-    """Es lo único que aísla la variable (spec 6.3)."""
+    """Es lo único que aísla la variable (ITER-TUNE)."""
     mentions = [FakeMention("m1", "x", "c:A"), FakeMention("m2", "y", "c:A")]
     candidates = [["c:B", "c:A"], ["c:B", "c:A"]]
     result = tuning.compare(Reorders("alpha"), mentions, candidates, TEXTS)

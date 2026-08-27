@@ -1,6 +1,7 @@
-"""Reasoning stack: JPype + OWL API, ELK and HermiT in one persistent JVM (spec 9).
+"""Reasoning stack: JPype + OWL API, ELK and HermiT in one persistent JVM (REASONING).
 
-owlready2 is not used (D16): it keeps its own world in SQLite plus a translation towards the
+owlready2 is not used (OWLAPI-VIA-JPYPE): it keeps its own world in SQLite plus a translation
+towards the
 OWL API, and two layers managing the same ontology is a source of desynchronization.
 
 Why a persistent JVM rather than ROBOT as a subprocess: HermiT does not produce
@@ -9,7 +10,7 @@ explanation algorithm, which uses the reasoner as an oracle — asking it repeat
 ontology is still inconsistent without this axiom. One justification costs tens or hundreds of
 reasoner invocations, not one. That is viable in a resident JVM and not as a subprocess.
 
-Justifications are a requirement, not a luxury: B6 needs to know which subsets of axioms
+Justifications are a requirement, not a luxury: ITER-BRANCH needs to know which subsets of axioms
 conflict in order to group branches by decision axis. "It is inconsistent" is not enough.
 
 The ELK asymmetry is the reason this module never returns an "OK":
@@ -50,8 +51,9 @@ class InconsistentOntology(RuntimeError):
 
 @dataclass
 class ProfileReport:
-    """A0.0. Two uses: routing the reasoner (outside EL, ELK stops being a useful filter) and
-    bounding B4, whose proposals are discarded before the reasoner when they leave the
+    """PREP-NORMALIZE-PROFILE. Two uses: routing the reasoner (outside EL, ELK stops being a useful
+    filter) and
+    bounding ITER-AXIOMATIZE, whose proposals are discarded before the reasoner when they leave the
     target profile."""
 
     detected: str
@@ -282,7 +284,7 @@ class Reasoners:
 
         SPARQL reads triples, and an entailment is not a triple until something writes it
         down. Without this, a competency question of the inferential type — a mandatory quota
-        in spec 4.4, whose stated point is "que el razonador aporte" — can never pass: ask
+        in PREP-CQ-GENERATED, whose stated point is "que el razonador aporte" — can never pass: ask
         whether an Interview is a Technique and the asserted graph says no while the reasoner
         says yes.
 

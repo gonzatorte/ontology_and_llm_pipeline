@@ -1,4 +1,4 @@
-"""Ajuste del matcher (spec 6.3) — el único componente del pipeline que se entrena.
+"""Ajuste del matcher (ITER-TUNE) — el único componente del pipeline que se entrena.
 
 La razón es estructural y el spec la enuncia: esto es clasificación de pares, no generación.
 Con cientos de ejemplos etiquetados un cross-encoder mejora de forma medible; un generador no.
@@ -60,7 +60,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-STAGE = "B2_tuning"
+STAGE = "iter_tune"
 
 
 class TrainerUnavailable(RuntimeError):
@@ -243,7 +243,7 @@ def _add_lora(model, rank: int, alpha: int, dropout: float) -> None:
 def compare(
     model, mentions: Sequence, candidates: Sequence[Sequence[str]], texts: dict[str, str],
 ) -> Comparison:
-    """Pareado sobre las mismas menciones: es lo único que aísla la variable (spec 6.3)."""
+    """Pareado sobre las mismas menciones: es lo único que aísla la variable (ITER-TUNE)."""
     usable = [
         (mention, list(offered))
         for mention, offered in zip(mentions, candidates, strict=True)

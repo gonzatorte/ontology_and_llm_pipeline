@@ -1,4 +1,4 @@
-"""B2b — world-knowledge bridging, between matching and class induction (spec 6.2b).
+"""ITER-BRIDGE — world-knowledge bridging, between matching and class induction.
 
 Before an orphan mention becomes a proposed class, ask whether it relates to a class the seed
 already has **even though no document says so**. The corpus writes "focus group" and the seed
@@ -13,7 +13,8 @@ This is the filter between them.
 
 **The model classifies, the code builds the logic.** It is never asked for OWL: it gets a
 phrase and a short list of candidate classes and answers one atomic question — is this an
-example of that class, a kind of it, or neither. The axiom, if any, is assembled later by B4.
+example of that class, a kind of it, or neither. The axiom, if any, is assembled later by
+ITER-AXIOMATIZE.
 The answer is verified mechanically: a class the model did not receive is a rejected answer,
 not a bridge, in the same way coreference verifies that every mention id it grouped exists.
 
@@ -47,7 +48,7 @@ from typing import Any
 from .llm import Prompt
 from .matching import Target, dot, normalize
 
-STAGE = "B2b_bridging"
+STAGE = "iter_bridge"
 
 WORLD_KNOWLEDGE = "world_knowledge"
 TEXTUAL = "textual"

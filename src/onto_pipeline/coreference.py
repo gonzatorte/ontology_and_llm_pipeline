@@ -1,15 +1,18 @@
-"""B1b — intra-document coreference (spec 6.1b).
+"""ITER-COREFER — intra-document coreference.
 
-A different problem from cross-document linking, solved earlier and by another method (D15).
+A different problem from cross-document linking, solved earlier and by another method
+(COREF-INTRA-DOCUMENT).
 An anaphoric definite phrase — "the system", "these researchers" — is resolved here, inside
-the document, and never reaches B2's cross-document entity resolution.
+the document, and never reaches ITER-MATCH's cross-document entity resolution.
 
 Method: the LLM over the whole document. Ten pages is roughly ten thousand tokens and fits in
-context, and with no confidentiality constraint (D13) that is the pragmatic route. Dedicated
+context, and with no confidentiality constraint (API-LLM-ALLOWED) that is the pragmatic route.
+Dedicated
 tools (CorPipe, CorefUD derivatives) are research infrastructure with fragile installs and are
 out of scope for v1; reconsider at thousands of documents.
 
-**The critical implementation detail: never ask for spans.** B1 already extracted the mentions
+**The critical implementation detail: never ask for spans.** ITER-EXTRACT already extracted the
+mentions
 with their offsets. They are numbered, the document is passed with the markers in place, and
 the model is asked to group *identifiers*:
 
@@ -28,7 +31,7 @@ from dataclasses import dataclass, field
 
 from .llm import Prompt
 
-STAGE = "B1b_coreference"
+STAGE = "iter_corefer"
 
 PROMPT = Prompt(
     stage=STAGE,

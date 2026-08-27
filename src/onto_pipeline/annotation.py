@@ -1,4 +1,4 @@
-"""Retention set: annotation format, BRAT export (T3), orphan metrics (spec 10.1, 10.2).
+"""Retention set: annotation format, BRAT export (T3), orphan metrics (EVAL-PIPELINE, 10.2).
 
 The format is the project's own JSONL for one reason: the annotation carries a field no
 standard contemplates — `in_seed` — and it is exactly the field that defines the false-orphan
@@ -9,11 +9,11 @@ The false orphan is the metric that matters most and the one no standard suite r
 Aggregated with everything else it disappears:
 
     false orphan   the class existed in the seed and the matcher missed it — an error
-    genuine orphan the seed does not cover the concept — normal, and it feeds B3
+    genuine orphan the seed does not cover the concept — normal, and it feeds ITER-INDUCE
 
 The exporter is written from the start even though nothing uses it yet: it keeps the door open
 to BRAT/INCEpTION if the retention set outgrows ten documents. The importer is deliberately
-absent (spec 12.2) — standard formats anchor offsets on plain text while these are offsets
+absent (BUILD-OUT-OF-SCOPE) — standard formats anchor offsets on plain text while these are offsets
 into the parser's Markdown, so a parser version change shifts them. `markdown_hash` travels
 with the export so a reimport can be refused rather than silently misaligned.
 """
@@ -63,7 +63,7 @@ class AnnotatedDocument:
 
 @dataclass
 class OrphanReport:
-    """Split in two, because the aggregate says nothing (spec 6.2b)."""
+    """Split in two, because the aggregate says nothing (ITER-BRIDGE)."""
 
     false_orphans: list[str] = field(default_factory=list)
     genuine_orphans: list[str] = field(default_factory=list)

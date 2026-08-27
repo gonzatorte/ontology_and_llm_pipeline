@@ -1,4 +1,4 @@
-"""Boilerplate filter (spec 4.2), independent of the parser.
+"""Boilerplate filter (PREP-PARSE), independent of the parser.
 
 Rule: a text block present in more than `page_frequency_threshold` of the pages with an
 approximately constant bbox is boilerplate. Comparison is by template — digits, IPs and dates

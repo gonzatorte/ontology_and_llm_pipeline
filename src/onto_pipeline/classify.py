@@ -1,4 +1,4 @@
-"""A1 — page-level document classification (spec 4.1).
+"""PREP-CLASSIFY — page-level document classification.
 
 Per page, not per document: mixed documents (born-digital report with a scanned annex) are
 common. Uncertainty routes to the expensive path.

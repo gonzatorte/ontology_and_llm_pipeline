@@ -35,7 +35,7 @@ def test_targets_honour_the_configured_comparison_text():
 
 def test_typings_are_stored_per_version_not_on_the_mention(tmp_path):
     """A typing is derived from one ontology version and recomputed when the TBox or the
-    glosses change; the mention layer stays immutable except by extension (spec 3)."""
+    glosses change; the mention layer stays immutable except by extension (LAYERS)."""
     conn = connect(tmp_path)
     split = typing_store.persist_typings(conn, "v1", [
         Typing("m1", "c:Technique", 0.95, "auto"),
@@ -74,12 +74,14 @@ def test_merges_chain_into_one_entity():
         Decision("m4", "m5", "separate", "low_similarity"),
     ])
     assert len({entities["m1"], entities["m2"], entities["m3"]}) == 1
-    assert "m4" not in entities, "separate leaves a mention with its own identity (D10)"
+    assert "m4" not in entities, (
+        "separate leaves a mention with its own identity (SEPARATE-UNTIL-CONFIRMED)"
+    )
 
 
 def test_grey_zone_mentions_are_marked_so_they_leave_the_functional_count(tmp_path):
     """Two duplicates with one value each look like confirmation of functionality; the state
-    is what keeps them out of that count (spec 6.8)."""
+    is what keeps them out of that count (ITER-APPLY)."""
     conn = connect(tmp_path)
     conn.executemany(
         "INSERT INTO mentions (id, document_id, page, surface_text, status) "

@@ -13,7 +13,7 @@ paths:
 
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:
-  detected: auto          # computed in A0.0
+  detected: auto          # computed in PREP-NORMALIZE-PROFILE
   target: OWL_DL_no_cardinality
 reasoner:
   elk_filter_enabled: true
@@ -40,7 +40,7 @@ boilerplate:
 extraction:
   max_mention_words: 8   # a mention is a noun phrase; a clause is an extraction error
 
-# Puenteo por conocimiento del mundo (§6.2b), entre el tipado y la inducción. Sin esta etapa,
+# Puenteo por conocimiento del mundo (ITER-BRIDGE), entre el tipado y la inducción. Sin esta etapa,
 # cada mención que la semilla sí cubría pero el matcher no conectó se convierte en una clase
 # inducida espuria: el falso huérfano alimentando al inductor.
 bridging:
@@ -54,19 +54,19 @@ bridging:
 
 induction:
   similarity_threshold: 0.75   # single-link sobre las menciones huérfanas
-  min_support: 3               # una mención proponiendo una clase es ruido (§6.6)
+  min_support: 3               # una mención proponiendo una clase es ruido (ITER-BRANCH)
   max_phrases_in_prompt: 30
   # Desde qué parecido con una clase existente una propuesta es duplicado, o sea que sus
   # menciones eran falsos huérfanos. No se descarta sola: es el diagnóstico del matcher que pide
-  # la compuerta de §12.1. Medido sobre MaterioMiner: 5 de 45 propuestas por encima de 0,90, con
+  # la compuerta de BUILD-NO-GO-GATE. Medido sobre MaterioMiner: 5 de 45 propuestas por encima de 0,90, con
   # `Test specimen` en 1,00 contra una clase idéntica que el matcher no encontró.
   redundant_threshold: 0.90
 
 chunking:
-  target_chars: 3000     # a chunk is B1's unit of extraction
+  target_chars: 3000     # a chunk is ITER-EXTRACT's unit of extraction
   max_chars: 6000        # a table is atomic and may exceed this
 
-# ─── Seed normalization (A0) ─────────────────────────────
+# ─── Seed normalization (PREP-NORMALIZE) ─────────────────────────────
 seed:
   base_iri: https://ontology.local/id/   # opaque IRIs; the original is kept as provenance
   label_divergence_threshold: 0.8        # below it, a label pair is flagged, not assumed
@@ -79,7 +79,7 @@ matching:
   # defaults del spec resultaron bien puestos para este par. Lo que el F1 no dice es que en ese
   # punto la tasa de falsos huérfanos es 26,3%, contra 4,7% en 0,70 — pero con 2.300 mal
   # tipados que en 0,90 son 563. Cuál de los dos errores duele más es decisión de diseño (un
-  # falso huérfano induce clases espurias en B3), no algo que el barrido pueda resolver.
+  # falso huérfano induce clases espurias en ITER-INDUCE), no algo que el barrido pueda resolver.
   # Advertencia de lectura: el barrido usa UN corte, el pipeline usa dos. Mide el corte de
   # huérfano; dónde parte auto de zona gris es la pregunta separada de cuánta revisión humana
   # se está dispuesto a hacer, y eso no se calibra contra un corpus.
@@ -160,7 +160,7 @@ matching:
                                    # only tuned on accumulated accept/reject labels (6.3).
   device: null                     # null lets torch choose; "cuda" or "cpu" to force
 
-# Enriquecimiento de glosas desde el corpus (§6.5 B4b, §4.3). Los pasajes se encuentran por
+# Enriquecimiento de glosas desde el corpus (ITER-AXIOMATIZE ITER-AXIOMATIZE-ENRICH, PREP-NORMALIZE). Los pasajes se encuentran por
 # señal definitoria —"X es un", "X se define como", "también llamado"— y no preguntándole a un
 # modelo cuáles son definitorios: un corpus tiene muchos más párrafos que presupuesto tiene
 # pedidos, y un filtro que cuesta un pedido por párrafo no es un filtro.
@@ -169,7 +169,7 @@ enrichment:
   max_passage_chars: 1200
   min_passages: 1          # sin pasajes no se pregunta; inventar una glosa no es enriquecer
 
-# ─── Ajuste del re-ranker (§6.3) ─────────────────────────
+# ─── Ajuste del re-ranker (ITER-TUNE) ─────────────────────────
 # El modelo que se ajusta es `matching.cross_encoder`, o sea que es configurable y esto no está
 # atado a ninguno en particular. De su tamaño depende el método:
 #   full  todos los pesos. Mejor resultado, memoria proporcional al modelo. Con el de fábrica
@@ -199,7 +199,7 @@ tuning:
                                # el top_k —el 57%— no cambia nada: +10,0.
   train_fraction: 0.8          # partición POR DOCUMENTO, no por mención
 
-# ─── Criterios de parada (§10.3) ─────────────────────────
+# ─── Criterios de parada (EVAL-STOPPING) ─────────────────────────
 # Dos terminaciones distintas: de iteración (¿esta ronda se agotó?) y de proceso (¿la ontología
 # está lista?). Siendo incremental, la segunda es "suficiente hasta que lleguen documentos
 # nuevos". El criterio primario es `cq.target_pass_rate` y el duro `iteration.max_iterations`;
@@ -210,7 +210,7 @@ stopping:
   novelty_window: 5        # documentos que mira la saturación
   novelty_threshold: 1.0   # conceptos nuevos por documento por debajo de los cuales satura
 
-# ─── Ramas (§6.6) ────────────────────────────────────────
+# ─── Ramas (ITER-BRANCH) ────────────────────────────────────────
 # El multi-rama es el camino excepcional, no el default: preguntar en cada iteración sin
 # conflicto real es exactamente el trabajo manual que el pipeline existe para evitar (D21).
 # Ningún eje sale de un modelo — la única prohibición explícita del spec para esta etapa es
@@ -228,24 +228,24 @@ branching:
   min_criterion_separation: 0.10
 
 # ─── Mapping rules: mention layer -> ABox ────────────────
-# La política global. Las excepciones por caso viven en `review_items`, no acá: §6.4 les da
-# alcance por caso y §6.8 recomputa el ABox entero, así que no pueden vivir dentro del código
+# La política global. Las excepciones por caso viven en `review_items`, no acá: ITER-CONFLICTS les da
+# alcance por caso y ITER-APPLY recomputa el ABox entero, así que no pueden vivir dentro del código
 # que recomputa. Ver plan_reglas_de_mapeo.md.
 mapping:
   individual_from: entity      # entity (componente de fusión) | mention (sólo diagnóstico)
   type_from: [auto]            # zonas que producen rdf:type. La gris no tipa hasta que la
-                               # contestás: es la política conservadora de §6.2 en el ABox.
+                               # contestás: es la política conservadora de ITER-MATCH en el ABox.
   provenance: named_graph      # named_graph (uno por documento) | flat
-  conflict_policy: notarize    # notarize | force | refute — §6.4. Notarizar es el único que
+  conflict_policy: notarize    # notarize | force | refute — ITER-CONFLICTS. Notarizar es el único que
                                # no destruye información, y es el default silencioso del spec.
   duplicate_policy: separate   # separate | merge. Separados y marcados, fuera del conteo de
-                               # soporte funcional (§6.8).
+                               # soporte funcional (ITER-APPLY).
   # A partir de cuántas entidades un par de clases que choca deja de ser casos y pasa a ser
-  # UNA pregunta sobre la TBox (§6.4). Contextualizar una propiedad cambia la forma de todas
+  # UNA pregunta sobre la TBox (ITER-CONFLICTS). Contextualizar una propiedad cambia la forma de todas
   # las consultas sobre ella, incluidas las SPARQL de las CQ, así que esa pregunta es un eje
   # de `branch` y no una decisión por caso acá. Sin calibrar.
   conflict_pattern_threshold: 3
-  # Por debajo de estos individuos no se pregunta si una propiedad es funcional (§6.8): la
+  # Por debajo de estos individuos no se pregunta si una propiedad es funcional (ITER-APPLY): la
   # respuesta se apoyaría en evidencia demasiado flaca, y preguntar igual entrena a la persona
   # a decir que sí. "1 valor en 3 individuos" y "1 valor en 400" son la misma señal cualitativa
   # y decisiones opuestas — por eso la distribución va en la pregunta, no sólo la conclusión.
@@ -292,28 +292,28 @@ llm:
     medium: deepseek-v4-flash
     large:  glm-5.2
   # MEASURED COST, and it is not what input tokens suggest. Every model on this gateway is a
-  # reasoning model, and the reasoning is billed as output: B1 over one 11-page paper spent
+  # reasoning model, and the reasoning is billed as output: ITER-EXTRACT over one 11-page paper spent
   # 34,549 in and 505,443 out — a ratio of 14.6x — which is $0.34 for that document and about
   # $34 for a pass over 100. An earlier estimate of $0.23 counted input only and was wrong by
   # two orders of magnitude. Extraction is not a reasoning task; the small tier is ~3x cheaper
-  # and worth trying for B1 before paying this.
+  # and worth trying for ITER-EXTRACT before paying this.
   # reasoning_effort: extraction and classification do not need a chain of thought;
   # axiomatization and branching do. Measured on this gateway, 'low' cut reasoning
   # tokens from 148 to 2 on a trivial extraction.
-  A0_2_labels:        {tier: small,  temperature: 0.0, reasoning_effort: low}
-  A0_4_glosses:       {tier: medium, temperature: 0.3}
-  A3_cq_generation:   {tier: large,  temperature: 0.3}
-  B1_extraction:      {tier: small,  temperature: 0.0, reasoning_effort: low}
-  B1b_coreference:    {tier: medium, temperature: 0.0, reasoning_effort: low}
-  B2_matching:        {tier: small,  temperature: 0.0, reasoning_effort: low}
-  B2b_bridging:       {tier: large,  temperature: 0.3}
-  B3_naming:          {tier: large,  temperature: 0.3}
-  B4_axiomatization:  {tier: large,  temperature: 0.7}
-  B4b_enrichment:     {tier: medium, temperature: 0.3}
+  prep_normalize_labels:        {tier: small,  temperature: 0.0, reasoning_effort: low}
+  prep_normalize_glosses:       {tier: medium, temperature: 0.3}
+  prep_cq_generated:   {tier: large,  temperature: 0.3}
+  iter_extract:      {tier: small,  temperature: 0.0, reasoning_effort: low}
+  iter_corefer:    {tier: medium, temperature: 0.0, reasoning_effort: low}
+  iter_match:        {tier: small,  temperature: 0.0, reasoning_effort: low}
+  iter_bridge:       {tier: large,  temperature: 0.3}
+  iter_induce:          {tier: large,  temperature: 0.3}
+  iter_axiomatize:  {tier: large,  temperature: 0.7}
+  iter_axiomatize_enrich:     {tier: medium, temperature: 0.3}
   # Metapropiedades de OntoClean. Temperatura 0: no es una pregunta creativa, y la misma clase
   # tiene que dar la misma respuesta en dos corridas o el filtro 4 deja de ser determinista.
-  B5_ontoclean:       {tier: large,  temperature: 0.0}
-  B6_branching:       {tier: large,  temperature: 0.3}
+  iter_validate_ontoclean:       {tier: large,  temperature: 0.0}
+  iter_branch:       {tier: large,  temperature: 0.3}
   regeneration_retry: {tier: large,  temperature: 0.7}
 
 # ─── Execution ───────────────────────────────────────────

@@ -18,7 +18,7 @@ El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentac
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
 
 ⚠️ **El entregable es el sistema y su caracterización, sin dominio objetivo.** El spec lo dice en
-§1.4 ("sin tarea downstream comprometida"). **Todos los pares (corpus, ontología) son
+`SCOPE-PURPOSE` ("sin tarea downstream comprometida"). **Todos los pares (corpus, ontología) son
 instrumentos**: se usan para medir cómo se comporta el pipeline, y lo que lo califica es su
 comportamiento *a través* de pares, no cómo le va en uno. No hay un "caso de aplicación" al que
 volver — la documentación afirmó lo contrario hasta el 2026-09-09 y se corrigió en 15 lugares.
@@ -28,9 +28,9 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 
 | Documento | Qué contesta | Cuándo leerlo |
 |---|---|---|
-| [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) | El diseño: 14 secciones, decisiones D1–D25, secuencia de construcción §12 | **Primero, siempre.** Es la referencia canónica; las etapas se citan por su §. 1.353 líneas |
+| [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) | El diseño: 14 secciones, decisiones `SEED-REORGANIZABLE`–`RETENTION-SET-JSONL`, secuencia de construcción `BUILD` | **Primero, siempre.** Es la referencia canónica; las etapas se citan por su §. 1.353 líneas |
 | [`README.md`](README.md) | Cómo se usa cada comando y en qué estado está cada etapa | Antes de tocar el CLI o de decir que algo falta |
-| [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su §3 lista las que ya se descartaron con datos |
+| [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
 | [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
 | [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
 | [`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md) | Por qué el corpus de calibración está separado del de aplicación, y las tareas la tarea «cablear el matcher»–la tarea «más pares» | Al tocar `calibration.py` o interpretar un barrido |
@@ -45,7 +45,7 @@ que no se versionan acá:
 | [`../calibration/README.md`](../calibration/README.md) | Qué pares hay, cuál es el primario y cuáles son tareas pendientes |
 | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) | De dónde salió el par primario, su licencia, y qué se decidió al importarlo |
 
-⚠️ **Los valores de configuración que aparecen en el spec (§7) son históricos.**
+⚠️ **Los valores de configuración que aparecen en el spec (`CONFIG`) son históricos.**
 `auto_merge_threshold: 0.92` y `grey_zone_lower: 0.70` son los defaults con los que se escribió
 el diseño, antes de que hubiera con qué medirlos; hoy son 0,95 y 0,80. Los vigentes están
 **siempre** en `config/default.yaml`. El spec no se edita: es el registro de lo que se decidió
@@ -71,7 +71,7 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 
 1. **"El LLM clasifica y nombra. El código arma la lógica. El razonador rechaza."** Al modelo
    nunca se le pide OWL: se le hace una pregunta atómica y el código escribe el axioma.
-2. **A un modelo nunca se le piden alternativas de rama** (§6.6). Es la única prohibición
+2. **A un modelo nunca se le piden alternativas de rama** (`ITER-BRANCH`). Es la única prohibición
    explícita del spec para esa etapa. Los ejes salen del razonador y de un catálogo enumerado.
 3. **ELK nunca devuelve `OK`.** Su silencio sólo significa que el axioma ofensor pudo haber sido
    ignorado: `REJECTED` / `INCONCLUSIVE` / `SKIPPED`, jamás una aprobación.
@@ -85,7 +85,7 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
    modelo ni razonador, y nunca escribe en la capa de menciones.
 7. **Nada de algoritmos de grafo sobre la serialización RDF de la TBox.** La disjointness invierte
    el signo bajo similitud estructural: dos clases declaradas incompatibles se ven conectadas
-   (§3.1). Clustering sobre el grafo de menciones huérfanas sí está permitido.
+   (`LAYERS-ONTOLOGY-NOT-GRAPH`). Clustering sobre el grafo de menciones huérfanas sí está permitido.
 8. **Mundo abierto.** No asertar X y asertar ¬X son cosas distintas. Ausencia de contraejemplo no
    es prueba; sólo el contraejemplo es conocimiento.
 
@@ -113,7 +113,7 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 src/onto_pipeline/
   cli.py            todos los comandos (Typer). Grande a propósito: una etapa, un comando
   config.py         la superficie de configuración; rechaza valores no implementados
-  seed.py           A0: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
+  seed.py           `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
   parse.py ingest.py classify.py boilerplate.py chunking.py     corpus -> bloques -> chunks
   extraction.py coreference.py                                   chunks -> menciones
   matching.py typing_store.py embeddings.py                      menciones -> clases + zona gris
@@ -121,13 +121,13 @@ src/onto_pipeline/
   branching.py                                                   ejes de decisión y ramas
   enrichment.py glosses.py                                       glosas: bootstrap y corpus
   conflicts.py                                                   documentos que se contradicen
-  validation.py ontoclean.py structural.py reasoning.py          la cadena B5 completa
-  functional.py                                                  propiedades funcionales (§6.8)
+  validation.py ontoclean.py structural.py reasoning.py          la cadena `ITER-VALIDATE` completa
+  functional.py                                                  propiedades funcionales (`ITER-APPLY`)
   mapping.py versioning.py                                       ABox y DAG de versiones
   cq.py cq_generation.py stopping.py                             CQ y criterios de parada
   orchestration.py                                               qué corresponde correr
   review.py                                                      hallazgos esperando decisión
-  annotate.py annotation.py                                      conjunto de retención (§10.1)
+  annotate.py annotation.py                                      conjunto de retención (`EVAL-PIPELINE`)
   calibration.py                                                 barrido contra corpus publicado
   llm.py providers.py telemetry.py                               proveedor, caché y costos
   db.py language.py terms.py report.py                           almacén y utilidades
@@ -182,20 +182,20 @@ Dos cosas sobre el proveedor, para que nadie las vuelva a plantear:
 antes de proponer trabajo nuevo.
 
 
-La secuencia de construcción del spec (§12) está dada en sus cinco pasos y la tabla de estado del
+La secuencia de construcción del spec (`BUILD`) está dada en sus cinco pasos y la tabla de estado del
 README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes de prometer nada:
 
-- **§6.3, el ajuste del matcher (LoRA)** — bloqueado por datos, no por código: hace falta que
+- **`ITER-TUNE`, el ajuste del matcher (LoRA)** — bloqueado por datos, no por código: hace falta que
   alguien conteste unos cientos de pares de zona gris. Deuda 8i.
-- **§6.7, el historial de feedback** — **cerrado el 2026-09-10**: esquema D9, forma normal y
+- **`ITER-FEEDBACK`, el historial de feedback** — **cerrado el 2026-09-10**: esquema `GRADED-FEEDBACK`, forma normal y
   precedentes en el prompt de `axiomatize`. Lo que falta no es código sino una segunda iteración
   con feedback humano real, para ver si algún precedente mueve un juicio. Deuda 20.
-- **La compuerta no-go de §12.1 sigue abierta**, y es la que decide si tiene sentido seguir
+- **La compuerta no-go de `BUILD-NO-GO-GATE` sigue abierta**, y es la que decide si tiene sentido seguir
   construyendo encima. Ver el README.
 
 ## Antes de proponer una idea
 
-**Mirar §3 de [`HALLAZGOS.md`](HALLAZGOS.md), "Lo que se probó y no funcionó".** Siete formas de
+**Mirar `LAYERS` de [`HALLAZGOS.md`](HALLAZGOS.md), "Lo que se probó y no funcionó".** Siete formas de
 meterle más texto a la comparación están medidas y todas empeoran; la cobertura léxica como
 veredicto de alineación da el resultado invertido; reusar un re-ranker entre dominios resta. Cada
 una parecía razonable antes de medirla, y por eso están anotadas.

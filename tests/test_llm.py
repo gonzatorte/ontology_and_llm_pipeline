@@ -38,7 +38,7 @@ def test_no_provider_fails_loudly_rather_than_returning_nothing():
 
 
 def test_stage_settings_come_from_the_config():
-    stage = settings(Llm(), "A0_4_glosses")
+    stage = settings(Llm(), "prep_normalize_glosses")
     assert (stage.tier, stage.temperature) == ("medium", 0.3)
     with pytest.raises(KeyError):
         settings(Llm(), "not_a_stage")
@@ -54,7 +54,7 @@ def test_gloss_prompt_is_built_from_the_neighbourhood():
 def test_a_gloss_stage_run_is_cached_and_metered(ledger):
     model = ScriptedModel([_ANSWER])
     payloads = [("iri1", glosses.payload(context()))]
-    stage = settings(Llm(), "A0_4_glosses")
+    stage = settings(Llm(), "prep_normalize_glosses")
 
     first = run_stage(ledger, model, glosses.PROMPT, stage, payloads, glosses.parse)
     second = run_stage(ledger, model, glosses.PROMPT, stage, payloads, glosses.parse)
@@ -67,7 +67,7 @@ def test_a_gloss_stage_run_is_cached_and_metered(ledger):
 
 def test_editing_the_prompt_invalidates_the_cached_glosses(ledger):
     payloads = [("iri1", glosses.payload(context()))]
-    stage = settings(Llm(), "A0_4_glosses")
+    stage = settings(Llm(), "prep_normalize_glosses")
     run_stage(ledger, ScriptedModel([_ANSWER]), glosses.PROMPT, stage, payloads, glosses.parse)
 
     # A version distinct from the production one, so the test does not break every time the
@@ -90,7 +90,7 @@ def test_a_malformed_answer_is_a_unit_failure_not_a_silent_gloss(ledger):
     ]
     responses = ["I cannot answer that."] * 3 + [_ANSWER] * 19
     result = run_stage(
-        ledger, ScriptedModel(responses), glosses.PROMPT, settings(Llm(), "A0_4_glosses"),
+        ledger, ScriptedModel(responses), glosses.PROMPT, settings(Llm(), "prep_normalize_glosses"),
         payloads, glosses.parse,
     )
     assert set(result.failures) == {"iri0"}

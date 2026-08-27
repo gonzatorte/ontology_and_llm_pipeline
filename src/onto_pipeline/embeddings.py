@@ -1,4 +1,4 @@
-"""Local sentence-transformer models behind B2's encoder ports (spec 6.2).
+"""Local sentence-transformer models behind ITER-MATCH's encoder ports.
 
 Multilingual by requirement, not preference: the corpus and the glosses are bilingual, and a
 monolingual encoder would push every es/en pair into the grey zone on language alone.
@@ -6,7 +6,7 @@ monolingual encoder would push every es/en pair into the grey zone on language a
 Local rather than a hosted embedding service for two reasons: this is the highest-volume stage
 of the pipeline (every mention against every candidate class, every iteration), and the
 matcher is the one component the design ever fine-tunes — LoRA over the cross-encoder from the
-user's own accept/reject decisions (spec 6.3), which needs the weights on this machine.
+user's own accept/reject decisions (ITER-TUNE), which needs the weights on this machine.
 
 Imports are deferred so the rest of the pipeline runs without the `matching` extra installed.
 """

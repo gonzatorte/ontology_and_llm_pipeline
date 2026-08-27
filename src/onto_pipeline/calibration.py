@@ -8,11 +8,12 @@ is not, so the false-orphan rate needs no annotation campaign.
 
 Three things this module does not do, on purpose:
 
-    no ingest        the corpus is already plain text; A1/A2 never run, so there is no
+    no ingest        the corpus is already plain text; PREP-CLASSIFY/PREP-PARSE never run, so there
+    is no
                      Markdown and `markdown_hash` hashes the source text itself. That is
                      what makes the 12.2 objection to importers inapplicable here: the text
                      is its own reference and no parser version can shift the offsets.
-    no B1            the corpus already carries the mentions. Feeding them through the
+    no ITER-EXTRACT            the corpus already carries the mentions. Feeding them through the
                      extractor would measure the extractor, not the matcher.
     no seed pipeline `seed.normalize_seed` mints opaque IRIs and hunts for typos, which is the
                      right treatment for a seed a human wrote and the wrong one for a released
@@ -212,7 +213,7 @@ def read_knowtator(path: Path, text: str) -> tuple[list[GoldMention], int]:
 
 def read_brat(path: Path, text: str) -> tuple[list[GoldMention], int]:
     """BRAT `.ann`: `T<n>\\t<class> <start> <end>\\t<text>`. Only text-bound annotations are
-    read; relations and attributes are not part of what B2 is measured on."""
+    read; relations and attributes are not part of what ITER-MATCH is measured on."""
     mentions, skipped = [], 0
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if not line.startswith("T"):

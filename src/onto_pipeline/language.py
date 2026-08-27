@@ -1,4 +1,4 @@
-"""Per-block language detection for the es/en corpus (spec 4.2).
+"""Per-block language detection for the es/en corpus (PREP-PARSE).
 
 Function-word frequency rather than a statistical library: the pipeline caches on input
 hashes, so detection has to be deterministic and inspectable. `language_source` records

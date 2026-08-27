@@ -71,8 +71,9 @@ def test_the_payload_carries_what_the_export_has_to_reproduce(tmp_path):
 
 
 def test_held_out_documents_are_kept_out_of_the_process(two_column_pdf, config, tmp_path):
-    """They are parsed — the offsets index A2's Markdown — but must never reach B1, or the
-    evaluation measures the pipeline against its own input (spec 10.1)."""
+    """They are parsed — the offsets index PREP-PARSE's Markdown — but must never reach
+    ITER-EXTRACT, or the
+    evaluation measures the pipeline against its own input (EVAL-PIPELINE)."""
     conn = connect(config.paths.work_dir)
     result = ingest(config, conn, [two_column_pdf])
     doc_id = next(iter(result.outputs))

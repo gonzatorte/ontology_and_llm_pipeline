@@ -1,7 +1,8 @@
-"""B5 — the filter chain (spec 6.6).
+"""ITER-VALIDATE — the filter chain (ITER-BRANCH).
 
 Stacked, and only what survives all of them reaches branch construction. **The user never sees
-an individual axiom** (D5): they see branches, and this chain decides what goes into one.
+an individual axiom** (BRANCH-ONLY-REVIEW): they see branches, and this chain decides what goes into
+one.
 
     1  ELK                    hard reject, incomplete       reasoning.py
     2  HermiT                 hard reject, with justifications   reasoning.py
@@ -120,7 +121,7 @@ PITFALLS = ("P06", "P08", "P11", "P19", "P24")
 
 
 def pitfalls(graph: Graph) -> Verdict:
-    """Modelling smells. A warning, never a rejection (spec 6.6, filter 5)."""
+    """Modelling smells. A warning, never a rejection (ITER-BRANCH, filter 5)."""
     findings: list[str] = []
     classes = {s for s in graph.subjects(RDF.type, OWL.Class) if isinstance(s, URIRef)}
     properties = {

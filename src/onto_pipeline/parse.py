@@ -1,8 +1,9 @@
-"""A2 — parsing and ingestion (spec 4.2).
+"""PREP-PARSE — parsing and ingestion.
 
 Priorities, in the spec's order: table fidelity, per-element provenance (page, bbox, block
 type), structure-aware chunking. The Markdown is assembled here rather than taken from a
-library so that every block's span offsets into it are exact — mention offsets (spec 8.1) are
+library so that every block's span offsets into it are exact — mention offsets (SCHEMAS-MENTIONS)
+are
 anchored on them and `markdown_hash` has to validate them on reimport.
 
 Only the born-digital route is implemented. Pages classified `scan` or `uncertain` are the
@@ -94,7 +95,7 @@ def is_table_caption(text: str) -> bool:
 
     Borderless tables are the common case in this corpus and `find_tables` only sees ruled
     ones; the `text` strategy grids the whole page instead. Rather than guess, the parse
-    reports the gap so those pages can be routed to the VLM parser (spec 4.2 puts table
+    reports the gap so those pages can be routed to the VLM parser (PREP-PARSE puts table
     fidelity first).
     """
     return bool(_TABLE_CAPTION_RE.match(text))
@@ -280,7 +281,7 @@ def _table_blocks(page: pymupdf.Page, number: int, doc_id: str) -> list[Block]:
 def _figure_blocks(
     page: pymupdf.Page, number: int, doc_id: str, assets_dir: Path, asset_root: Path
 ) -> list[Block]:
-    """No parser reads figures. They come out as a crop plus a placeholder (spec 4.2); the
+    """No parser reads figures. They come out as a crop plus a placeholder (PREP-PARSE); the
     VLM captioning second pass consumes the crops."""
     blocks = []
     for index, image in enumerate(page.get_image_info()):

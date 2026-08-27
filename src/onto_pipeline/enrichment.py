@@ -1,6 +1,7 @@
-"""B4b — gloss enrichment from definitional passages (spec 6.5, 4.3).
+"""ITER-AXIOMATIZE-ENRICH — gloss enrichment from definitional passages (ITER-AXIOMATIZE, 4.3).
 
-A gloss is not a fixed value of A0. It is bootstrapped from the structural neighbourhood, and
+A gloss is not a fixed value of PREP-NORMALIZE. It is bootstrapped from the structural
+neighbourhood, and
 then every iteration improves it from what the corpus actually says, which closes a
 self-correcting loop: a better gloss means better matching, which means fewer false orphans, so
 a mention orphaned at iteration 3 can be typed correctly at 8.
@@ -19,7 +20,8 @@ a small enumerated set of patterns anchored on the class's own surface forms. Th
 cheap half of the stage, and it has to be cheap — a corpus has far more paragraphs than a
 budget has requests, and a filter that costs one request per paragraph is not a filter.
 
-**Circularity control (§4.3).** Every enrichment records which documents contributed. A later
+**Circularity control (PREP-NORMALIZE).** Every enrichment records which documents contributed. A
+later
 match of a mention from a contributing document against that class is not independent evidence:
 the class was described using that document, so the match is partly the pipeline recognizing
 its own writing. Those matches inflate coverage, and `circular_matches` is what makes them
@@ -39,7 +41,7 @@ from rdflib.namespace import SKOS
 
 from .llm import Prompt
 
-STAGE = "B4b_enrichment"
+STAGE = "iter_axiomatize_enrich"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS gloss_contributions (
@@ -367,7 +369,7 @@ def circular_matches(conn: sqlite3.Connection, version_id: str) -> list[dict]:
     Deliberately not filtered by the version that recorded the contribution: once a document
     has described a class, every later match of that document against it carries the same
     dependency. These are not errors and they are not thrown away — they are the ones that must
-    not be counted as independent evidence of coverage (§4.3).
+    not be counted as independent evidence of coverage (PREP-NORMALIZE).
     """
     install(conn)
     return [

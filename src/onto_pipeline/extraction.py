@@ -1,21 +1,22 @@
-"""B1 — candidate extraction (spec 6.1).
+"""ITER-EXTRACT — candidate extraction.
 
 Governing principle of every LLM use in the pipeline:
 
     The LLM classifies and names. The code builds the logic. The reasoner rejects.
 
-So this stage does not assign ontology classes — that is B2's job, and giving it away here
+So this stage does not assign ontology classes — that is ITER-MATCH's job, and giving it away here
 would let the model conflate naming with typing. It extracts mentions and a bare descriptor.
 
 **The model is never asked for character offsets.** It returns the surface string; the code
 finds it in the chunk and translates to an absolute Markdown offset. That is the same reasoning
-the spec applies to B1b: ask for something mechanically verifiable, not for spans. A model that
+the spec applies to ITER-COREFER: ask for something mechanically verifiable, not for spans. A model
+that
 miscounts characters would otherwise anchor a mention to the wrong text, and nothing downstream
 could tell.
 
 A surface form occurring more than once is disambiguated by occurrence index, also supplied by
 the code rather than the model. Anything that cannot be located is dropped and counted: a
-mention the extractor invented is a bug in B1, and it should show up as one.
+mention the extractor invented is a bug in ITER-EXTRACT, and it should show up as one.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from typing import Any
 from .chunking import Chunk
 from .llm import Prompt
 
-STAGE = "B1_extraction"
+STAGE = "iter_extract"
 
 PROMPT = Prompt(
     stage=STAGE,
