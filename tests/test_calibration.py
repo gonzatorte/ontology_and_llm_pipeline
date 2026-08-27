@@ -207,7 +207,8 @@ def test_the_sweep_reuses_one_encoding_pass_across_thresholds(tmp_path):
 
 
 def test_a_threshold_above_every_score_turns_hits_into_false_orphans(tmp_path):
-    """The failure R1 names, and the reason the metric is split: an aggregate would report the
+    """The failure RISKS-FALSE-ORPHANS names, and why the metric is split: an aggregate
+    would report the
     same number for a matcher that ranked badly and one whose threshold was misplaced."""
     pair = load(build_pair(tmp_path))
     matcher = Matcher(KeywordEncoder(), auto_merge_threshold=1.1, grey_zone_lower=0.0)

@@ -154,7 +154,7 @@ matching:
                                    # recall@1 falls from 6.090 to 2.220 and the separation goes
                                    # to -0,56 (right top-1 median 0,143, wrong 0,325). It both
                                    # ranks worse and scores the errors higher, and it squashes
-                                   # everything into ~0,1-0,3, which is the R1 failure the spec
+                                   # everything into ~0,1-0,3, which is the RISKS-FALSE-ORPHANS failure the spec
                                    # names: a 0,73 match becomes a false orphan. A generic IR
                                    # re-ranker is the wrong instrument here; it earns its place
                                    # only tuned on accumulated accept/reject labels (6.3).
@@ -212,7 +212,7 @@ stopping:
 
 # ─── Ramas (ITER-BRANCH) ────────────────────────────────────────
 # El multi-rama es el camino excepcional, no el default: preguntar en cada iteración sin
-# conflicto real es exactamente el trabajo manual que el pipeline existe para evitar (D21).
+# conflicto real es exactamente el trabajo manual que el pipeline existe para evitar (AUTO-APPLY-WHEN-NO-AXES).
 # Ningún eje sale de un modelo — la única prohibición explícita del spec para esta etapa es
 # pedirle al LLM "dame 3 alternativas". Salen del razonador y de un catálogo enumerado.
 branching:

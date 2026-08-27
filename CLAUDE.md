@@ -28,7 +28,7 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 
 | Documento | Qué contesta | Cuándo leerlo |
 |---|---|---|
-| [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) | El diseño: 14 secciones, decisiones `SEED-REORGANIZABLE`–`RETENTION-SET-JSONL`, secuencia de construcción `BUILD` | **Primero, siempre.** Es la referencia canónica; las etapas se citan por su §. 1.353 líneas |
+| [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) | El diseño entero, con las 26 decisiones vinculantes | **Primero, siempre.** Es la referencia canónica, y desde el 2026-09-10 sus partes se citan por nombre (`ITER-MATCH`, `GRADED-FEEDBACK`), no por número |
 | [`README.md`](README.md) | Cómo se usa cada comando y en qué estado está cada etapa | Antes de tocar el CLI o de decir que algo falta |
 | [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
 | [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
@@ -91,14 +91,27 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 
 ## Convenciones de trabajo
 
-- **Evitar la nomenclatura `A1`, `A2`, `A0.1`, `B2`** en texto nuevo que lea una persona. Los
-  códigos del spec siguen siendo la referencia cruzada canónica y se pueden citar como tal, pero
-  las etapas se nombran por su nombre mnemotécnico: `extract`, `match`, `bridge`, `induce`,
-  `axiomatize`, `branch`, `enrich`, `validate`. La tabla de equivalencias está en el README.
+- **Identificadores legibles — y siempre identificar.** No quedan códigos ni números de sección
+  en ningún lado: ni `A0.1`, ni `B5`, ni `D9`, ni `§6.6`. Cada parte del diseño tiene un nombre y
+  **el nombre es el identificador**. Las tres reglas:
+  1. **El id de una sección lleva el de su padre**: `PREP-NORMALIZE-IRIS` está dentro de
+     `PREP-NORMALIZE`, que está dentro de `PREP`. Se lee dónde vive sin abrir nada.
+  2. **Número sólo cuando los hermanos son pasos de una secuencia y el orden pesa**:
+     `ITER-VALIDATE-1-ELK` … `ITER-VALIDATE-7-STRUCTURE`, `BUILD-STEP-1` … `BUILD-STEP-5`.
+     Un número que sólo dice «se registró antes» no va: eso lo dice el orden del índice.
+  3. **Sacar el identificador y dejar la frase suelta es peor que el código.** «La revisión que
+     el pipeline existe para evitar» no se puede buscar ni citar, y dos párrafos que hablan de lo
+     mismo dejan de parecerse. Se escribe la frase **y** `BRANCH-ONLY-REVIEW`.
+
+  Vale para todo lo que se cite: secciones del spec, decisiones (`GRADED-FEEDBACK`), riesgos
+  (`RISKS-FALSE-ORPHANS`), tareas, entradas de deuda (`DEBT-FEEDBACK-HISTORY`) y hallazgos
+  (`FINDINGS-MEASURED-RETRIEVAL-CEILING`). **El índice está en el [README](README.md)**, y todo
+  nombre nuevo se da de alta ahí. Los comandos del CLI son la hoja de su id: `ITER-EXTRACT` se
+  corre con `extract`.
 - **Commitear después de cada hito**, no al final. El mensaje explica *por qué*, no *qué*.
 - **`DEUDA_TECNICA.md` es para mejoras a futuro, no para bugs.** Lo que está roto se arregla.
-  Al agregar una entrada, mirar el último `###`: los números colisionan cuando dos sesiones
-  escriben en paralelo, y conviene referenciar por título y no por número.
+  Cada entrada lleva un id `DEBT-…`, así que dos sesiones en paralelo no colisionan como
+  colisionaban los números.
 - **No leer fuera de `pipeline/` sin preguntar.** El corpus, la ontología semilla y los pares de
   calibración viven afuera y el config los apunta; leer otra cosa del workspace es pedir permiso
   primero.
@@ -152,7 +165,9 @@ ignoraron.
   corrección que más veces tuvo que hacer.
 - **Commitear después de cada hito**, con el log de los cambios en el mensaje. No una tanda al
   final.
-- **Nombres mnemotécnicos, no códigos.** Lo pidió dos veces; la segunda ya con fastidio.
+- **Nombres mnemotécnicos, no códigos — pero nombres, no ausencia de nombre.** Lo pidió cuatro
+  veces. La tercera fue con fastidio; la cuarta fue para corregir que, al sacar los códigos, se
+  habían quedado frases sin identificador, y eso empobrece el texto en vez de mejorarlo.
 - **Documentar mientras se construye**: README, deuda técnica y el porqué de cada decisión,
   no como paso final separado.
 - **La deuda técnica es para mejoras a futuro**, no para llevar la cuenta de bugs.

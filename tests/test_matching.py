@@ -229,7 +229,8 @@ def test_grey_zone_pairs_become_unresolved_duplicates(matcher):
 def test_an_uncalibrated_reranker_turns_matches_into_false_orphans():
     """Why the cross-encoder is off by default. Measured on the real seed: mmarco ranked
     `semi-structured interview` correctly but squashed every score to ~0.01, dropping a match
-    the bi-encoder had at 0.73 into the discard zone. R1, manufactured by the matcher."""
+    the bi-encoder had at 0.73 into the discard zone. RISKS-FALSE-ORPHANS, manufactured
+    by the matcher."""
 
     class Flattening:
         def score(self, pairs):

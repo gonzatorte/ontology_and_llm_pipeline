@@ -4,7 +4,7 @@ One client covers every backend in play, because they all speak the OpenAI chat-
 shape: OpenCode Zen/Go at https://opencode.ai/zen/go/v1, and Ollama at
 http://127.0.0.1:11434/v1. That keeps the per-stage temperature (TEMPERATURE-PER-STAGE) and the
 token accounting
-the ledger needs (T4) in one place.
+the ledger needs (DELIVERABLES-PENDING-TELEMETRY) in one place.
 
 Credentials are read from the environment and never from the config file, never logged, and
 never included in an error message: a failing request reports status and body, and the body of

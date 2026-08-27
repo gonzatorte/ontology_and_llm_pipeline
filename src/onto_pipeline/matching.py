@@ -285,7 +285,8 @@ class Matcher:
         Which is why an untuned cross-encoder must not be switched on. Measured on the real
         seed, a generic IR re-ranker (mmarco) ranked `semi-structured interview` against the
         seed's classes correctly but squashed every score to ~0.01, dropping a match the
-        bi-encoder had put at 0.73 into the discard zone. That is R1 — a false orphan —
+        bi-encoder had put at 0.73 into the discard zone. That is RISKS-FALSE-ORPHANS — a false
+        orphan —
         manufactured by the matcher itself. A cross-encoder earns its place here only once
         it is tuned on accumulated accept/reject labels (ITER-TUNE).
         """

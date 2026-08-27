@@ -64,7 +64,7 @@ Sin sección propia en el spec, pero son comandos: `chunk` (agrupa bloques sin p
 | Id | Qué es |
 |---|---|
 | `SCOPE` | Qué construye, con qué entra y qué sale. Incluye `SCOPE-PURPOSE` (sin tarea downstream), `SCOPE-EXPRESSIVITY` y `SCOPE-SCALE` |
-| `DECISIONS` | Las 26 decisiones vinculantes, cada una con su nombre |
+| `DECISIONS` | Las 26 decisiones vinculantes, cada una con su nombre y la sección que la fundamenta. **Es la tabla que hay que mirar** antes de citar una: `BRANCH-ONLY-REVIEW`, `GRADED-FEEDBACK`, `SEPARATE-UNTIL-CONFIRMED`… |
 | `LAYERS` | Las cuatro capas y por qué no se mezclan. `LAYERS-ONTOLOGY-NOT-GRAPH` prohíbe los algoritmos de grafo sobre la TBox |
 | `REORG` | Por qué la semilla es reorganizable y qué cuesta: `REORG-PATH-DEPENDENCE` |
 | `CONFIG` | Toda la superficie de configuración |

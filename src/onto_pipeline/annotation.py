@@ -1,4 +1,6 @@
-"""Retention set: annotation format, BRAT export (T3), orphan metrics (EVAL-PIPELINE, 10.2).
+"""Retention set: annotation format, BRAT export, orphan metrics (EVAL-PIPELINE).
+
+The exporter is DELIVERABLES-PENDING-BRAT-EXPORTER; the format is EVAL-ANNOTATION-FORMAT.
 
 The format is the project's own JSONL for one reason: the annotation carries a field no
 standard contemplates — `in_seed` — and it is exactly the field that defines the false-orphan
