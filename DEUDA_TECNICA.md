@@ -195,7 +195,7 @@ usuario en vez de descartarla como huérfana.
 **Lo que sigue sin resolverse es transferirlos.** Se midieron contra un inventario de 3.418
 clases y la semilla de aplicación tiene 34: con más candidatos hay más chances de que algo
 espurio supere el umbral, así que el punto de operación se mueve con el tamaño y no se sabe
-cuánto. Esa curva es exactamente la tarea C5 del plan —179, 3.419 y ~40k clases— y hasta
+cuánto. Esa curva es exactamente la tarea «más pares» del plan —179, 3.419 y ~40k clases— y hasta
 medirla, los valores de arriba son un punto de partida defendible, no un valor final.
 
 **Las huérfanas genuinas ya no son cero.** El barrido con `--holdout 0.2` retiene 683 de las
@@ -457,7 +457,7 @@ calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo s
 medible hoy mismo, sin que nadie conteste nada. Lo que no dice es cuánto **transfiere** a otro
 dominio, y con el entregable siendo la caracterización del sistema esa pregunta deja de ser una
 salvedad y pasa a ser parte del resultado: entrenar en un par y evaluar en otro es justamente lo
-que hay que medir. Los pares de C5 son el banco para eso.
+que hay que medir. Los pares de la tarea «más pares» son el banco para eso.
 
 
 ### 9. El par cualitativo, retirado — y lo que sí dejó
@@ -627,7 +627,7 @@ lo cual la Affiliate License es gratuita.
 
 Lo que cuesta: la licencia hay que tramitarla, y SNOMED son ~360k conceptos, así que hay que
 subsetear y documentar el criterio como pide la fase 0 del plan. Por eso está acá y no en la
-tabla de tareas: no está en el camino crítico de la calibración, y no conviene que bloquee C2–C7.
+tabla de tareas: no está en el camino crítico de la calibración, y no conviene que bloquee las tareas de calibración.
 
 Mientras tanto el default se queda como está. Lo honesto es que se queda por falta de evidencia
 en contra, no por evidencia a favor.

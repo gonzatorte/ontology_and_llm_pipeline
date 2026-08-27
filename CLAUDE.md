@@ -33,7 +33,7 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 | [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su §3 lista las que ya se descartaron con datos |
 | [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
 | [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
-| [`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md) | Por qué el corpus de calibración está separado del de aplicación, y las tareas C1–C5 | Al tocar `calibration.py` o interpretar un barrido |
+| [`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md) | Por qué el corpus de calibración está separado del de aplicación, y las tareas la tarea «cablear el matcher»–la tarea «más pares» | Al tocar `calibration.py` o interpretar un barrido |
 
 Los cuatro últimos son enmiendas o complementos del spec, no lo reemplazan.
 

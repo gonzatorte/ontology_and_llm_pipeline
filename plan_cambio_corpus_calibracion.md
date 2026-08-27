@@ -6,7 +6,7 @@ resultados de los barridos que este plan hizo posibles están en
 
 > Este documento se llamaba "separar el corpus de calibración del corpus de aplicación" y esa
 > separación resultó ser una premisa equivocada: no hay corpus de aplicación. Ver la nota de
-> corrección en la sección de C7.
+> corrección en la sección de la tarea «volver al par de aplicación».
 
 ## Problema
 
@@ -135,7 +135,7 @@ Dos artefactos de CRAFT que el resto del plan debería aprovechar:
 Existe además el **CRAFT Shared Task 2019**, con evaluador oficial y baselines publicados: los
 números de la fase 3 tienen contra qué compararse.
 
-#### Pares adicionales (barrido, tarea C5)
+#### Pares adicionales (barrido, tarea **más pares**)
 
 Un solo par no dice si los umbrales transfieren. Tres inventarios de tamaño muy distinto sí, y eso
 ataca de frente el riesgo declarado abajo (*“el punto de operación no transfiere al inventario de
@@ -148,7 +148,7 @@ ataca de frente el riesgo declarado abajo (*“el punto de operación no transfi
 | **CafeteriaFCD / CafeteriaSA** | FoodOn (axiomatizada, ~40k) + SNOMED-CT | ~7.400 y ~4.300 anotaciones FoodOn | Extremo de inventario grande, y dominio no clínico |
 
 Cada uno trae su formato: HPO GSC+ y las Cafeteria usan standoff propio / brat, no Knowtator. La
-tarea C2 tiene que dejar el importador con el parser de formato desacoplado del mapeo a `Mention`.
+tarea **importador de corpus anotado** tiene que dejar el importador con el parser de formato desacoplado del mapeo a `Mention`.
 
 Descartados y por qué: **MedMentions** (UMLS es metatesauro, no ontología axiomatizada, y la
 escala es otra), **BioNLP-OST Bacteria Biotope** (OntoBiotope, 3.602 conceptos con definiciones,
@@ -162,7 +162,7 @@ o corpus diminuto. MaterioMiner es el mejor caso no biomédico encontrado.
 `cross_language_always_grey: true` y el encoder multilingüe son decisiones sin evidencia detrás, y
 los cuatro pares son en inglés, así que ninguno las toca. La vía existe —los corpus clínicos en
 español del BSC contra SNOMED CT— pero pide tramitar una licencia y subsetear 360k conceptos, y
-no conviene que eso bloquee C2–C7. Queda registrado como **deuda técnica 17** en
+no conviene que eso bloquee las tareas de calibración. Queda registrado como **deuda técnica 17** en
 [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md).
 
 Salida de la fase: un directorio con el corpus, su ontología en RDF, y una nota de una página
@@ -212,7 +212,7 @@ Estimación: ~120 líneas.
 ### Fase 4 — Re-decidir las dos opciones de config — **HECHA**
 
 Con n = 8.723 en lugar de n = 10, las dos quedaron resueltas y los comentarios de
-`config/default.yaml` reescritos. Ver [Resultados de C4](#resultados-de-c4-2026-09-09).
+`config/default.yaml` reescritos. Ver [Resultados del par primario](#resultados-de-c4-2026-09-09).
 
 La pregunta condicional que dejaba abierta esta fase —«si `gloss` gana acá, revisar A0.4»— se
 respondió al revés y con margen: `gloss` no gana, pierde por 9× y con separación negativa. **A0.4
@@ -226,7 +226,7 @@ hay evidencia de que deba. Su justificación queda siendo B4b y la lectura human
 > proyecto es el sistema y su caracterización, sin dominio comprometido (§1.4 del spec: "sin
 > tarea downstream comprometida"), así que **todos los pares son instrumentos** y el par
 > cualitativo era andamio para tener con qué probar mientras no había otra cosa. Queda archivado
-> abajo lo que decía, porque explica de dónde salió la tarea C7 y por qué se retiró.
+> abajo lo que decía, porque explica de dónde salió la tarea «volver al par de aplicación» y por qué se retiró.
 
 <details>
 <summary>Lo que decía antes (archivado)</summary>
@@ -244,11 +244,11 @@ aplicación o cambiar la semilla.
 **Lo que reemplaza a eso.** Sin dominio comprometido, la compuerta del §12.1 no es un semáforo
 del proyecto: una tasa alta de falsos huérfanos sobre un par es un resultado *sobre ese par*, y
 lo que califica al sistema es cómo se comporta **a través** de pares. Eso mueve el centro de
-gravedad del plan a C5 —la curva de tamaño de inventario— y agrega una tarea que antes no tenía
+gravedad del plan a la tarea «más pares» —la curva de tamaño de inventario— y agrega una tarea que antes no tenía
 sentido: correr el pipeline **entero** sobre un par publicado, no sólo el matcher, que es lo
 único que hasta ahora se midió con respuesta conocida.
 
-## Resultados de C4 (2026-09-09)
+## Resultados de la tarea «par primario» (2026-09-09)
 
 Par: CRAFT `CL+extensions`, 97 documentos, **8.723 menciones** gold (424 discontinuas salteadas),
 inventario de **3.418 clases, 3.281 con definición (96%)**. Cuatro corridas,
@@ -355,34 +355,34 @@ Los umbrales de `matching:` pasan a ser **salida** de la fase 3, no entrada escr
 
 | Riesgo | Mitigación |
 |---|---|
-| El corpus elegido resulta inaccesible o con licencia incompatible | **Resuelto en fase 0**: CRAFT verificado, CC BY 3.0, formato inspeccionado. C5 aporta los candidatos de respaldo |
-| El punto de operación no transfiere al inventario de 34 clases | **C5 lo mide** en vez de suponerlo: tres inventarios de 179, 3.540 y ~40k clases dan la curva. El umbral se documenta como punto de partida y la fase 5 lo revisa sobre el par real |
+| El corpus elegido resulta inaccesible o con licencia incompatible | **Resuelto en fase 0**: CRAFT verificado, CC BY 3.0, formato inspeccionado. la tarea «más pares» aporta los candidatos de respaldo |
+| El punto de operación no transfiere al inventario de 34 clases | **la tarea «más pares» lo mide** en vez de suponerlo: tres inventarios de 179, 3.540 y ~40k clases dan la curva. El umbral se documenta como punto de partida y la fase 5 lo revisa sobre el par real |
 | La fase 1 destapa que el matcher necesita trabajo antes de calibrar nada | Es el resultado correcto y llega antes que con el plan actual |
 | Convenciones de granularidad de mención distintas entre corpus | Comparar contra la guía de anotación del corpus; no mezclar métricas de corpus distintos en un promedio |
 
 ## Orden y esfuerzo
 
-Fase 0 está hecha (arriba) y la fase 1 también (`a4df6f0`). El camino crítico arranca en C2.
+Fase 0 está hecha (arriba) y la fase 1 también (`a4df6f0`). El camino crítico arranca en la tarea «importador de corpus anotado».
 
-Total estimado, C2–C3: **1 a 2 días** de implementación; C5 agrega ~medio día de parsers. C6–C7
+Total estimado, la tarea «importador de corpus anotado»–la tarea «banco de calibración»: **1 a 2 días** de implementación; la tarea «más pares» agrega ~medio día de parsers. la tarea «re-decidir el encoder»–la tarea «volver al par de aplicación»
 son medición y decisión.
 
 ## Tareas pendientes
 
-Registro de trabajo a ejecutar, en el mismo espíritu que el §14.2 de la spec (T1–T4). C1–C4 y C6
-están hechas; queda C5, C7 y C9.
+Registro de trabajo a ejecutar, en el mismo espíritu que el §14.2 de la spec (T1–T4). la tarea «cablear el matcher»–la tarea «par primario» y la tarea «re-decidir el encoder»
+están hechas; queda la tarea «más pares», la tarea «volver al par de aplicación» y la tarea «dónde parte `auto`».
 
-| # | Tarea | Fase | Bloqueada por | Estimación |
+| Tarea | Qué | Fase | Bloqueada por | Estimación |
 |---|---|---|---|---|
-| ~~C1~~ | ~~Cablear B2~~ — **hecha** en `a4df6f0`: `Target`, comando `match`, persistencia y umbrales desde config | 1 | — | — |
-| ~~C2~~ | ~~Importador de corpus anotado~~ — **hecha**: `calibration.py`, readers `knowtator` y `brat` tras un registro, `pair.yml` por par, offsets validados contra el texto fuente en los 97 documentos | 2 | — | — |
-| ~~C3~~ | ~~Banco de calibración~~ — **hecha**: comando `calibrate`, una pasada de encoding por variante y los umbrales aplicados encima, distribución de scores y separación reportadas aparte del agregado | 3 | C2 | — |
-| ~~C4~~ | ~~Par primario CRAFT `CL+extensions`~~ — **hecha**, cuatro corridas. Ver [Resultados de C4](#resultados-de-c4-2026-09-09) | 3 | C3 | — |
-| C5 | **Pares adicionales.** MaterioMiner **hecho** (ver abajo); quedan HPO GSC+ y CafeteriaFCD/CafeteriaSA. Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
-| ~~C6~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de C4**: ambas resueltas, comentarios de `config/default.yaml` reescritos. C5 puede refinar los umbrales, no estas dos | 4 | C4 | — |
-| ~~C7~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
-| ~~C8~~ | ~~Correr el pipeline entero sobre un par publicado~~ — **hecha** sobre MaterioMiner: de la semilla a `v2` con 45 clases inducidas. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.13 y 1.14 | 5 | C4 | — |
-| C9 | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | C4 | decisión |
+| ~~cablear-b2~~ | ~~Cablear B2~~ — **hecha** en `a4df6f0`: `Target`, comando `match`, persistencia y umbrales desde config | 1 | — | — |
+| ~~importador~~ | ~~Importador de corpus anotado~~ — **hecha**: `calibration.py`, readers `knowtator` y `brat` tras un registro, `pair.yml` por par, offsets validados contra el texto fuente en los 97 documentos | 2 | — | — |
+| ~~banco~~ | ~~Banco de calibración~~ — **hecha**: comando `calibrate`, una pasada de encoding por variante y los umbrales aplicados encima, distribución de scores y separación reportadas aparte del agregado | 3 | importador | — |
+| ~~par-primario~~ | ~~Par primario CRAFT `CL+extensions`~~ — **hecha**, cuatro corridas. Ver [Resultados del par primario](#resultados-de-c4-2026-09-09) | 3 | banco | — |
+| más-pares | **Pares adicionales.** MaterioMiner **hecho** (ver abajo); quedan HPO GSC+ y CafeteriaFCD/CafeteriaSA. Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | par-primario | 3 pair.yml + 3 barridos |
+| ~~re-decidir-encoder~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de la tarea «par primario»**: ambas resueltas, comentarios de `config/default.yaml` reescritos. la tarea «más pares» puede refinar los umbrales, no estas dos | 4 | par-primario | — |
+| ~~volver-al-par~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
+| ~~corrida-completa~~ | ~~Correr el pipeline entero sobre un par publicado~~ — **hecha** sobre MaterioMiner: de la semilla a `v2` con 45 clases inducidas. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.13 y 1.14 | 5 | par-primario | — |
+| dónde-parte-auto | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | par-primario | decisión |
 
 ### Segundo par: MaterioMiner — hecho (2026-09-09)
 
@@ -408,7 +408,7 @@ Falta el tercer punto de la curva (~40k clases) para tener la forma.
 
 ### Ingesta de texto plano — hecha (2026-09-09)
 
-Primera mitad de C8. `parse_text` toma un `.txt` y **el Markdown que entrega es el archivo,
+Primera mitad de la tarea «corrida completa». `parse_text` toma un `.txt` y **el Markdown que entrega es el archivo,
 literal**: sin des-hyphenación, sin detección de encabezados, sin supresión de boilerplate. No es
 minimalismo, es el requisito: las anotaciones gold indexan caracteres de ese archivo, y cualquier
 normalización corre los offsets sin producir ningún error — la medición posterior simplemente da
@@ -423,7 +423,7 @@ Verificado sobre los 97 artículos de CRAFT, 4.091.461 caracteres:
 | Menciones gold cuyo offset cae donde dice el Markdown | **8.723 de 8.723 (100%)** |
 | Menciones gold que caen enteras dentro de un bloque | **8.723 de 8.723 (100%)** |
 
-El corpus ya está ingestado y chunkeado. Lo que falta de C8 son las etapas que cuestan llamadas
+El corpus ya está ingestado y chunkeado. Lo que falta de la tarea «corrida completa» son las etapas que cuestan llamadas
 al modelo.
 
 **Un detalle para cuando se corra:** `seed_ontology` tiene que apuntar a
@@ -433,9 +433,9 @@ Consecuencia: `CL+extensions.obo` **no tiene equivalente en OWL**, así que la s
 pipeline no incluye las clases de extensión de CRAFT que sí usa el banco de calibración. Hay que
 decidir si eso importa antes de leer los números.
 
-C4 era la compuerta —si el matcher no separaba en ningún punto de operación, no había nada que
-calibrar— y la pasó: separación +1,61 con etiquetas. Quedan **C5**, que ya no decide
+la tarea «par primario» era la compuerta —si el matcher no separaba en ningún punto de operación, no había nada que
+calibrar— y la pasó: separación +1,61 con etiquetas. Quedan **la tarea «más pares»**, que ya no decide
 `match_against` ni `use_cross_encoder` sino cuánto se mueve el punto de operación con el tamaño
-del inventario, y **C8**, que saca la medición del matcher y la extiende al pipeline completo.
+del inventario, y **la tarea «corrida completa»**, que saca la medición del matcher y la extiende al pipeline completo.
 Las dos son ahora el trabajo principal, no tareas laterales: con el entregable siendo el sistema
 y su caracterización, medir a través de pares *es* el producto.

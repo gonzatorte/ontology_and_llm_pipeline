@@ -57,9 +57,9 @@ aplicación" (la semilla de metodología cualitativa) al que el proyecto debía 
 calibrar. **No lo hay.** Todos los pares (corpus, ontología) son instrumentos, y lo que califica
 al sistema es cómo se comporta a través de ellos, no cómo le va en uno.
 
-Corregido el 2026-09-09, en 15 lugares de 7 archivos. Venía de la tarea C7 del plan de
+Corregido el 2026-09-09, en 15 lugares de 7 archivos. Venía de la tarea «volver al par de aplicación» del plan de
 calibración, que decía "volver al par de aplicación"; esa tarea está retirada y en su lugar entró
-C8, correr el pipeline entero sobre un par publicado.
+la tarea «corrida completa», correr el pipeline entero sobre un par publicado.
 
 ---
 
@@ -341,13 +341,25 @@ compuerta nombra. Está implementado y **no descarta**: que la inducción reencu
 ya está es un diagnóstico sobre el matcher, y borrarlo en silencio perdería la única señal de
 que pasó.
 
-**Y un modo de falla distinto, del lado de la extracción.** Otras propuestas —`Scholarly
-research` (9 menciones), `Results` (5), `Table reference` (4)— no son falsos huérfanos: son
-encabezados de sección y referencias cruzadas que B1 extrajo como si fueran conceptos. La
-ontología hace bien en no tenerlas. Es un problema de precisión de la extracción, no del
-matcher, y ningún filtro de los que hay lo atrapa.
+**Y un modo de falla distinto, del lado de la extracción.** Otras propuestas no son falsos
+huérfanos: la ontología hace bien en no tenerlas. Mirando de qué menciones salieron:
 
-### 1.14 El pipeline entero sobre un par anotado (C8), y qué se ve al final
+| Clase propuesta | De qué menciones |
+|---|---|
+| `Scholarly research` | `Previous studies`, `literature`, `research`, `studies`, `researchers`, `publication` |
+| `Table reference` | `Table 1`, `Table S1`, `Table 2` |
+| `Results` | `results`, `corrected results` |
+
+Son **vocabulario sobre el paper, no sobre el dominio**: cómo se habla de investigar, y
+referencias cruzadas a figuras y tablas. No son encabezados de sección — verificado,
+`Abstract`, `Introduction`, `Conclusions` y `References` **no aparecen ni una vez** entre las
+1.309 menciones, así que la extracción no confunde la estructura del documento con contenido.
+Confunde el metalenguaje de la escritura académica con el dominio del que se escribe.
+
+Es precisión de la extracción, no del matcher, y ningún filtro de los siete lo atrapa: son
+sintagmas nominales legítimos, con soporte suficiente, y el razonador no tiene nada que objetar.
+
+### 1.14 El pipeline entero sobre un par anotado (tarea «corrida completa»), y qué se ve al final
 
 Primera corrida completa contra una respuesta conocida. MaterioMiner, 4 publicaciones:
 

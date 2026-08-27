@@ -81,11 +81,11 @@ existe para que no se pierdan entre las entradas.
 | # | Qué | Por qué | Detalle |
 |---|---|---|---|
 | 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [hallazgo 1.11](HALLAZGOS.md), [1.14](HALLAZGOS.md) |
-| 2 | **Precisión de la extracción**: `Results`, `Table reference` y `Scholarly research` se volvieron clases propuestas | Son encabezados de sección y referencias cruzadas, no conceptos. Ninguno de los siete filtros los atrapa, y no son falsos huérfanos — la ontología hace bien en no tenerlos | [hallazgo 1.13](HALLAZGOS.md) |
+| 2 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — vocabulario sobre el paper, no sobre el dominio. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [hallazgo 1.13](HALLAZGOS.md) |
 | 3 | **Llevar los precedentes al prompt** | Es lo que justifica guardar el registro de decisiones. `precedents()` existe y no tiene llamador | [deuda 20](DEUDA_TECNICA.md) |
 | 4 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [deuda 22](DEUDA_TECNICA.md) |
 | 5 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita | [deuda 8e](DEUDA_TECNICA.md) |
-| 6 | **El tercer punto de la curva de tamaño** (~40k clases) | Con 428 y 3.418 hay dos puntos; con tres hay forma | [plan, C5](plan_cambio_corpus_calibracion.md) |
+| 6 | **El tercer punto de la curva de tamaño** (~40k clases) | Con 428 y 3.418 hay dos puntos; con tres hay forma | [plan, tarea «más pares»](plan_cambio_corpus_calibracion.md) |
 | 7 | **Comparación por forma normal** | Sin ella el mismo compromiso vuelve con IRIs distintos y no se detecta como re-proposición | [deuda 20](DEUDA_TECNICA.md) |
 | 8 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Tres lugares donde hoy hay que acordarse. El último es el que cierra el bucle de §4.3 | [deuda 8c](DEUDA_TECNICA.md), [8e](DEUDA_TECNICA.md) |
 
@@ -98,7 +98,7 @@ existe para que no se pierdan entre las entradas.
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
 | ~~3~~ | ~~Unificar el registro de decisiones~~ — **hecho**: una tabla, seis categorías fijas, `invalid` separado de `rejected`. Falta llevar los precedentes al prompt | Lo rechazado no está en ningún otro lado | [deuda 20](DEUDA_TECNICA.md) |
 | ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [deuda 8g](DEUDA_TECNICA.md) |
-| ~~5~~ | ~~Terminar C8~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [hallazgo 1.14](HALLAZGOS.md) |
+| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [hallazgo 1.14](HALLAZGOS.md) |
 | ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
 
 </details>
