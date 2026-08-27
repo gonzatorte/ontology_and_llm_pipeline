@@ -2217,7 +2217,8 @@ def tune_cmd(
         f"{len(eval_docs)} para evaluar · {len(source.targets)} clases"
     )
     with console.status("recuperando candidatos"):
-        train_mentions, train_candidates = retrieve(source, train_docs, top_k)
+        # El pozo de negativos es más ancho que la ventana de re-ranking, a propósito.
+        train_mentions, train_candidates = retrieve(source, train_docs, settings.negative_pool)
     examples = tuning.examples_from(
         train_mentions, train_candidates, texts, negatives=negatives
     )

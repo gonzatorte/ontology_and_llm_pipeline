@@ -9,11 +9,22 @@ acierto en los primeros k, y conviene medirla antes de entrenar nada: sobre CRAF
 puntos y sobre MaterioMiner +18,5. Lo que no está en el top-k no lo alcanza ningún
 reordenamiento.
 
-**Los negativos son las clases que el bi-encoder puso entre las `top_k` primeras y no eran la
-correcta.** Ordena todas las clases del inventario por parecido con la mención y se queda con
-diez; nueve están mal, y ésas son exactamente las confusiones que el sistema comete. Una clase
-tomada al azar es una que el recuperador nunca iba a proponer, y entrenar contra eso enseña a
-distinguir lo que ya estaba distinguido.
+**Los negativos son clases que el bi-encoder puso arriba y no eran la correcta.** Ordena todas
+las clases del inventario por parecido con la mención; las de más arriba que están mal son
+exactamente las confusiones que el sistema comete. Una clase tomada al azar del inventario es
+una que el recuperador nunca iba a proponer, y entrenar contra eso enseña a distinguir lo que ya
+estaba distinguido.
+
+**El pozo de negativos es más ancho que la ventana de re-ranking, y eso está medido.** Al usar
+se reordenan las `top_k` (diez) primeras; al entrenar los negativos salen de las
+`negative_pool` (cincuenta) primeras. Ver sólo las nueve que va a tener que puntuar generaliza
+peor que ver un rango más amplio de equivocadas plausibles: +11,2 puntos contra +10,4 sobre
+MaterioMiner. La diferencia es chica y sobre n=653, así que es una preferencia con evidencia
+débil, no un resultado.
+
+**Lo que sí se descartó midiendo:** dejar afuera las menciones cuya clase correcta no está en el
+top-k. Son el 57% del entrenamiento y el par que aportan es uno que el recuperador nunca va a
+mostrar, así que parecía ruido; sacarlas da +10,0 contra +10,4, o sea que no molestaban.
 
 **La partición es por documento, nunca por mención.** Dos menciones del mismo paper comparten
 vocabulario, autores y tema; separarlas al azar deja la respuesta del lado del entrenamiento y
@@ -112,8 +123,11 @@ def examples_from(
     mentions: Sequence, candidates: Sequence[Sequence[str]], texts: dict[str, str],
     *, negatives: int = 4, seed: int = 0,
 ) -> list[Example]:
-    """Un positivo por mención y `negatives` de los candidatos equivocados que el bi-encoder
-    puso arriba."""
+    """Un positivo por mención y `negatives` equivocadas de entre las que el bi-encoder trajo.
+
+    `candidates` tiene que venir del pozo ancho —`negative_pool`—, no de la ventana de
+    re-ranking: entrenar sólo contra las nueve que va a tener que puntuar generaliza peor.
+    """
     generator = random.Random(seed)
     built: list[Example] = []
     for mention, offered in zip(mentions, candidates, strict=True):

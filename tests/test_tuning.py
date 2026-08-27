@@ -145,3 +145,12 @@ def test_what_was_trained_is_reported_as_a_fraction():
     trained = tuning.Trained(model=None, method=tuning.LORA,
                              total_params=117_641_089, trainable_params=443_137)
     assert 0.003 < trained.trainable_fraction < 0.004
+
+
+def test_the_negative_pool_is_wider_than_the_reranking_window():
+    """Los negativos salen de las cincuenta primeras aunque al usarse se reordenen diez: ver
+    sólo las que va a tener que puntuar generaliza peor. Medido +11,2 contra +10,4."""
+    from onto_pipeline.config import Tuning
+
+    settings = Tuning()
+    assert settings.negative_pool > settings.top_k

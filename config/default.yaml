@@ -185,8 +185,13 @@ tuning:
                                # puntos, 4 dan -5,4 y 12 dan +7,0. Igualarlas es concluir mal.
   batch_size: 64
   max_length: 64
-  negatives: 4                 # por mención, de los candidatos que el bi-encoder puso primero
-  top_k: 10                    # cuántos recupera el bi-encoder para que el otro reordene
+  negatives: 4                 # por mención, de clases que el bi-encoder puso arriba y estaban mal
+  top_k: 10                    # cuántas reordena el cross-encoder al usarse
+  negative_pool: 50            # de cuántas se sacan los negativos al entrenar. Más ancho que
+                               # top_k a propósito: entrenar sólo contra las que va a puntuar
+                               # generaliza peor. Medido +11,2 contra +10,4 (n=653, evidencia
+                               # débil pero gratis). Sacar las menciones cuya clase no está en
+                               # el top_k —el 57%— no cambia nada: +10,0.
   train_fraction: 0.8          # partición POR DOCUMENTO, no por mención
 
 # ─── Criterios de parada (§10.3) ─────────────────────────

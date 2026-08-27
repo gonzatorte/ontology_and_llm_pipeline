@@ -284,11 +284,25 @@ o rechazar del usuario en la zona gris— sólo que ahora se sabe cuánto rinde 
 tomar prestado.
 
 **Dos cosas de método que hacen que el número signifique algo.** Los negativos salen de las
-clases que el bi-encoder puso entre las diez primeras y no eran la correcta: ordena todas las
-clases por parecido, se queda con diez, nueve están mal, y ésas son las confusiones a corregir.
-Una clase al azar es una que el recuperador nunca iba a proponer. Y la partición es por documento
+clases que el bi-encoder puso arriba y estaban mal: son las confusiones que el sistema comete, y
+una clase al azar es una que el recuperador nunca iba a proponer. Y la partición es por documento
 y nunca por mención — dos menciones del mismo paper comparten vocabulario y tema, y separarlas al
 azar mide memoria.
+
+**De cuán arriba salen los negativos, medido sobre MaterioMiner (n=653):**
+
+| Cómo se arman los ejemplos | ganancia |
+|---|---|
+| negativos del top-10, todas las menciones | +10,4 |
+| sólo menciones cuya clase está en el top-10 (el 43%) | +10,0 |
+| **negativos del top-50** | **+11,2** |
+| 8 negativos en vez de 4 | +10,3 |
+
+O sea: el pozo de negativos conviene **más ancho que la ventana de re-ranking** —ver sólo las
+nueve que va a tener que puntuar generaliza peor— y no conviene más negativos. Y sacar las
+menciones cuya clase correcta no está en el top-k, que era la sospecha razonable porque el par
+que aportan el recuperador nunca lo va a mostrar, **no cambia nada**. Diferencias chicas sobre
+una muestra chica: preferencias con evidencia débil, no resultados.
 
 **Se reporta el techo junto al resultado**, porque subir 9,9 puntos cuando había 11,2 disponibles
 es otra cosa que subir 9,9 cuando había 40. El re-ranker sólo reordena lo que la recuperación

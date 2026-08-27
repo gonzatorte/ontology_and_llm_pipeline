@@ -166,7 +166,11 @@ class Tuning(BaseModel):
     # Negativos por mención, tomados de las clases que el bi-encoder puso entre las primeras y
     # no eran la correcta — el error que hay que corregir, no uno inventado.
     negatives: int = 4
+    # Cuántas reordena el cross-encoder al usarse.
     top_k: int = 10
+    # De cuántas se sacan los negativos al entrenar. Más ancho que `top_k` a propósito: ver
+    # sólo las que va a tener que puntuar generaliza peor. Medido: +11,2 contra +10,4.
+    negative_pool: int = 50
     train_fraction: float = 0.8
 
     @field_validator("method")
