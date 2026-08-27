@@ -38,7 +38,7 @@ validation = [
 ]
 
 [project.scripts]
-onto-pipeline = "onto_pipeline.cli:app"
+onto-pipeline = "onto_pipeline.cli:entrypoint"
 
 [build-system]
 requires = ["hatchling"]

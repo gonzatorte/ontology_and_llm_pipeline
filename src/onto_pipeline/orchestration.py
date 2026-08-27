@@ -1,8 +1,9 @@
 """What to run next, and what is waiting on a person (REORG, ITER, EVAL-STOPPING).
 
 The pipeline is a sequence of stages with five points where the *user* decides — the matcher's
-grey zone (6.2), the branch (6.6), a functional property (6.8), a competency question (4.4), a
-typo in the seed (4.3). An orchestrator that ran straight through them would be deciding those
+grey zone (`ITER-MATCH`), the branch (`ITER-BRANCH`), a functional property (`ITER-APPLY`), a
+competency question (`PREP-CQ-USER`), a typo in the seed (`PREP-NORMALIZE`). An orchestrator
+that ran straight through them would be deciding those
 by default, which is the failure the spec names in BRANCH-ONLY-REVIEW and AUTO-APPLY-WHEN-NO-AXES
 from both ends: never ask, and the
 system quietly picks the modelling; ask about everything, and it becomes the manual work it
@@ -154,7 +155,7 @@ def survey(conn: sqlite3.Connection, version_id: str, *, has_provider: bool) -> 
               "decision", "nothing typed yet: run match"),
         stage("competency questions", "onto-pipeline cq", False, bool(questions),
               f"{questions} accepted questions", "none imported: run import-cq or propose-cq"),
-        stage("stop?", "onto-pipeline stop", False, True, "the four criteria of 10.3"),
+        stage("stop?", "onto-pipeline stop", False, True, "the four criteria of EVAL-STOPPING"),
     ]
     return Plan(steps=steps)
 

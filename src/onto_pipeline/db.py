@@ -112,4 +112,8 @@ def connect(work_dir: Path) -> sqlite3.Connection:
         "SELECT name FROM sqlite_master WHERE type = 'table'")}
     for table in existing & {"branches", "decisions"}:
         conn.execute(f"UPDATE {table} SET status = 'not_chosen' WHERE status = 'rejected'")
+    # Sin este commit la migración deja abierta una transacción de escritura, y en WAL eso
+    # bloquea a cualquier segunda conexión sobre el mismo almacén — que es lo que pasa apenas
+    # una interfaz abre el almacén dos veces.
+    conn.commit()
     return conn
