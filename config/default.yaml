@@ -56,6 +56,11 @@ induction:
   similarity_threshold: 0.75   # single-link sobre las menciones huérfanas
   min_support: 3               # una mención proponiendo una clase es ruido (§6.6)
   max_phrases_in_prompt: 30
+  # Desde qué parecido con una clase existente una propuesta es duplicado, o sea que sus
+  # menciones eran falsos huérfanos. No se descarta sola: es el diagnóstico del matcher que pide
+  # la compuerta de §12.1. Medido sobre MaterioMiner: 5 de 45 propuestas por encima de 0,90, con
+  # `Test specimen` en 1,00 contra una clase idéntica que el matcher no encontró.
+  redundant_threshold: 0.90
 
 chunking:
   target_chars: 3000     # a chunk is B1's unit of extraction

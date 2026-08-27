@@ -217,6 +217,36 @@ def parse(text: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+REDUNDANT = "redundant"
+
+
+def redundant(
+    proposals: Sequence[Proposal], labels: Sequence[str], similarity, *, threshold: float
+) -> dict[str, str]:
+    """Propuestas cuyo nombre ya es el de una clase de la ontología.
+
+    Es el camino que la compuerta no-go de §12.1 nombra —un falso huérfano se vuelve una clase
+    espuria— y acá se lo puede atajar barato, porque para cuando la inducción **nombró** el
+    cluster ya hay contra qué comparar. El matcher falló sobre las menciones sueltas
+    ("specimen", "the specimens") y el nombre del grupo sí coincide: medido sobre MaterioMiner,
+    `Test specimen` propuesta con coseno 1,00 contra una `Test specimen` existente, y
+    `Grain Boundary` con 0,99 desde dos clusters distintos.
+
+    Devuelve la etiqueta existente por cada propuesta redundante. **No las borra**: que la
+    inducción vuelva a encontrar una clase que ya está es un diagnóstico sobre el matcher, y
+    tirarlo en silencio sería perder la única señal de que eso pasó.
+    """
+    if not labels:
+        return {}
+    found: dict[str, str] = {}
+    scores = similarity([proposal.label for proposal in proposals], list(labels))
+    for proposal, row in zip(proposals, scores, strict=True):
+        best = max(range(len(labels)), key=lambda index: row[index])
+        if row[best] >= threshold:
+            found[proposal.cluster_id] = labels[best]
+    return found
+
+
 def persist(conn: sqlite3.Connection, version_id: str, proposals: list[Proposal]) -> None:
     install(conn)
     conn.execute("DELETE FROM proposed_classes WHERE version_id = ?", (version_id,))

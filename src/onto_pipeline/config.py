@@ -76,6 +76,10 @@ class Induction(BaseModel):
     similarity_threshold: float = 0.75
     min_support: int = 3          # one mention proposing a class is noise (spec 6.6)
     max_phrases_in_prompt: int = 30
+    # Desde qué parecido con una clase existente una propuesta es un duplicado — o sea, sus
+    # menciones eran falsos huérfanos. No se descarta sola: es el diagnóstico del matcher que la
+    # compuerta de §12.1 pide. Medido: `Test specimen` dio 1,00 y `Grain boundary` 0,99.
+    redundant_threshold: float = 0.90
 
 
 class Enrichment(BaseModel):

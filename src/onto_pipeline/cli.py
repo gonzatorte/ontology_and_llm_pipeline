@@ -2105,6 +2105,17 @@ def induce_cmd(
         )
     induction.persist(conn, version_id, proposals)
 
+    # El nombre del cluster contra el inventario, ahora que existe. El matcher falló sobre las
+    # menciones sueltas; si el nombre del grupo coincide con una clase que ya está, esas
+    # menciones eran falsos huérfanos y la clase propuesta sería un duplicado — el camino que la
+    # compuerta de §12.1 nombra.
+    existing = [target.label for target in labels.values()]
+    duplicates = induction.redundant(
+        proposals, existing,
+        lambda left, right: _label_similarity(matcher, left, right),
+        threshold=config.induction.redundant_threshold,
+    )
+
     table = Table("proposed class", "support", "criterion", "nearest existing")
     for proposal in sorted(proposals, key=lambda p: -p.support)[:20]:
         table.add_row(
@@ -2117,7 +2128,32 @@ def induce_cmd(
         f"proposed classes, {declined} groups the model declined to name · "
         f"{len(result.failures)} failed · {result.in_tokens}/{result.out_tokens} tokens"
     )
+    if duplicates:
+        console.print(
+            f"[yellow]{len(duplicates)} de {len(proposals)} propuestas nombran una clase que ya "
+            f"existe[/] — sus menciones eran falsos huérfanos, y acuñarlas duplicaría:"
+        )
+        for proposal in proposals:
+            if proposal.cluster_id in duplicates:
+                console.print(
+                    f"  [yellow]{proposal.label}[/] ~ {duplicates[proposal.cluster_id]} "
+                    f"({proposal.support} menciones)"
+                )
+        console.print(
+            "[dim]Quedan propuestas a propósito: que la inducción reencuentre una clase que ya "
+            "está es un diagnóstico sobre el matcher, y borrarlo en silencio pierde la única "
+            "señal de que pasó. B4 decide.[/]"
+        )
     console.print("[dim]nothing applied; B4 decides the axioms[/]")
+
+
+def _label_similarity(matcher, left, right) -> list[list[float]]:
+    """Coseno de cada etiqueta propuesta contra cada existente, en una pasada de encoding."""
+    from .matching import dot
+
+    proposed = matcher.vectors_for(list(left))
+    known = matcher.vectors_for(list(right))
+    return [[dot(a, b) for b in known] for a in proposed]
 
 
 @app.command("match")

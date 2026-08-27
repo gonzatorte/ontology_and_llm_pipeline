@@ -124,3 +124,56 @@ def test_reproposing_against_the_same_version_replaces(tmp_path):
     induction.persist(conn, "v1", [first])
     induction.persist(conn, "v1", [second])
     assert [row["label"] for row in induction.load(conn, "v1")] == ["Digital Repository"]
+
+
+# ────────  el falso huérfano que se vuelve clase espuria (§12.1)  ────────
+
+
+def proposal(label: str, cluster: str = "c1"):
+    return induction.Proposal(cluster, label, "g", "criterio", 2, ["m1", "m2"])
+
+
+def exact(left, right):
+    """Similitud de juguete: 1,0 si las etiquetas coinciden sin distinguir mayúsculas."""
+    return [[1.0 if a.lower() == b.lower() else 0.1 for b in right] for a in left]
+
+
+def test_a_proposal_that_names_an_existing_class_is_flagged():
+    """El matcher falló sobre las menciones sueltas; el nombre del grupo sí coincide. Medido
+    sobre MaterioMiner: `Test specimen` con coseno 1,00 contra una clase idéntica."""
+    found = induction.redundant([proposal("Test specimen")], ["Test specimen", "Aging"],
+                                exact, threshold=0.9)
+    assert found == {"c1": "Test specimen"}
+
+
+def test_case_does_not_save_it_from_being_a_duplicate():
+    found = induction.redundant([proposal("Grain Boundary")], ["Grain boundary"],
+                                exact, threshold=0.9)
+    assert found
+
+
+def test_a_genuinely_new_class_is_not_flagged():
+    found = induction.redundant([proposal("Precipitate-Free Zone")], ["Aging", "Carbon"],
+                                exact, threshold=0.9)
+    assert found == {}
+
+
+def test_nothing_to_compare_against_is_not_a_duplicate():
+    assert induction.redundant([proposal("X")], [], exact, threshold=0.9) == {}
+
+
+def test_the_flagged_proposals_are_not_removed():
+    """Que la inducción reencuentre una clase que ya está es un diagnóstico sobre el matcher.
+    Borrarlo en silencio pierde la única señal de que pasó."""
+    proposals = [proposal("Test specimen"), proposal("Nueva", "c2")]
+    induction.redundant(proposals, ["Test specimen"], exact, threshold=0.9)
+    assert len(proposals) == 2
+
+
+def test_two_clusters_naming_the_same_existing_class_are_both_flagged():
+    """Pasó: dos grupos distintos produjeron `Grain Boundary`."""
+    found = induction.redundant(
+        [proposal("Grain boundary", "c1"), proposal("Grain boundary", "c2")],
+        ["Grain boundary"], exact, threshold=0.9,
+    )
+    assert set(found) == {"c1", "c2"}

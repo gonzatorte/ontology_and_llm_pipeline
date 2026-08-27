@@ -308,6 +308,40 @@ una muestra chica: preferencias con evidencia débil, no resultados.
 es otra cosa que subir 9,9 cuando había 40. El re-ranker sólo reordena lo que la recuperación
 trajo; lo que no está en el top-k no lo alcanza.
 
+### 1.13 El falso huérfano volviéndose clase espuria, con nombre y apellido
+
+La compuerta no-go de §12.1 dice que un falso huérfano se convierte en una clase espuria en la
+inducción. Corriendo el pipeline entero sobre MaterioMiner se lo pudo **ver**, que es distinto de
+suponerlo:
+
+De 616 huérfanas, la inducción armó 48 clusters y propuso 45 clases. **Cuatro nombran una clase
+que la ontología ya tenía**, cubriendo 28 menciones:
+
+| Clase propuesta | Ya existía como | Menciones |
+|---|---|---|
+| `Test specimen` | `Test specimen` (coseno **1,00**) | 8 |
+| `Grain Boundary` | `Grain boundary` (0,99) | 14 |
+| `Grain Boundary` | `Grain boundary` (0,99) | 3 |
+| `Alloy aging condition` | `Aging` (0,90) | 3 |
+
+Dos cosas de esto. **`Test specimen` con coseno 1,00 es el caso puro**: la clase estaba en el
+inventario con ese nombre exacto y el matcher no la encontró, porque las menciones sueltas decían
+`specimen`, `the specimens`, `samples`. Y **dos clusters distintos produjeron `Grain Boundary`**,
+o sea que el mismo falso huérfano se habría duplicado dos veces.
+
+**Lo aprovechable es que la inducción nombra el cluster, y ahí sí hay contra qué comparar.** El
+matcher falla sobre el sintagma suelto; el nombre del grupo coincide. Comparar la propuesta con
+el inventario antes de acuñarla cuesta una pasada de encoding y ataca de frente el camino que la
+compuerta nombra. Está implementado y **no descarta**: que la inducción reencuentre una clase que
+ya está es un diagnóstico sobre el matcher, y borrarlo en silencio perdería la única señal de
+que pasó.
+
+**Y un modo de falla distinto, del lado de la extracción.** Otras propuestas —`Scholarly
+research` (9 menciones), `Results` (5), `Table reference` (4)— no son falsos huérfanos: son
+encabezados de sección y referencias cruzadas que B1 extrajo como si fueran conceptos. La
+ontología hace bien en no tenerlas. Es un problema de precisión de la extracción, no del
+matcher, y ningún filtro de los que hay lo atrapa.
+
 ---
 
 ## 2. Decisiones tomadas, y por qué
