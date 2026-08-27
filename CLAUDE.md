@@ -12,7 +12,7 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología semilla, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~13.500 líneas en 43 módulos, 460 tests, CLI con ~30 comandos.
+con `uv`, ~15.200 líneas en 45 módulos, 546 tests, CLI con ~40 comandos.
 
 El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentación y los
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
@@ -55,7 +55,7 @@ antes de ver datos.
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 460 tests, ~3 s, sin red ni Docker
+uv run pytest -q                       # 546 tests, ~5 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
 uv run onto-pipeline --help
@@ -161,6 +161,8 @@ ignoraron.
   anterior había salido de la memoria y no de los archivos.
 - **Localidad.** No leer fuera de `pipeline/` sin preguntar primero. Los pares de calibración y
   el corpus están afuera y el config los apunta; cualquier otra cosa se pide.
+- **Nada de correr trabajos de horas en esta máquina.** Si un ajuste o un barrido no termina
+  en minutos, se propone y se espera: puede configurar un proveedor en la nube.
 - **Castellano para hablar y documentar**, inglés para el código.
 
 Dos cosas sobre el proveedor, para que nadie las vuelva a plantear:
@@ -185,8 +187,9 @@ README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes
 
 - **§6.3, el ajuste del matcher (LoRA)** — bloqueado por datos, no por código: hace falta que
   alguien conteste unos cientos de pares de zona gris. Deuda 8i.
-- **§6.7, el historial de feedback** — se graban los rechazos, pero el esquema D9, la recuperación
-  de precedentes en el prompt y la comparación por forma normal no existen. Deuda 20.
+- **§6.7, el historial de feedback** — **cerrado el 2026-09-10**: esquema D9, forma normal y
+  precedentes en el prompt de `axiomatize`. Lo que falta no es código sino una segunda iteración
+  con feedback humano real, para ver si algún precedente mueve un juicio. Deuda 20.
 - **La compuerta no-go de §12.1 sigue abierta**, y es la que decide si tiene sentido seguir
   construyendo encima. Ver el README.
 
