@@ -652,3 +652,30 @@ sobre este mismo aparato.
 Orden razonable si se retoma: unificar en `decisions` (una tabla, no dos) → mapear el eje a las
 seis categorías → recuperación por embedding → forma normal. Lo primero es barato y lo que
 desbloquea el resto.
+
+### 21. El hash de estado no escala a una ontología con axiomas de verdad
+
+Descubierto intentando usar la Cell Ontology como semilla, y es lo que hoy bloquea esa corrida.
+
+`versioning.logical_axioms` canonicaliza los nodos en blanco con `to_canonical_graph` de rdflib
+antes de hashear. Sobre la semilla de 34 clases es instantáneo. Sobre `cl-base.owl` —**123.864
+tripletas, de las cuales el 73,2% involucra un nodo en blanco**, porque así se representan las
+restricciones OWL y las anotaciones de axioma— **no termina en 7 minutos**. Ordenar las mismas
+tripletas sin canonicalizar tarda **0,21 s**.
+
+Y `normalize-seed` lo llama **tres veces**: dos para el hash de estado y una más en el diff.
+
+**No alcanza con sacarlo.** La canonicalización está por una razón: dos grafos que difieren sólo
+en los identificadores de sus nodos en blanco son el mismo estado, y de ese hash depende la
+detección de loops del §6.8. Sin ella, re-serializar la misma ontología produciría un estado
+"nuevo" y el DAG se llenaría de versiones que no cambian nada.
+
+La salida es canonicalizar sólo lo que lo necesita. En una ontología OWL casi todo nodo en blanco
+es **estructural**: una restricción cuelga de exactamente una clase nombrada, así que etiquetarlo
+determinísticamente por su camino desde el nodo nombrado más cercano cubre la enorme mayoría, y
+la canonicalización completa queda para el caso raro de nodos en blanco genuinamente cíclicos.
+Hay que medir cuántos son de cada tipo antes de escribirlo.
+
+**Qué cuesta no arreglarlo:** cualquier ontología con axiomatización real queda fuera de alcance
+como semilla, y eso incluye casi todos los pares de C5 —HPO ~19k clases, FoodOn ~40k—. El único
+que entra hoy es MaterioMiner, con 179.

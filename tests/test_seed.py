@@ -172,3 +172,22 @@ def test_denormalizing_identifiers():
     assert terms.denormalize("Aplica_una_o_varias") == "Aplica una o varias"
     assert terms.denormalize("has-theoretical-frame") == "has theoretical frame"
     assert terms.denormalize("PDFDocument") == "PDF Document"
+
+
+def test_typo_detection_survives_a_real_sized_vocabulary():
+    """Con 34 clases el barrido completo del léxico no se notaba. Con una ontología de verdad
+    son cientos de millones de iteraciones y la etapa deja de terminar."""
+    import time
+
+    from onto_pipeline.seed import CLASS, Entity, Label, detect_typos
+
+    entities = [
+        Entity(
+            iri=f"c:{index}", original_iri=f"c:{index}", kind=CLASS,
+            labels=[Label(text=f"term{index:05d} cell", language="en", source="derived")],
+        )
+        for index in range(4000)
+    ]
+    started = time.perf_counter()
+    detect_typos(entities)
+    assert time.perf_counter() - started < 10, "volvió a ser cuadrático sobre el léxico"

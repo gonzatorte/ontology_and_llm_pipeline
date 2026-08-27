@@ -72,6 +72,20 @@ por falta de etiquetas.
 Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `calibrate`, T3
 `export-annotations`, T4 la telemetría en `work_units` desde el principio.
 
+### En cola
+
+Lo comprometido y todavía sin hacer, en orden de valor sobre costo. Cada uno tiene su entrada
+con el detalle; esta lista existe para que no se pierdan entre las entradas.
+
+| # | Qué | Por qué ahora | Detalle |
+|---|---|---|---|
+| 1 | **Entrenar el re-ranker** sobre las 8.723 menciones gold del par publicado, evaluado sobre el holdout que ya existe | Es la tercera vía del spec para bajar los falsos huérfanos, y la única que no se probó. No necesita que nadie anote nada | [deuda 8i](DEUDA_TECNICA.md) |
+| 2 | **La variante con contexto**: comparar *mención + su oración* contra la clase, como una opción más de `match_against` | Es el ataque directo al eco léxico, que es el modo de falla que ningún umbral filtra, y se mide en el banco que ya está | [deuda 19](DEUDA_TECNICA.md) |
+| 3 | **Unificar el registro de decisiones** en una sola tabla | Hoy hay dos y se usa la que menos guarda; es barato y desbloquea el resto de esa entrada | [deuda 20](DEUDA_TECNICA.md) |
+| 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
+| 5 | **Terminar C8**: correr el pipeline entero sobre un par publicado. La ingesta ya está | Primera vez que se mediría algo posterior al tipado contra una respuesta conocida | [plan](plan_cambio_corpus_calibracion.md) |
+| 6 | **Chequeo de desalineación**: contar el vocabulario núcleo de la semilla en el corpus | Un par desalineado es invisible en la tasa de huérfanas y obvio con un `grep`; hoy se descubre a mano semanas después | [deuda 9](DEUDA_TECNICA.md) |
+
 | Etapa | Estado |
 |---|---|
 | A0.0 detección de perfil OWL | listo |

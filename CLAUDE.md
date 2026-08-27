@@ -175,6 +175,11 @@ Dos cosas sobre el proveedor, para que nadie las vuelva a plantear:
 
 ## Qué falta, en una línea
 
+**La lista de lo comprometido y pendiente está en la sección "En cola" del
+[README](README.md)**, con el porqué de cada uno y a qué entrada de deuda mirar. Empezar por ahí
+antes de proponer trabajo nuevo.
+
+
 La secuencia de construcción del spec (§12) está dada en sus cinco pasos y la tabla de estado del
 README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes de prometer nada:
 

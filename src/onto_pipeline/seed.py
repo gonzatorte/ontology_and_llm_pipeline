@@ -227,30 +227,52 @@ def detect_typos(entities: list[Entity]) -> list[TypoFinding]:
             lexicon = lexicons.setdefault(label.language, {})
             for token in terms.tokens(label.text):
                 lexicon[token] = lexicon.get(token, 0) + 1
+    buckets = {language: _bucket(lexicon) for language, lexicon in lexicons.items()}
 
     findings: list[TypoFinding] = []
     for entity in entities:
         for label in entity.labels:
             lexicon = lexicons[label.language]
-            findings.extend(_near_miss(entity, label, lexicon))
+            findings.extend(_near_miss(entity, label, lexicon, buckets[label.language]))
             findings.extend(_truncated_abbreviation(entity, label, lexicon))
             findings.extend(_capitalization_anomaly(entity, label))
     findings.extend(_naming_pattern(entities))
     return findings
 
 
-def _near_miss(entity: Entity, label: Label, lexicon: dict[str, int]) -> list[TypoFinding]:
+def _bucket(lexicon: dict[str, int]) -> dict[tuple[str, int], list[str]]:
+    """El léxico indexado por (primera letra, largo), que es lo que `_near_miss` exige igual.
+
+    Sin esto la comparación es cada token contra todo el léxico. Con la semilla de 34 clases no
+    se notaba; con una ontología de verdad —7.159 clases, ~20 mil tokens— son cientos de
+    millones de iteraciones y la etapa deja de terminar. El predicado no cambia: son los mismos
+    candidatos, buscados en vez de barridos.
+    """
+    index: dict[tuple[str, int], list[str]] = {}
+    for token in lexicon:
+        index.setdefault((token[0], len(token)), []).append(token)
+    return index
+
+
+def _near_miss(
+    entity: Entity, label: Label, lexicon: dict[str, int],
+    buckets: dict[tuple[str, int], list[str]],
+) -> list[TypoFinding]:
     """`subre` against `sobre`. A misspelling keeps the first letter and is rarer than the
     word it corrupts."""
     findings = []
     for token in terms.tokens(label.text):
         if len(token) < 4 or lexicon[token] > 1:
             continue
-        for candidate, count in lexicon.items():
-            if candidate == token or count <= lexicon[token] or candidate[0] != token[0]:
+        nearby = [
+            candidate
+            for length in (len(token) - 1, len(token), len(token) + 1)
+            for candidate in buckets.get((token[0], length), ())
+        ]
+        for candidate in nearby:
+            count = lexicon[candidate]
+            if candidate == token or count <= lexicon[token]:
                 continue
-            if abs(len(candidate) - len(token)) > 1:
-                continue  # a misspelling keeps roughly the length of the word it corrupts
             if terms.levenshtein(token, candidate) <= 2:
                 findings.append(
                     TypoFinding(
