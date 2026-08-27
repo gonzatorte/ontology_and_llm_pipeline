@@ -164,6 +164,31 @@ enrichment:
   max_passage_chars: 1200
   min_passages: 1          # sin pasajes no se pregunta; inventar una glosa no es enriquecer
 
+# ─── Ajuste del re-ranker (§6.3) ─────────────────────────
+# El modelo que se ajusta es `matching.cross_encoder`, o sea que es configurable y esto no está
+# atado a ninguno en particular. De su tamaño depende el método:
+#   full  todos los pesos. Mejor resultado, memoria proporcional al modelo. Con el de fábrica
+#         (117M de parámetros) son 79 s en una GPU de notebook.
+#   lora  pesos base congelados y matrices de rango bajo en la atención: 443 mil parámetros
+#         entrenables sobre ese mismo modelo, el 0,38%. Es lo que permite ajustar uno grande.
+#   auto  completo por debajo de `full_max_params`, LoRA por encima.
+# Medido (documentos no vistos): +9,9 puntos en CRAFT, +11,6 en MaterioMiner. Un modelo ajustado
+# en un dominio aplicado a otro da -2,1: hay que ajustar uno por dominio.
+tuning:
+  method: auto
+  full_max_params: 150000000   # política sobre esta máquina, no una verdad sobre los modelos
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  epochs: 1
+  lora_epochs: 12              # LoRA mueve menos pesos y necesita más pasos: 1 época da -6,3
+                               # puntos, 4 dan -5,4 y 12 dan +7,0. Igualarlas es concluir mal.
+  batch_size: 64
+  max_length: 64
+  negatives: 4                 # por mención, de los candidatos que el bi-encoder puso primero
+  top_k: 10                    # cuántos recupera el bi-encoder para que el otro reordene
+  train_fraction: 0.8          # partición POR DOCUMENTO, no por mención
+
 # ─── Criterios de parada (§10.3) ─────────────────────────
 # Dos terminaciones distintas: de iteración (¿esta ronda se agotó?) y de proceso (¿la ontología
 # está lista?). Siendo incremental, la segunda es "suficiente hasta que lleguen documentos

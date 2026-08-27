@@ -114,3 +114,34 @@ def test_the_ceiling_is_reported_next_to_the_gain():
 
 def test_no_usable_mention_is_not_a_crash():
     assert tuning.compare(Reorders("alpha"), [], [], TEXTS).n == 0
+
+
+# ─────────────────────  el método, según el modelo  ─────────────────────
+
+
+def test_auto_takes_the_full_update_while_the_model_fits():
+    assert tuning.choose_method("auto", 117_000_000, 150_000_000) == tuning.FULL
+
+
+def test_auto_switches_to_lora_when_it_does_not():
+    """El umbral es una política sobre esta máquina, no una verdad sobre los modelos: por eso
+    es configurable y por eso `auto` existe."""
+    assert tuning.choose_method("auto", 400_000_000, 150_000_000) == tuning.LORA
+
+
+def test_an_explicit_method_is_respected_whatever_the_size():
+    assert tuning.choose_method("lora", 1_000, 150_000_000) == tuning.LORA
+    assert tuning.choose_method("full", 10**10, 150_000_000) == tuning.FULL
+
+
+def test_an_unknown_method_is_refused():
+    import pytest
+
+    with pytest.raises(ValueError, match="full"):
+        tuning.choose_method("magia", 1, 1)
+
+
+def test_what_was_trained_is_reported_as_a_fraction():
+    trained = tuning.Trained(model=None, method=tuning.LORA,
+                             total_params=117_641_089, trainable_params=443_137)
+    assert 0.003 < trained.trainable_fraction < 0.004

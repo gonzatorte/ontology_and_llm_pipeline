@@ -27,6 +27,8 @@ matching = [
     # recuperación y el re-ranking sin entrenar no los necesitan.
     "datasets>=3.0",
     "accelerate>=1.1.0",
+    # LoRA, para ajustar un re-ranker que no entra entero en memoria.
+    "peft>=0.13",
 ]
 # B5 filter 3. Optional because the filter reports SKIPPED without shapes anyway, and shapes
 # are written by hand: OWL says what must be true, SHACL what must be stated, and under the

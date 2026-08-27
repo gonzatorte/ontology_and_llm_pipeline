@@ -147,6 +147,36 @@ class Iteration(BaseModel):
     reload_seed: int = 0
 
 
+class Tuning(BaseModel):
+    """Ajuste del re-ranker (spec 6.3). El modelo que se ajusta es `matching.cross_encoder`."""
+
+    # auto | full | lora. `auto` elige por tamaño: completo mientras entre, LoRA cuando no.
+    method: str = "auto"
+    # El umbral no es una verdad sobre los modelos, es una política sobre esta máquina.
+    full_max_params: int = 150_000_000
+    lora_rank: int = 16
+    lora_alpha: int = 32
+    lora_dropout: float = 0.05
+    epochs: int = 1
+    # LoRA entrena una fracción de los pesos y necesita más pasos para llegar al mismo lugar.
+    # Medido: con 1 época da -6,3 puntos, con 4 da -5,4, con 12 da +7,0.
+    lora_epochs: int = 12
+    batch_size: int = 64
+    max_length: int = 64
+    # Negativos por mención, tomados de las clases que el bi-encoder puso entre las primeras y
+    # no eran la correcta — el error que hay que corregir, no uno inventado.
+    negatives: int = 4
+    top_k: int = 10
+    train_fraction: float = 0.8
+
+    @field_validator("method")
+    @classmethod
+    def _implemented(cls, value: str) -> str:
+        if value not in ("auto", "full", "lora"):
+            raise ValueError(f"tuning.method es auto | full | lora, no {value!r}")
+        return value
+
+
 class Stopping(BaseModel):
     """When a round is exhausted, and when the ontology is enough (spec 10.3)."""
 
@@ -258,6 +288,7 @@ class Config(BaseModel):
     iteration: Iteration = Iteration()
     cq: CompetencyQuestions = CompetencyQuestions()
     stopping: Stopping = Stopping()
+    tuning: Tuning = Tuning()
     branching: Branching = Branching()
     llm: Llm = Llm()
     execution: Execution = Execution()

@@ -148,10 +148,14 @@ CrossEncoderSweepOption = typer.Option(
     False, "--cross-encoder", help="Run each variant with and without the re-ranker."
 )
 TrainFractionOption = typer.Option(
-    0.8, "--train", help="Fracción de documentos para entrenar; el resto evalúa."
+    None, "--train", help="Fracción de documentos para entrenar; el resto evalúa."
 )
 NegativesOption = typer.Option(
-    4, "--negatives", help="Negativos por mención, tomados del top-k del bi-encoder."
+    None, "--negatives",
+    help="Negativos por mención: clases que el bi-encoder puso primero y no eran la correcta.",
+)
+MethodOption = typer.Option(
+    None, "--method", help="auto | full | lora. Por defecto, lo que diga el config."
 )
 EvalOnOption = typer.Option(
     None, "--eval-on", help="Evaluar contra otro par: mide si transfiere. Medido: poco."
@@ -2059,8 +2063,9 @@ def match_cmd(
 def tune_cmd(
     pair_name: str = PairOption,
     config_path: Path = ConfigOption,
-    train_fraction: float = TrainFractionOption,
-    negatives: int = NegativesOption,
+    train_fraction: float | None = TrainFractionOption,
+    negatives: int | None = NegativesOption,
+    method: str | None = MethodOption,
     eval_on: str | None = EvalOnOption,
     out: Path | None = OutOption,
 ) -> None:
@@ -2101,7 +2106,10 @@ def tune_cmd(
         ranked = matcher._rank(vectors, targets, pair.targets, top_k)
         return mentions, [[target.iri for _, target in row] for row in ranked]
 
-    top_k = 10
+    settings = config.tuning
+    top_k = settings.top_k
+    train_fraction = train_fraction if train_fraction is not None else settings.train_fraction
+    negatives = negatives if negatives is not None else settings.negatives
     source = calibration.load_pair(
         config.paths.calibration_root / pair_name, match_against=config.matching.match_against
     )
@@ -2120,8 +2128,23 @@ def tune_cmd(
     console.print(f"ejemplos: {len(examples)} · {len(train_mentions)} menciones")
 
     with console.status("entrenando"):
-        model = tuning.train(examples, config.matching.cross_encoder,
-                             device=config.matching.device)
+        try:
+            trained = tuning.train(
+                examples, config.matching.cross_encoder, device=config.matching.device,
+                method=method or settings.method, full_max_params=settings.full_max_params,
+                lora_rank=settings.lora_rank, lora_alpha=settings.lora_alpha,
+                lora_dropout=settings.lora_dropout, epochs=settings.epochs,
+                lora_epochs=settings.lora_epochs,
+                batch_size=settings.batch_size, max_length=settings.max_length,
+            )
+        except (ValueError, tuning.TrainerUnavailable) as exc:
+            raise typer.BadParameter(str(exc)) from exc
+    model = trained.model
+    console.print(
+        f"método [bold]{trained.method}[/] sobre {config.matching.cross_encoder} · "
+        f"{trained.trainable_params:,} de {trained.total_params:,} parámetros entrenados "
+        f"({trained.trainable_fraction:.2%})"
+    )
 
     target_pair, target_docs, target_texts = source, eval_docs, texts
     if eval_on:
@@ -2131,7 +2154,10 @@ def tune_cmd(
         )
         target_docs = target_pair.documents
         target_texts = {t.iri: t.text for t in target_pair.targets}
-        console.print(f"[yellow]evaluando en {eval_on}[/]: mide transferencia entre dominios")
+        console.print(
+            f"[yellow]evaluando en {eval_on}[/]: mide si un modelo ajustado acá "
+            "sirve en otro dominio"
+        )
 
     with console.status("evaluando"):
         mentions, candidates = retrieve(target_pair, target_docs, top_k)
@@ -2148,7 +2174,11 @@ def tune_cmd(
         f"vistos · captura el {result.headroom_taken:.0%} del margen disponible"
     )
     if out is not None:
-        console.print(f"[green]guardado[/] {tuning.save(model, out)}")
+        console.print(f"[green]guardado[/] {tuning.save(trained, out)}")
+        console.print(
+            "[dim]apuntá `matching.cross_encoder` a ese directorio y poné "
+            "`use_cross_encoder: true` para usarlo[/]"
+        )
 
 
 @app.command("calibrate")

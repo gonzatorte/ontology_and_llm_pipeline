@@ -398,7 +398,7 @@ sin decir por qué. Detalle completo en [`../calibration/materiominer/NOTA_FASE0
 | recall@1 | **21,5%** | 68,5% |
 | Mejor F1 | 0,277 (0,75) | 0,774 (0,90) |
 
-**El punto de operación no transfiere, y no en la dirección esperable**: un inventario ocho veces
+**El punto de operación cambia con cada par, y no en la dirección esperable**: un inventario ocho veces
 más chico no es más fácil. Y las dos cifras se separan — la separación aguanta, el recall se cae—
 lo que dice que acá el cuello no es el umbral sino la **recuperación**: el encoder distingue
 acierto de error, pero la clase correcta casi nunca está primera. Es un modo de falla distinto

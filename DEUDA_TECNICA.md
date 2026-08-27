@@ -185,7 +185,7 @@ entrenado sobre los accept/reject acumulados de la zona gris (§6.3), que es un 
 distinto de un re-ranker de IR genérico. Ver la entrada de LoRA más abajo.
 
 
-### 8. Los umbrales — MEDIDOS, y el punto de operación no transfiere
+### 8. Los umbrales — MEDIDOS, y el punto de operación cambia con cada par
 
 Ya no son los defaults del spec. Sobre `craft-cl`, el 0,70 que traía aceptaba mal 3 de cada 10
 menciones (precisión 72,3%); ahora `auto_merge` está en 0,95 (precisión 97,9%) y
@@ -390,7 +390,7 @@ Dos huecos concretos en la etapa:
 
 > **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
 > da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
-> más grande que se midió acá— y **no transfiere**: entrenado en CRAFT y aplicado a MaterioMiner
+> más grande que se midió acá— y **sólo sirve en su propio dominio**: el de CRAFT aplicado a MaterioMiner
 > resta 2,1 puntos. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.12.
 >
 > **Ajuste completo en vez de LoRA**, apartándose de la letra del spec: LoRA existe para no tocar

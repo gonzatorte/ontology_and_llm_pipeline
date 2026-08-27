@@ -79,7 +79,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 
 | # | Qué | Por qué ahora | Detalle |
 |---|---|---|---|
-| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y no transfiere entre dominios | La mejora más grande medida en este pipeline | [hallazgo 1.12](HALLAZGOS.md) |
+| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [hallazgo 1.12](HALLAZGOS.md) |
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
 | 3 | **Unificar el registro de decisiones** en una sola tabla | Hoy hay dos y se usa la que menos guarda; es barato y desbloquea el resto de esa entrada | [deuda 20](DEUDA_TECNICA.md) |
 | 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
@@ -825,7 +825,7 @@ boilerplate descartó aparecen atenuados.
 
 ```bash
 uv run onto-pipeline tune craft-cl --out data/models/reranker-craft
-uv run onto-pipeline tune craft-cl --eval-on materiominer   # ¿transfiere?
+uv run onto-pipeline tune craft-cl --eval-on materiominer   # ¿sirve en otro dominio?
 ```
 
 Es el **único componente del pipeline que se entrena**, y la razón es estructural: esto es
@@ -841,7 +841,7 @@ Evaluado sobre documentos que el entrenamiento nunca vio; 79 segundos en una GPU
 la mejora más grande que este pipeline midió, y el mismo modelo **sin ajustar** empeoraba el
 orden.
 
-**No transfiere entre dominios.** El de CRAFT aplicado a MaterioMiner da **−2,1 puntos**: peor
+**Un modelo ajustado sólo sirve en su propio dominio.** El de CRAFT aplicado a MaterioMiner da **−2,1 puntos**: peor
 que no usar ninguno. Tres documentos propios le ganan a setenta y siete ajenos por catorce
 puntos. Las etiquetas tienen que salir del dominio donde se va a usar.
 
@@ -849,8 +849,11 @@ Tres cosas de método, porque sin ellas el número no significa nada:
 
 - **La partición es por documento, nunca por mención.** Dos menciones del mismo paper comparten
   vocabulario y tema; separarlas al azar mide memoria.
-- **Los negativos son los candidatos equivocados que el propio bi-encoder puso arriba**, no
-  negativos al azar. Un negativo al azar es una clase que el recuperador nunca iba a proponer.
+- **Los negativos salen de las clases que el bi-encoder puso entre las diez primeras y no eran
+  la correcta**, no de clases al azar. El bi-encoder ordena las 428 (o 3.418) clases por
+  parecido y se queda con las diez de arriba; nueve están mal, y ésas son exactamente las
+  confusiones que hay que corregir. Una clase al azar es una que el recuperador nunca iba a
+  proponer: entrenar contra eso enseña a distinguir lo que ya estaba distinguido.
 - **Se reporta el techo junto a la ganancia.** Subir 9,9 puntos cuando había 11,2 disponibles es
   otra cosa que subir 9,9 cuando había 40.
 

@@ -261,7 +261,7 @@ Lo que queda dicho es dónde **no** está la solución: no es la representación
 encoder. Un modelo asimétrico o entrenado es la vía, y es lo mismo que ya decía la conclusión
 sobre glosas.
 
-### 1.12 Ajustar el re-ranker: la mejora más grande medida, y no transfiere
+### 1.12 Ajustar el re-ranker: la mejora más grande medida, y sirve sólo en su dominio
 
 El cross-encoder de fábrica arruinaba el orden —separación −0,50—. Ajustado con las anotaciones
 del propio par, es la mejora más grande que este pipeline midió. Partición **por documento**, y
@@ -274,7 +274,7 @@ evaluado sobre documentos que el entrenamiento nunca vio:
 
 79 segundos de entrenamiento sobre una GPU de notebook, 37 mil ejemplos.
 
-**Y no transfiere entre dominios.** Entrenado en CRAFT y aplicado a MaterioMiner (n=2.229):
+**Un modelo ajustado sólo sirve en el dominio en que se ajustó.** Entrenado en CRAFT y aplicado a MaterioMiner (n=2.229):
 **−2,1 puntos**, o sea peor que no usarlo. Tres documentos de mecánica de materiales le ganan a
 setenta y siete de biomedicina por catorce puntos sobre el mismo conjunto de evaluación.
 
@@ -283,11 +283,12 @@ va a usar el matcher. Es exactamente de donde el spec dice que salen —las deci
 o rechazar del usuario en la zona gris— sólo que ahora se sabe cuánto rinde y cuánto no se puede
 tomar prestado.
 
-**Dos cosas de método que hacen que el número signifique algo.** Los negativos son los candidatos
-equivocados que el propio bi-encoder puso arriba, no negativos al azar: entrenar contra una clase
-que el recuperador nunca iba a proponer enseña a distinguir lo que ya estaba distinguido. Y la
-partición es por documento y nunca por mención — dos menciones del mismo paper comparten
-vocabulario y tema, y separarlas al azar mide memoria.
+**Dos cosas de método que hacen que el número signifique algo.** Los negativos salen de las
+clases que el bi-encoder puso entre las diez primeras y no eran la correcta: ordena todas las
+clases por parecido, se queda con diez, nueve están mal, y ésas son las confusiones a corregir.
+Una clase al azar es una que el recuperador nunca iba a proponer. Y la partición es por documento
+y nunca por mención — dos menciones del mismo paper comparten vocabulario y tema, y separarlas al
+azar mide memoria.
 
 **Se reporta el techo junto al resultado**, porque subir 9,9 puntos cuando había 11,2 disponibles
 es otra cosa que subir 9,9 cuando había 40. El re-ranker sólo reordena lo que la recuperación
