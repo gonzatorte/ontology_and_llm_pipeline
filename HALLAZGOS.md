@@ -172,17 +172,27 @@ Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del p
 
 ### 1.9 Estado del par de aplicación
 
-848 menciones extraídas, 1.725 tipadas contra `v2`, **219 en zona gris** y 53 items de revisión
-abiertos. La zona gris es a la vez el trabajo pendiente del usuario y el insumo que falta para
-LoRA (§6.3): hoy hay **una** etiqueta acumulada.
+Contra `v5`, que es la versión vigente: 10 documentos (5 en el conjunto de retención), **848
+menciones**, de las cuales 18 tipadas automáticamente, **131 en zona gris** y 699 huérfanas
+(82%). Más 53 items de revisión abiertos de A0 —13 etiquetas divergentes, 27 chequeos semánticos
+pendientes, 13 erratas—. La zona gris es a la vez el trabajo pendiente del usuario y el insumo
+que falta para LoRA (§6.3): hoy hay **cero** etiquetas acumuladas.
+
+**Cuidado al leer números de versiones viejas.** `v2` tiene 1.725 tipados contra una capa de
+menciones que después se volvió a extraer, así que 116 de sus 219 pares de zona gris apuntan a
+menciones que ya no existen. Los tipados son función de (menciones, versión) y se recomputan;
+los de una versión que no se volvió a matchear quedan como estaban. Al citar un número, decir
+contra qué versión.
 
 ### 1.10 Eco léxico, y dónde está de verdad el problema del homónimo
 
 **El eco léxico es el modo de falla que ningún umbral filtra.** Sobre la semilla, 24 de 34 clases
 superan 0,70 y **11 de esas 24 son eco léxico**: la mención es la palabra corriente que da nombre
-a la clase, no una instanciación. Sobre el corpus real, de 1.725 menciones tipadas contra `v2`,
-las **32 automáticas son todas eco léxico** — `question` 0.998, `information` 0.998,
-`support` 0.993, `subject` 0.992.
+a la clase, no una instanciación. Sobre el corpus real no mejora al cambiar de versión: en `v2`
+las 32 automáticas eran **todas** eco léxico (`question` 0.998, `information` 0.998,
+`support` 0.993, `subject` 0.992) y en `v5` las 18 siguen igual — `information` 0.998,
+`support` 0.993, `researchers` 0.946. La única que parece una instanciación real es
+`data collection` 0.995.
 
 Verificado al analizar el caso del homónimo (`cell` de biología contra `cell` de una
 organización clandestina): **el riesgo no está donde parece**. El `uuid5` de un individuo se

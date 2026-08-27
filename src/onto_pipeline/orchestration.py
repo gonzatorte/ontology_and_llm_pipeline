@@ -77,17 +77,17 @@ def survey(conn: sqlite3.Connection, version_id: str, *, has_provider: bool) -> 
     blocks = _count(conn, "SELECT COUNT(*) FROM blocks")
     mentions = _count(conn, "SELECT COUNT(*) FROM mentions")
     grouped = _count(conn, "SELECT COUNT(*) FROM mentions WHERE coref_group IS NOT NULL")
-    typed = _count(
+    # Joined against `mentions`, not counted raw. A version matched before a re-extraction keeps
+    # typings for mentions that no longer exist, and counting those makes this command disagree
+    # with `grey list`, which does join — two numbers for one question is worse than either.
+    live = ("FROM mention_typing t JOIN mentions m ON m.id = t.mention_id "
+            "WHERE t.version_id = ?")
+    typed = _count(conn, f"SELECT COUNT(*) {live}", (version_id,))
+    grey = _count(conn, f"SELECT COUNT(*) {live} AND t.zone = 'grey'", (version_id,))
+    orphans = _count(conn, f"SELECT COUNT(*) {live} AND t.iri IS NULL", (version_id,))
+    stale = _count(
         conn, "SELECT COUNT(*) FROM mention_typing WHERE version_id = ?", (version_id,)
-    )
-    grey = _count(
-        conn, "SELECT COUNT(*) FROM mention_typing WHERE version_id = ? AND zone = 'grey'",
-        (version_id,),
-    )
-    orphans = _count(
-        conn, "SELECT COUNT(*) FROM mention_typing WHERE version_id = ? AND iri IS NULL",
-        (version_id,),
-    )
+    ) - typed
     bridged = _count(conn, "SELECT COUNT(*) FROM bridges WHERE version_id = ?", (version_id,))
     proposals = _count(
         conn, "SELECT COUNT(*) FROM proposed_classes WHERE version_id = ?", (version_id,)
@@ -122,7 +122,9 @@ def survey(conn: sqlite3.Connection, version_id: str, *, has_provider: bool) -> 
         stage("coref", f"onto-pipeline coref{llm_note}", bool(grouped), bool(mentions),
               f"{grouped} of {mentions} mentions grouped", "no mentions: run extract"),
         stage("match", "onto-pipeline match", bool(typed), bool(mentions),
-              f"{typed} mentions typed against {version_id}", "no mentions: run extract"),
+              f"{typed} mentions typed against {version_id}"
+              + (f" · {stale} stale typings from an older mention layer" if stale else ""),
+              "no mentions: run extract"),
         stage("grey zone", "onto-pipeline grey list", not grey, bool(typed),
               f"{grey} mentions are in the grey zone and nothing types them until they are "
               "answered", "nothing typed yet: run match", decision=bool(grey)),

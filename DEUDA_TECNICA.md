@@ -404,8 +404,16 @@ documenta esa clase de falla (la edición silenciosa de la entrada de coordinaci
 contestar zona gris → exportar → medir el cross-encoder tuneado contra el barrido de `calibrate`
 → recién ahí decidir si `use_cross_encoder` vuelve a `true`.
 
-Cuánto hace falta es desconocido. Con 219 pares esperando en `v2` hay techo para una primera
-tanda, pero un re-ranker entrenado con doscientos ejemplos es una apuesta, no una medición.
+Cuánto hace falta es desconocido, y el techo disponible es más bajo de lo que parecía: contra
+`v5`, que es la versión vigente, hay **131 pares** esperando respuesta, no los 219 de `v2` —esa
+versión quedó tipada contra una capa de menciones que después se volvió a extraer—. Un re-ranker
+entrenado con ciento y pico de ejemplos es una apuesta, no una medición.
+
+**Hay una fuente de etiquetas que no requiere trabajo humano y conviene mirar antes:** el par de
+calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
+medible hoy mismo, sin que nadie conteste nada. Lo que no resuelve es la transferencia —CRAFT es
+biomédico y el caso de aplicación es metodología cualitativa— así que sirve para saber si el
+mecanismo funciona, no para cerrar la compuerta de §12.1.
 
 
 ### 9. El par corpus/semilla
