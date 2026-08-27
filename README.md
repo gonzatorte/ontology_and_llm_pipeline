@@ -59,13 +59,15 @@ el pipeline completo antes de ver datos. **Los cinco pasos están dados**, con u
 | 4 | B4–B5 sin ramas, aplicación directa | **hecho** — `axiomatize` + la cadena de siete filtros |
 | 5 | B6–B8: ramas, scoring, DAG completo | **hecho** — `branch`, `versions`, `diff` |
 
-**La compuerta no-go del paso 3 (§12.1) sigue abierta y es lo que condiciona todo lo demás.** El
-spec dice: si la tasa de falsos huérfanos es alta, no seguir construyendo, porque cada falso
-huérfano se vuelve una clase espuria en B3 y con multi-rama se estaría eligiendo entre variantes
-de ruido. Hoy sobre el par de aplicación esa tasa no es interpretable —el corpus y la semilla no
-se corresponden (ver Limitaciones)— y sobre el par de calibración da 18% en el corte configurado.
-Las tres vías que el spec da para cerrarla son mejor encoder, mejores glosas y **LoRA**; las dos
-primeras se probaron y la tercera está bloqueada por falta de etiquetas.
+**Sobre la compuerta no-go del paso 3 (§12.1).** El spec dice: si la tasa de falsos huérfanos es
+alta, no seguir construyendo, porque cada falso huérfano se vuelve una clase espuria en la
+inducción y con multi-rama se estaría eligiendo entre variantes de ruido. Eso está escrito
+suponiendo un dominio objetivo, y **este proyecto no tiene uno**: el entregable es el sistema y su
+caracterización a través de pares. Así que una tasa alta sobre un par es un resultado *sobre ese
+par*, no una razón para frenar — sobre el par publicado da 18% en el corte configurado. Lo que sí
+sigue abierto es la mejora que el spec propone para bajarla: de sus tres vías —mejor encoder,
+mejores glosas, **ajuste del matcher**— las dos primeras se midieron y la tercera está bloqueada
+por falta de etiquetas.
 
 Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `calibrate`, T3
 `export-annotations`, T4 la telemetría en `work_units` desde el principio.
@@ -96,8 +98,8 @@ Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `cal
 | B5 filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
 | B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
-| B6.3 ajuste del matcher (LoRA) | **no implementado** — bloqueado por datos, no por código; ver deuda 8i |
-| §6.7 historial y feedback | **a medias**: se graban los rechazos; falta el esquema D9, la recuperación de precedentes y la forma normal. Ver deuda 20 |
+| Ajuste del matcher · LoRA (§6.3) | **no implementado** — bloqueado por datos, no por código; ver deuda 8i |
+| Registro de decisiones (§6.7) | **a medias**: se graban los rechazos; falta el esquema D9, la recuperación de precedentes y la forma normal. Ver deuda 20 |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
 | Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
@@ -164,11 +166,11 @@ flowchart TB
   class corpus,seed,OUT io
 ```
 
-Verde: listo. Ámbar: parcial —`A2` sólo born-digital, `B2` calibrado contra un corpus publicado
-pero no contra el par de aplicación, `B5` con 3 de 7 filtros—. Rojo: no implementado. **El
-corte hoy está en B4:** el corpus llega hasta clases propuestas —extraídas, correferidas,
-tipadas, puenteadas e inducidas— y la semilla hasta la TBox normalizada y validada, pero nada
-convierte todavía una propuesta en axiomas.
+Verde: listo. Ámbar: parcial —`A2` sólo por la ruta born-digital, sin VLM—. Rojo: no
+implementado, que hoy son el ajuste del matcher y la mitad que falta del registro de decisiones.
+**El camino de punta a punta está cerrado:** el corpus llega hasta axiomas aplicados y versionados
+—extraído, correferido, tipado, puenteado, inducido, axiomatizado, validado por siete filtros y
+ramificado— y la semilla hasta una TBox normalizada, glosada y enriquecida desde el corpus.
 
 **No hay sesión interactiva.** Hoy esto es un CLI de comandos discretos. El spec tiene varios
 puntos donde el usuario decide —elegir rama (§6.6), zona gris del matcher (§6.2), pregunta por
@@ -713,8 +715,8 @@ valor en 400" son la misma señal cualitativa y decisiones opuestas. Y los indiv
 cada uno se ven exactamente como confirmación de funcionalidad, que es la única forma en que este
 relevamiento podría fabricar su propia evidencia.
 
-Hoy no encuentra nada en el caso de aplicación, y con razón: el pipeline extrae tipos y
-procedencia, no propiedades. La etapa está lista para cuando las haya.
+Hoy no encuentra nada, y con razón: el pipeline extrae tipos y procedencia, no propiedades. La
+etapa está lista para cuando las haya.
 
 ### 10. ¿Cuándo parar? (§10.3)
 
@@ -871,10 +873,11 @@ BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
 ### 14. Calibración contra un corpus publicado
 
-El conjunto de retención mide el **caso de aplicación**. Para fijar los umbrales hace falta otra
-cosa: un corpus ya anotado contra una ontología, donde `in_seed` **es decidible por
-construcción** —la clase gold está en la ontología o no está— y por lo tanto la métrica que
-gobierna la compuerta del §12.1 no necesita campaña de anotación.
+El conjunto de retención mide un par anotado a mano, documento por documento. Para fijar los
+umbrales hace falta otra cosa: un corpus **ya** anotado contra una ontología, donde `in_seed` es
+decidible por construcción —la clase gold está en la ontología o no está— y por lo tanto la
+métrica no necesita campaña de anotación. Todos los pares, propios y publicados, son
+instrumentos: el proyecto no tiene un dominio objetivo al que "volver".
 
 ```bash
 uv run onto-pipeline calibrate craft-cl -m label -m gloss -m label_and_gloss

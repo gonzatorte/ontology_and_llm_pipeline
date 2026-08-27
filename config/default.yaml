@@ -7,7 +7,8 @@ paths:
   work_dir: ../data              # SQLite stores, markdown, crops, reports
   reasoner_lib: ../lib           # OWL API, ELK, HermiT (scripts/fetch-jars.sh)
   # Pares de calibración: corpus publicado + su ontología, uno por subdirectorio con su
-  # pair.yml. Es el instrumento, no el caso de aplicación — ver calibration/README.md.
+  # pair.yml. Todos los pares son instrumentos: el proyecto no tiene dominio comprometido, así
+  # que un par se usa para medir el sistema y no al revés — ver calibration/README.md.
   calibration_root: ../../calibration
 
 # ─── Profile and reasoning ───────────────────────────────

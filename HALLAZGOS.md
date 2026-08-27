@@ -43,12 +43,27 @@ sesión movió el contexto— está en la sección de coordinación de
 
 ---
 
+## 0. Para qué es todo esto
+
+**El entregable es el sistema y su caracterización, sin dominio comprometido.** El spec lo dice
+en §1.4 —"sin tarea downstream comprometida"— y conviene tenerlo a la vista porque durante un
+tiempo la documentación de este repositorio afirmó lo contrario: que había un "caso de
+aplicación" (la semilla de metodología cualitativa) al que el proyecto debía volver después de
+calibrar. **No lo hay.** Todos los pares (corpus, ontología) son instrumentos, y lo que califica
+al sistema es cómo se comporta a través de ellos, no cómo le va en uno.
+
+Corregido el 2026-09-09, en 15 lugares de 7 archivos. Venía de la tarea C7 del plan de
+calibración, que decía "volver al par de aplicación"; esa tarea está retirada y en su lugar entró
+C8, correr el pipeline entero sobre un par publicado.
+
+---
+
 ## 1. Mediciones
 
 ### 1.1 El matcher, contra CRAFT/CL — n = 8.723 menciones gold
 
-El instrumento es un par publicado (corpus anotado + su ontología), no el par de aplicación.
-`onto-pipeline calibrate craft-cl`.
+Medido sobre un par publicado —corpus anotado contra su propia ontología—, donde la respuesta
+correcta se conoce para cada mención. `onto-pipeline calibrate craft-cl`.
 
 **`match_against: label`, contra la premisa del spec.** Con 3.418 clases candidatas, 96% de
 ellas con definición escrita por curadores —la condición bajo la que la premisa del spec
@@ -81,9 +96,9 @@ umbral sólo filtra mistypes. Por eso subir es casi gratis en recall y caro en h
 ### 1.2 Huérfanas genuinas — la corrida con `--holdout 0.2`
 
 Un corpus anotado contra su propia ontología **no tiene huérfanas genuinas por construcción**:
-toda clase gold está en la ontología, así que toda huérfana es falsa y la tasa no es comparable
-con la del par de aplicación. Reteniendo 683 de las 3.418 clases, las **546 menciones** de esas
-clases pasan a ser huérfanas genuinas con respuesta conocida.
+toda clase gold está en la ontología, así que toda huérfana es falsa y la tasa no dice nada sobre
+un par donde sí falten conceptos. Reteniendo 683 de las 3.418 clases, las **546 menciones** de
+esas clases pasan a ser huérfanas genuinas con respuesta conocida.
 
 Dónde cae una mención de un concepto que la ontología **no** tiene:
 
@@ -170,9 +185,14 @@ escribe solo, y que el prompt sí consiguió.
 **Límite observado en la misma corrida:** la cita se verifica que **exista**, no que **sostenga**.
 Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del paper.
 
-### 1.9 Estado del par de aplicación
+### 1.9 Estado del par cualitativo — retirado el 2026-09-09
 
-Contra `v5`, que es la versión vigente: 10 documentos (5 en el conjunto de retención), **848
+Estos números son de la dupla semilla cualitativa + corpus de ciencia abierta, que **ya no se
+usa**: el proyecto no tiene dominio comprometido y todos los pares son instrumentos (ver
+[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), entrada 9). Quedan acá porque son la única corrida de
+punta a punta que hubo hasta ahora, y porque el eco léxico que muestran es sobre el método.
+
+Contra `v5`, que era la versión vigente: 10 documentos (5 en el conjunto de retención), **848
 menciones**, de las cuales 18 tipadas automáticamente, **131 en zona gris** y 699 huérfanas
 (82%). Más 53 items de revisión abiertos de A0 —13 etiquetas divergentes, 27 chequeos semánticos
 pendientes, 13 erratas—. La zona gris es a la vez el trabajo pendiente del usuario y el insumo

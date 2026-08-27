@@ -1,8 +1,12 @@
-# Plan: separar el corpus de calibración del corpus de aplicación
+# Plan: calibrar contra corpus publicados anotados
 
 Enmienda al §12 (secuencia de construcción) de `especificacion_pipeline_ontologia.md`. Los
 resultados de los barridos que este plan hizo posibles están en
 [`HALLAZGOS.md`](HALLAZGOS.md) §1.1–1.2.
+
+> Este documento se llamaba "separar el corpus de calibración del corpus de aplicación" y esa
+> separación resultó ser una premisa equivocada: no hay corpus de aplicación. Ver la nota de
+> corrección en la sección de C7.
 
 ## Problema
 
@@ -217,16 +221,32 @@ hay evidencia de que deba. Su justificación queda siendo B4b y la lectura human
 
 ### Fase 5 — Volver al corpus de aplicación
 
+> **Corregido el 2026-09-09.** Lo que sigue en esta sección describía "volver al par de
+> aplicación", y ese marco era equivocado: **no hay par de aplicación**. El entregable del
+> proyecto es el sistema y su caracterización, sin dominio comprometido (§1.4 del spec: "sin
+> tarea downstream comprometida"), así que **todos los pares son instrumentos** y el par
+> cualitativo era andamio para tener con qué probar mientras no había otra cosa. Queda archivado
+> abajo lo que decía, porque explica de dónde salió la tarea C7 y por qué se retiró.
+
+<details>
+<summary>Lo que decía antes (archivado)</summary>
+
 - Aplicar la config calibrada a la semilla cualitativa + corpus de ciencia abierta.
-- Correr la curva de acumulación del §10.3 sobre ese par, que es la métrica que distingue si el
-  problema está en el pipeline o en los datos.
-- Evaluar la compuerta del §12.1 **sabiendo** que el matcher está calibrado, así una tasa alta de
-  falsos huérfanos se lee como lo que es: señal sobre el par corpus/semilla, no sobre el matcher.
+- Correr la curva de acumulación del §10.3 sobre ese par.
+- Evaluar la compuerta del §12.1 sabiendo que el matcher está calibrado.
 
 Con el desajuste ya medido, el resultado esperado es tasa alta. Eso deja de ser un no-go del
 sistema y pasa a ser un resultado sobre el caso de aplicación: la salida es cambiar el corpus de
-aplicación (uno que reporte estudios cualitativos) o cambiar la semilla. Decisión de dominio, no
-de ingeniería.
+aplicación o cambiar la semilla.
+
+</details>
+
+**Lo que reemplaza a eso.** Sin dominio comprometido, la compuerta del §12.1 no es un semáforo
+del proyecto: una tasa alta de falsos huérfanos sobre un par es un resultado *sobre ese par*, y
+lo que califica al sistema es cómo se comporta **a través** de pares. Eso mueve el centro de
+gravedad del plan a C5 —la curva de tamaño de inventario— y agrega una tarea que antes no tenía
+sentido: correr el pipeline **entero** sobre un par publicado, no sólo el matcher, que es lo
+único que hasta ahora se midió con respuesta conocida.
 
 ## Resultados de C4 (2026-09-09)
 
@@ -360,9 +380,13 @@ están hechas; queda C5, C7 y C9.
 | ~~C4~~ | ~~Par primario CRAFT `CL+extensions`~~ — **hecha**, cuatro corridas. Ver [Resultados de C4](#resultados-de-c4-2026-09-09) | 3 | C3 | — |
 | C5 | **Pares adicionales: HPO GSC+, MaterioMiner, CafeteriaFCD/CafeteriaSA.** Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
 | ~~C6~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de C4**: ambas resueltas, comentarios de `config/default.yaml` reescritos. C5 puede refinar los umbrales, no estas dos | 4 | C4 | — |
-| C7 | Volver al par de aplicación: config calibrada sobre semilla cualitativa + corpus de ciencia abierta, curva de acumulación del §10.3, evaluar la compuerta del §12.1 | 5 | C6 | medición |
+| ~~C7~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
+| C8 | **Correr el pipeline entero sobre un par publicado**, no sólo el matcher: ingesta de texto plano (los corpus anotados vienen en `.txt`, no en PDF), y después extracción, puenteo, inducción y axiomatización con las anotaciones gold como control en cada etapa. Es la primera vez que las etapas posteriores al tipado se medirían contra una respuesta conocida | 5 | C4 | ruta de ingesta + corrida |
 | C9 | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | C4 | decisión |
 
 C4 era la compuerta —si el matcher no separaba en ningún punto de operación, no había nada que
-calibrar— y la pasó: separación +1,61 con etiquetas. Queda C5, que ya no decide `match_against`
-ni `use_cross_encoder` sino cuánto se mueve el punto de operación con el tamaño del inventario.
+calibrar— y la pasó: separación +1,61 con etiquetas. Quedan **C5**, que ya no decide
+`match_against` ni `use_cross_encoder` sino cuánto se mueve el punto de operación con el tamaño
+del inventario, y **C8**, que saca la medición del matcher y la extiende al pipeline completo.
+Las dos son ahora el trabajo principal, no tareas laterales: con el entregable siendo el sistema
+y su caracterización, medir a través de pares *es* el producto.

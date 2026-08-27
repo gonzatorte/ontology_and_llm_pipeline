@@ -315,8 +315,8 @@ servicio web: correrlo significa mandarle la ontología del usuario a un tercero
 decisión suya, no un default. Si alguna vez se agrega, va detrás de un flag explícito.
 
 **Las shapes de SHACL no existen todavía.** El filtro corre pero no hay ninguna escrita, así que
-hoy siempre reporta SKIPPED en el caso de aplicación. Escribir el primer juego —procedencia
-obligatoria, cardinalidad de las etiquetas, individuos sin tipo— es trabajo pendiente y barato.
+hoy siempre reporta SKIPPED. Escribir el primer juego —procedencia obligatoria, cardinalidad de
+las etiquetas, individuos sin tipo— es trabajo pendiente y barato.
 
 
 ### 8f. Las propiedades funcionales están listas y no tienen qué mirar
@@ -411,17 +411,34 @@ entrenado con ciento y pico de ejemplos es una apuesta, no una medición.
 
 **Hay una fuente de etiquetas que no requiere trabajo humano y conviene mirar antes:** el par de
 calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
-medible hoy mismo, sin que nadie conteste nada. Lo que no resuelve es la transferencia —CRAFT es
-biomédico y el caso de aplicación es metodología cualitativa— así que sirve para saber si el
-mecanismo funciona, no para cerrar la compuerta de §12.1.
+medible hoy mismo, sin que nadie conteste nada. Lo que no dice es cuánto **transfiere** a otro
+dominio, y con el entregable siendo la caracterización del sistema esa pregunta deja de ser una
+salvedad y pasa a ser parte del resultado: entrenar en un par y evaluar en otro es justamente lo
+que hay que medir. Los pares de C5 son el banco para eso.
 
 
-### 9. El par corpus/semilla
+### 9. El par cualitativo, retirado — y lo que sí dejó
 
-La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
-Medido sobre 495.213 caracteres: `field note`, `informant`, `coding scheme`,
-`thematic analysis`, `grounded theory` y `theoretical framework` aparecen **cero veces**. Es un
-caso de aplicación válido, pero no sirve como instrumento de calibración.
+La semilla de metodología cualitativa contra el corpus de política de ciencia abierta **está
+fuera de circulación** desde el 2026-09-09. No es un caso de aplicación al que haya que volver:
+el proyecto no tiene dominio comprometido —el entregable es el sistema y su caracterización a
+través de pares— y esa dupla fue el andamio para tener con qué probar mientras no existía un par
+anotado. Los pares publicados lo reemplazan por completo.
+
+Lo que dejó, y que sigue valiendo porque es sobre el método y no sobre el par:
+
+- **El desajuste temático es medible y vale la pena medirlo.** Sobre 495.213 caracteres,
+  `field note`, `informant`, `coding scheme`, `thematic analysis`, `grounded theory` y
+  `theoretical framework` aparecen **cero veces**. Que un par esté desalineado no se ve mirando
+  la tasa de huérfanas —da alta y no dice por qué—: se ve contando el vocabulario núcleo de la
+  semilla en el corpus, que cuesta un `grep`. **Debería ser un chequeo del pipeline**, no algo
+  que se descubre a mano tres semanas después.
+- **El eco léxico se hace visible cuando el par está desalineado**, y por eso este par sirvió:
+  las 18 automáticas de `v5` son casi todas la palabra corriente que da nombre a la clase. Ver
+  la entrada 19.
+
+Los datos derivados (`data/`, versiones `v0`–`v5`) quedan como están: son historia, y los
+números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md).
 
 ---
 

@@ -17,6 +17,13 @@ con `uv`, ~13.500 líneas en 43 módulos, 460 tests, CLI con ~30 comandos.
 El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentación y los
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
 
+⚠️ **El entregable es el sistema y su caracterización, sin dominio objetivo.** El spec lo dice en
+§1.4 ("sin tarea downstream comprometida"). **Todos los pares (corpus, ontología) son
+instrumentos**: se usan para medir cómo se comporta el pipeline, y lo que lo califica es su
+comportamiento *a través* de pares, no cómo le va en uno. No hay un "caso de aplicación" al que
+volver — la documentación afirmó lo contrario hasta el 2026-09-09 y se corrigió en 15 lugares.
+El par de metodología cualitativa fue el andamio inicial y **está retirado**.
+
 ## Los documentos, y cuál leer
 
 | Documento | Qué contesta | Cuándo leerlo |
