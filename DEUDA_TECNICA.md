@@ -653,9 +653,15 @@ Orden razonable si se retoma: unificar en `decisions` (una tabla, no dos) → ma
 seis categorías → recuperación por embedding → forma normal. Lo primero es barato y lo que
 desbloquea el resto.
 
-### 21. El hash de estado no escala a una ontología con axiomas de verdad
+### 21. El hash de estado no escalaba a una ontología con axiomas de verdad — RESUELTO
 
-Descubierto intentando usar la Cell Ontology como semilla, y es lo que hoy bloquea esa corrida.
+> **Resuelto el 2026-09-09.** `logical_axioms` etiqueta los nodos en blanco por su estructura en
+> vez de canonicalizar el grafo entero: `cl-base.owl` pasó de **no terminar en 7 minutos** a
+> **1,96 s**, con los 23.162 nodos anónimos etiquetados y el hash estable frente a un
+> re-parseo que les cambia el identificador a todos. Queda el registro de qué era, porque el
+> diagnóstico vale para la próxima etapa que se tope con lo mismo.
+
+Descubierto intentando usar la Cell Ontology como semilla.
 
 `versioning.logical_axioms` canonicaliza los nodos en blanco con `to_canonical_graph` de rdflib
 antes de hashear. Sobre la semilla de 34 clases es instantáneo. Sobre `cl-base.owl` —**123.864
@@ -676,6 +682,16 @@ determinísticamente por su camino desde el nodo nombrado más cercano cubre la 
 la canonicalización completa queda para el caso raro de nodos en blanco genuinamente cíclicos.
 Hay que medir cuántos son de cada tipo antes de escribirlo.
 
-**Qué cuesta no arreglarlo:** cualquier ontología con axiomatización real queda fuera de alcance
-como semilla, y eso incluye casi todos los pares de C5 —HPO ~19k clases, FoodOn ~40k—. El único
-que entra hoy es MaterioMiner, con 179.
+**Cómo quedó.** Un hash de Merkle en las dos direcciones, iterado hasta punto fijo: cada nodo
+anónimo se describe por las aristas que lo alcanzan desde algo ya identificado y por las que
+salen hacia algo ya identificado. Hacen falta las dos direcciones —una restricción entra por
+arriba, una reificación de axioma sólo por abajo—; con una sola quedaban 7.965 sin resolver. El
+algoritmo general de rdflib sigue ahí como red, para el caso de nodos anónimos que no cuelgan de
+ningún nombrado; sobre las ontologías probadas nunca se activa.
+
+**Una trampa que costó encontrar y quedó fijada con test:** la primera versión leía las
+etiquetas mientras las asignaba, así que el resultado dependía del orden de iteración sobre un
+conjunto — o sea, de los identificadores que rdflib repartió al parsear, que es exactamente lo
+único que había que neutralizar. El síntoma era que re-parsear la misma ontología daba otro
+hash. La actualización tiene que ser **sincrónica**: todo lo de una vuelta se calcula contra las
+etiquetas de la anterior.

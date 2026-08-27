@@ -284,6 +284,27 @@ class Reasoners:
         materialized.parse(data=str(document.toString()), format="turtle")
         return materialized
 
+    def to_rdf(self, path: Path) -> Graph:
+        """Una ontología en cualquier formato que la OWL API entienda, como grafo RDF.
+
+        Existe por OBO: rdflib no lo parsea, y buena parte de las ontologías con axiomatización
+        de verdad se publican así. OBO Format 1.4 tiene un mapeo **normativo** a OWL 2 y esta es
+        su implementación de referencia, que ya viene en `lib/`. Traducirlo a mano sería
+        introducir una divergencia silenciosa contra lo que el banco de calibración lee.
+        """
+        from java.io import File
+        from org.semanticweb.owlapi.formats import RDFXMLDocumentFormat
+        from org.semanticweb.owlapi.io import StringDocumentTarget
+
+        source = File(str(Path(path).resolve()))
+        ontology = self._manager.loadOntologyFromOntologyDocument(source)
+        try:
+            target = StringDocumentTarget()
+            self._manager.saveOntology(ontology, RDFXMLDocumentFormat(), target)
+        finally:
+            self._manager.removeOntology(ontology)
+        return Graph().parse(data=str(target.toString()), format="xml")
+
     def incompatible_pairs(
         self, graph: Graph, pairs: Sequence[tuple[str, str]]
     ) -> set[frozenset[str]]:

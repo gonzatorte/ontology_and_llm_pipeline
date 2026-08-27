@@ -251,6 +251,7 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
         config.paths.seed_ontology,
         config.seed.base_iri,
         divergence_threshold=config.seed.label_divergence_threshold,
+        reasoner_lib=config.paths.reasoner_lib,
     )
 
     ontology_dir = config.paths.work_dir / "ontology"

@@ -22,7 +22,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from rdflib import Graph
+from rdflib import BNode, Graph
 from rdflib.compare import to_canonical_graph
 from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS, SKOS, XSD
 
@@ -90,15 +90,111 @@ def install(conn: sqlite3.Connection) -> None:
 
 
 def logical_axioms(graph: Graph) -> set[str]:
-    """Canonical N-Triples of the logical content: blank nodes canonicalized, annotations
-    dropped, order irrelevant because the result is a set."""
+    """N-Triples canónicos del contenido lógico: nodos en blanco etiquetados de forma estable,
+    anotaciones descartadas, orden irrelevante porque el resultado es un conjunto.
+
+    **Por qué no se usa `to_canonical_graph` directo.** Hace falta canonicalizar: dos grafos que
+    difieren sólo en los identificadores de sus nodos en blanco son el mismo estado, y de este
+    hash depende la detección de loops. Pero el algoritmo de rdflib resuelve el caso general
+    —isomorfismo de grafos— y en una ontología OWL real eso no termina: `cl-base.owl` tiene
+    123.864 tripletas con 73% de nodos en blanco y no cierra en siete minutos.
+
+    Lo que hace que sea tratable es que en OWL casi todo nodo en blanco es **estructural**: una
+    restricción, una lista, una anotación de axioma, colgando de exactamente un nodo nombrado.
+    Se los etiqueta por su camino desde ahí, que es determinista y lineal. La canonicalización
+    completa queda sólo para los que no cuelgan de ningún nombrado —ciclos entre anónimos, que
+    son raros— y sobre ese resto sí corre rápido, porque es chico.
+    """
     logical = Graph()
     for subject, predicate, obj in graph:
         if predicate not in ANNOTATION_PREDICATES:
             logical.add((subject, predicate, obj))
-    canonical = to_canonical_graph(logical)
-    return {line.strip() for line in canonical.serialize(format="nt").splitlines()
-            if line.strip()}
+
+    labels = _structural_labels(logical)
+    if any(node not in labels for node in _blank_nodes(logical)):
+        # Hay nodos anónimos que no cuelgan de ninguno nombrado —ciclos entre anónimos—. El
+        # etiquetado por camino no los alcanza, así que para ese grafo se usa el algoritmo
+        # general, que es correcto y caro. Se mide cuándo pasa antes de intentar optimizarlo:
+        # sobre las ontologías OWL probadas, nunca.
+        canonical = to_canonical_graph(logical)
+        return {line.strip() for line in canonical.serialize(format="nt").splitlines()
+                if line.strip()}
+
+    def render(term) -> str:
+        if isinstance(term, BNode):
+            return f"_:{labels[term]}"
+        return term.n3()
+
+    return {
+        " ".join((render(s), render(p), render(o))) + " ."
+        for s, p, o in logical
+    }
+
+
+def _blank_nodes(graph: Graph) -> set[BNode]:
+    return {
+        term for triple in graph for term in triple if isinstance(term, BNode)
+    }
+
+
+def _structural_labels(graph: Graph) -> dict[BNode, str]:
+    """Etiqueta estable para cada nodo en blanco, derivada de su estructura y no de su id.
+
+    Un hash de Merkle en las dos direcciones, iterado hasta punto fijo: un nodo anónimo se
+    describe por las aristas que lo alcanzan desde algo ya identificado —nombrado o ya
+    etiquetado— y por las que salen hacia algo ya identificado. Hacen falta las dos: en OWL una
+    restricción cuelga de una clase nombrada (entra por arriba) y una reificación de axioma no
+    es objeto de nada, sólo sujeto (entra por abajo). Con una sola dirección quedaban 7.965 sin
+    resolver sobre `cl-base.owl`.
+
+    Dos nodos anónimos con la misma descripción reciben la misma etiqueta, que es lo correcto:
+    si son indistinguibles, sus tripletas colapsan en el conjunto, que es lo que tienen que
+    hacer.
+    """
+    incoming: dict[BNode, list] = {}
+    outgoing: dict[BNode, list] = {}
+    for subject, predicate, obj in graph:
+        if isinstance(obj, BNode):
+            incoming.setdefault(obj, []).append((subject, predicate))
+        if isinstance(subject, BNode):
+            outgoing.setdefault(subject, []).append((predicate, obj))
+
+    labels: dict[BNode, str] = {}
+    nodes = set(incoming) | set(outgoing)
+
+    def name(term, known: dict[BNode, str]) -> str | None:
+        if isinstance(term, BNode):
+            return known.get(term)
+        return term.n3()
+
+    for _ in range(len(nodes) + 1):
+        # Sincrónica: todo lo de esta vuelta se calcula contra las etiquetas de la anterior y
+        # recién después se aplica. Si se leyera lo que se acaba de asignar, el resultado
+        # dependería del orden de iteración sobre un conjunto —o sea, de los identificadores
+        # que rdflib repartió al parsear—, que es justamente lo único que hay que neutralizar.
+        # Se detectó midiendo: re-parsear la misma ontología daba otro hash.
+        previous = dict(labels)
+        pending: dict[BNode, str] = {}
+        for node in nodes:
+            if node in previous:
+                continue
+            described = sorted(
+                f"<{resolved}|{predicate.n3()}"
+                for parent, predicate in incoming.get(node, ())
+                if (resolved := name(parent, previous)) is not None
+            ) + sorted(
+                f">{predicate.n3()}|{resolved}"
+                for predicate, obj in outgoing.get(node, ())
+                if (resolved := name(obj, previous)) is not None
+            )
+            if described:
+                pending[node] = hashlib.sha1(
+                    "&".join(described).encode("utf-8")
+                ).hexdigest()[:16]
+        if not pending:
+            break
+        labels.update(pending)
+    return labels
 
 
 def state_hash(graph: Graph) -> str:

@@ -144,3 +144,61 @@ def test_the_label_index_covers_both_sides_of_the_comparison():
     labels = versioning.label_index(graph(EXTENDED), graph(BASE))
 
     assert labels["http://example.org/onto#Technique"] == "Technique"
+
+
+# ─────────────────  el hash frente a los nodos en blanco  ─────────────────
+
+
+def restriction_graph(seed: int = 0) -> Graph:
+    """Una clase con una restricción anónima, como la escribe cualquier ontología OWL."""
+    from rdflib import BNode, URIRef
+    from rdflib.namespace import OWL, RDF, RDFS
+
+    graph = Graph()
+    for index in range(3):
+        klass = URIRef(f"http://x/C{index}")
+        node = BNode(f"seed{seed}_{index}")
+        graph.add((klass, RDF.type, OWL.Class))
+        graph.add((klass, RDFS.subClassOf, node))
+        graph.add((node, RDF.type, OWL.Restriction))
+        graph.add((node, OWL.onProperty, URIRef(f"http://x/p{index}")))
+        graph.add((node, OWL.someValuesFrom, URIRef(f"http://x/D{index}")))
+    return graph
+
+
+def test_renaming_every_blank_node_is_not_a_new_state():
+    """Dos grafos que difieren sólo en los identificadores de sus nodos anónimos son el mismo
+    estado. Si no, re-serializar llenaría el DAG de versiones que no cambian nada."""
+    assert versioning.state_hash(restriction_graph(0)) == versioning.state_hash(
+        restriction_graph(1)
+    )
+
+
+def test_the_labelling_does_not_depend_on_iteration_order():
+    """El fallo que hubo: las etiquetas se leían mientras se asignaban, así que el resultado
+    dependía del orden de iteración sobre un conjunto — o sea, de los identificadores."""
+    graph = restriction_graph(0)
+    reparsed = Graph().parse(data=graph.serialize(format="turtle"), format="turtle")
+    assert versioning.state_hash(graph) == versioning.state_hash(reparsed)
+
+
+def test_a_blank_node_that_is_only_a_subject_gets_labelled():
+    """Una reificación de axioma no es objeto de nada. Con etiquetado sólo por camino desde
+    arriba quedaba sin resolver, y el grafo entero caía al algoritmo caro."""
+    from rdflib import BNode, URIRef
+    from rdflib.namespace import OWL, RDF
+
+    graph = Graph()
+    node = BNode()
+    graph.add((node, RDF.type, OWL.Axiom))
+    graph.add((node, OWL.annotatedSource, URIRef("http://x/C")))
+    assert versioning._structural_labels(graph).keys() == {node}
+
+
+def test_an_extra_axiom_changes_the_state():
+    from rdflib import URIRef
+    from rdflib.namespace import RDFS
+
+    changed = restriction_graph(0)
+    changed.add((URIRef("http://x/A"), RDFS.subClassOf, URIRef("http://x/B")))
+    assert versioning.state_hash(changed) != versioning.state_hash(restriction_graph(0))

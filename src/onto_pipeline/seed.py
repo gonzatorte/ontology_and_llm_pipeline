@@ -106,8 +106,36 @@ class NormalizedSeed:
         return {entity.iri: entity for entity in self.entities}
 
 
-def normalize_seed(path: Path, base_iri: str, *, divergence_threshold: float) -> NormalizedSeed:
-    source = Graph().parse(path)
+# Formatos que rdflib no lee y la OWL API sí. OBO es el caso que importa: buena parte de las
+# ontologías con axiomatización de verdad se publican así.
+FOREIGN_SUFFIXES = frozenset({".obo", ".owx", ".ofn"})
+
+
+def load_ontology(path: Path, *, reasoner_lib: Path | None = None) -> Graph:
+    """La semilla como grafo, venga en el formato que venga.
+
+    Un `.obo` no es un error de entrada: es un formato con un mapeo normativo a OWL 2, y su
+    implementación de referencia ya está en `lib/`. Convertirlo es parte de leerlo.
+    """
+    if Path(path).suffix.lower() not in FOREIGN_SUFFIXES:
+        return Graph().parse(path)
+
+    from .reasoning import Reasoners, ReasonerUnavailable
+
+    try:
+        return Reasoners(reasoner_lib or Path("lib")).to_rdf(Path(path))
+    except ReasonerUnavailable as exc:
+        raise ReasonerUnavailable(
+            f"{path.name} viene en un formato que necesita la OWL API para traducirse a OWL, "
+            f"y los jars no están: {exc}"
+        ) from exc
+
+
+def normalize_seed(
+    path: Path, base_iri: str, *, divergence_threshold: float,
+    reasoner_lib: Path | None = None,
+) -> NormalizedSeed:
+    source = load_ontology(path, reasoner_lib=reasoner_lib)
     mapping = _mint_opaque_iris(source, base_iri)
     graph = _rewrite(source, mapping)
 

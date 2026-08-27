@@ -89,7 +89,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | Etapa | Estado |
 |---|---|
 | A0.0 detección de perfil OWL | listo |
-| A0.1–A0.3 IRIs opacos, etiquetas, erratas | listo |
+| A0.1–A0.3 IRIs opacos, etiquetas, erratas | listo; la semilla puede venir en OWL, Turtle o **OBO** |
 | A0.4 glosas | listo (requiere proveedor LLM) |
 | A1 clasificación por página | listo |
 | A2 parseo e ingesta | listo: PDF born-digital y **texto plano**; falta la ruta VLM |
