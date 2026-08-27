@@ -23,6 +23,10 @@ reasoning = [
 ]
 matching = [
     "sentence-transformers>=6.0.1",
+    # Sólo para el ajuste del re-ranker (spec 6.3): `CrossEncoder.fit` los pide. La
+    # recuperación y el re-ranking sin entrenar no los necesitan.
+    "datasets>=3.0",
+    "accelerate>=1.1.0",
 ]
 # B5 filter 3. Optional because the filter reports SKIPPED without shapes anyway, and shapes
 # are written by hand: OWL says what must be true, SHACL what must be stated, and under the

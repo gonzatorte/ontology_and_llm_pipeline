@@ -261,6 +261,38 @@ Lo que queda dicho es dónde **no** está la solución: no es la representación
 encoder. Un modelo asimétrico o entrenado es la vía, y es lo mismo que ya decía la conclusión
 sobre glosas.
 
+### 1.12 Ajustar el re-ranker: la mejora más grande medida, y no transfiere
+
+El cross-encoder de fábrica arruinaba el orden —separación −0,50—. Ajustado con las anotaciones
+del propio par, es la mejora más grande que este pipeline midió. Partición **por documento**, y
+evaluado sobre documentos que el entrenamiento nunca vio:
+
+| Par | bi-encoder solo | + ajustado | techo (@10) | ganancia | del margen |
+|---|---|---|---|---|---|
+| CRAFT/CL (n=1.237) | 66,3% | **76,2%** | 77,5% | **+9,9** | 88% |
+| MaterioMiner (n=653) | 28,5% | **40,1%** | 47,0% | **+11,6** | 63% |
+
+79 segundos de entrenamiento sobre una GPU de notebook, 37 mil ejemplos.
+
+**Y no transfiere entre dominios.** Entrenado en CRAFT y aplicado a MaterioMiner (n=2.229):
+**−2,1 puntos**, o sea peor que no usarlo. Tres documentos de mecánica de materiales le ganan a
+setenta y siete de biomedicina por catorce puntos sobre el mismo conjunto de evaluación.
+
+Eso cierra una pregunta de diseño con datos: las etiquetas tienen que salir del dominio donde se
+va a usar el matcher. Es exactamente de donde el spec dice que salen —las decisiones de aceptar
+o rechazar del usuario en la zona gris— sólo que ahora se sabe cuánto rinde y cuánto no se puede
+tomar prestado.
+
+**Dos cosas de método que hacen que el número signifique algo.** Los negativos son los candidatos
+equivocados que el propio bi-encoder puso arriba, no negativos al azar: entrenar contra una clase
+que el recuperador nunca iba a proponer enseña a distinguir lo que ya estaba distinguido. Y la
+partición es por documento y nunca por mención — dos menciones del mismo paper comparten
+vocabulario y tema, y separarlas al azar mide memoria.
+
+**Se reporta el techo junto al resultado**, porque subir 9,9 puntos cuando había 11,2 disponibles
+es otra cosa que subir 9,9 cuando había 40. El re-ranker sólo reordena lo que la recuperación
+trajo; lo que no está en el top-k no lo alcanza.
+
 ---
 
 ## 2. Decisiones tomadas, y por qué

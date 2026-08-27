@@ -79,7 +79,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 
 | # | Qué | Por qué ahora | Detalle |
 |---|---|---|---|
-| 1 | **Entrenar el re-ranker** sobre las 8.723 menciones gold del par publicado, evaluado sobre el holdout que ya existe | Es la tercera vía del spec para bajar los falsos huérfanos, y la única que no se probó. No necesita que nadie anote nada | [deuda 8i](DEUDA_TECNICA.md) |
+| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y no transfiere entre dominios | La mejora más grande medida en este pipeline | [hallazgo 1.12](HALLAZGOS.md) |
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
 | 3 | **Unificar el registro de decisiones** en una sola tabla | Hoy hay dos y se usa la que menos guarda; es barato y desbloquea el resto de esa entrada | [deuda 20](DEUDA_TECNICA.md) |
 | 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
@@ -821,7 +821,43 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 13. Conjunto de retención
+### 13. Ajustar el matcher (§6.3)
+
+```bash
+uv run onto-pipeline tune craft-cl --out data/models/reranker-craft
+uv run onto-pipeline tune craft-cl --eval-on materiominer   # ¿transfiere?
+```
+
+Es el **único componente del pipeline que se entrena**, y la razón es estructural: esto es
+clasificación de pares, no generación. El bi-encoder recupera y el cross-encoder reordena lo que
+aquél trajo.
+
+| Par | bi-encoder solo | + ajustado | techo (@10) | ganancia |
+|---|---|---|---|---|
+| CRAFT/CL (n=1.237) | 66,3% | **76,2%** | 77,5% | **+9,9** (88% del margen) |
+| MaterioMiner (n=653) | 28,5% | **40,1%** | 47,0% | **+11,6** (63% del margen) |
+
+Evaluado sobre documentos que el entrenamiento nunca vio; 79 segundos en una GPU de notebook. Es
+la mejora más grande que este pipeline midió, y el mismo modelo **sin ajustar** empeoraba el
+orden.
+
+**No transfiere entre dominios.** El de CRAFT aplicado a MaterioMiner da **−2,1 puntos**: peor
+que no usar ninguno. Tres documentos propios le ganan a setenta y siete ajenos por catorce
+puntos. Las etiquetas tienen que salir del dominio donde se va a usar.
+
+Tres cosas de método, porque sin ellas el número no significa nada:
+
+- **La partición es por documento, nunca por mención.** Dos menciones del mismo paper comparten
+  vocabulario y tema; separarlas al azar mide memoria.
+- **Los negativos son los candidatos equivocados que el propio bi-encoder puso arriba**, no
+  negativos al azar. Un negativo al azar es una clase que el recuperador nunca iba a proponer.
+- **Se reporta el techo junto a la ganancia.** Subir 9,9 puntos cuando había 11,2 disponibles es
+  otra cosa que subir 9,9 cuando había 40.
+
+Para usarlo: apuntar `matching.cross_encoder` al directorio guardado y poner
+`use_cross_encoder: true`.
+
+### 14. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (§10.1). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de §12.1.
@@ -885,7 +921,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 14. Calibración contra un corpus publicado
+### 15. Calibración contra un corpus publicado
 
 El conjunto de retención mide un par anotado a mano, documento por documento. Para fijar los
 umbrales hace falta otra cosa: un corpus **ya** anotado contra una ontología, donde `in_seed` es

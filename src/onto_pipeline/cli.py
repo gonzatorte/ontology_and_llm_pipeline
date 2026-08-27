@@ -39,6 +39,7 @@ from . import (
     review,
     stopping,
     structural,
+    tuning,
     typing_store,
     validation,
     versioning,
@@ -146,6 +147,16 @@ MatchAgainstOption = typer.Option(
 CrossEncoderSweepOption = typer.Option(
     False, "--cross-encoder", help="Run each variant with and without the re-ranker."
 )
+TrainFractionOption = typer.Option(
+    0.8, "--train", help="Fracción de documentos para entrenar; el resto evalúa."
+)
+NegativesOption = typer.Option(
+    4, "--negatives", help="Negativos por mención, tomados del top-k del bi-encoder."
+)
+EvalOnOption = typer.Option(
+    None, "--eval-on", help="Evaluar contra otro par: mide si transfiere. Medido: poco."
+)
+OutOption = typer.Option(None, "--out", help="Dónde guardar el modelo ajustado.")
 ContextOption = typer.Option(
     "none", "--context",
     help="none | sentence: qué texto representa a la mención. Medido: `sentence` empeora.",
@@ -2042,6 +2053,102 @@ def match_cmd(
         "[yellow]uncalibrated[/]: the thresholds are the spec's defaults, not measured ones. "
         "See Limitaciones in the README."
     )
+
+
+@app.command("tune")
+def tune_cmd(
+    pair_name: str = PairOption,
+    config_path: Path = ConfigOption,
+    train_fraction: float = TrainFractionOption,
+    negatives: int = NegativesOption,
+    eval_on: str | None = EvalOnOption,
+    out: Path | None = OutOption,
+) -> None:
+    """Ajusta el cross-encoder con las anotaciones de un par (spec 6.3).
+
+    El bi-encoder recupera y el cross-encoder reordena, así que el techo de esta etapa es la
+    diferencia entre acertar en el primer puesto y acertar en los primeros k. El comando la
+    reporta junto al resultado: subir nueve puntos cuando había once disponibles es otra cosa
+    que subir nueve cuando había cuarenta.
+
+    La partición es **por documento**. Separar menciones al azar deja las del mismo paper de
+    los dos lados, que comparten vocabulario y tema, y eso mide memoria.
+
+    `--eval-on otro-par` entrena acá y evalúa allá, que es la pregunta de si sirve reutilizar
+    un modelo entre dominios. Medido: mucho menos que entrenar con tres documentos propios.
+    """
+    from .embeddings import EncoderUnavailable, SentenceTransformerEncoder
+
+    config = Config.load(config_path)
+    try:
+        encoder = SentenceTransformerEncoder(config.matching.bi_encoder, config.matching.device)
+    except EncoderUnavailable as exc:
+        raise typer.BadParameter(f"{exc}; uv sync --extra matching") from exc
+    matcher = matching.Matcher(encoder)
+
+    def retrieve(pair, documents, top_k: int):
+        mentions = [
+            matching.Mention(id=m.id, text=m.text, document_id=d.doc_id, language=pair.language)
+            for d in documents for m in d.mentions if m.in_seed and m.gold_class
+        ]
+        gold = {m.id: m.gold_class for d in documents for m in d.mentions}
+        for mention in mentions:
+            mention.gold_class = gold[mention.id]
+        if not mentions:
+            return [], []
+        vectors = matcher.vectors_for([m.text for m in mentions])
+        targets = matcher.vectors_for([t.text for t in pair.targets])
+        ranked = matcher._rank(vectors, targets, pair.targets, top_k)
+        return mentions, [[target.iri for _, target in row] for row in ranked]
+
+    top_k = 10
+    source = calibration.load_pair(
+        config.paths.calibration_root / pair_name, match_against=config.matching.match_against
+    )
+    train_docs, eval_docs = tuning.split_by_document(source.documents, train_fraction)
+    texts = {target.iri: target.text for target in source.targets}
+
+    console.print(
+        f"[bold]{pair_name}[/]: {len(train_docs)} documentos para entrenar, "
+        f"{len(eval_docs)} para evaluar · {len(source.targets)} clases"
+    )
+    with console.status("recuperando candidatos"):
+        train_mentions, train_candidates = retrieve(source, train_docs, top_k)
+    examples = tuning.examples_from(
+        train_mentions, train_candidates, texts, negatives=negatives
+    )
+    console.print(f"ejemplos: {len(examples)} · {len(train_mentions)} menciones")
+
+    with console.status("entrenando"):
+        model = tuning.train(examples, config.matching.cross_encoder,
+                             device=config.matching.device)
+
+    target_pair, target_docs, target_texts = source, eval_docs, texts
+    if eval_on:
+        target_pair = calibration.load_pair(
+            config.paths.calibration_root / eval_on,
+            match_against=config.matching.match_against,
+        )
+        target_docs = target_pair.documents
+        target_texts = {t.iri: t.text for t in target_pair.targets}
+        console.print(f"[yellow]evaluando en {eval_on}[/]: mide transferencia entre dominios")
+
+    with console.status("evaluando"):
+        mentions, candidates = retrieve(target_pair, target_docs, top_k)
+        result = tuning.compare(model, mentions, candidates, target_texts)
+
+    table = Table("qué", "@1", "@5")
+    table.add_row("bi-encoder solo", f"{result.base_at_1:.1%}", f"{result.base_at_5:.1%}")
+    table.add_row("+ cross-encoder ajustado",
+                  f"[bold]{result.tuned_at_1:.1%}[/]", f"{result.tuned_at_5:.1%}")
+    table.add_row(f"techo (@{top_k} del bi-encoder)", f"{result.ceiling:.1%}", "")
+    console.print(table)
+    console.print(
+        f"{result.gain:+.1%} en el primer puesto sobre {result.n} menciones de documentos no "
+        f"vistos · captura el {result.headroom_taken:.0%} del margen disponible"
+    )
+    if out is not None:
+        console.print(f"[green]guardado[/] {tuning.save(model, out)}")
 
 
 @app.command("calibrate")

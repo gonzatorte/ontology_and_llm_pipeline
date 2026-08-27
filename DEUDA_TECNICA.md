@@ -386,7 +386,27 @@ Dos huecos concretos en la etapa:
   conviene saberlo antes de leer 60 candidatas.
 
 
-### 8i. LoRA (§6.3) — la única pieza del plan bloqueada por falta de datos, no de código
+### 8i. Ajuste del matcher (§6.3) — HECHO, con un resultado que cambia el default
+
+> **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
+> da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
+> más grande que se midió acá— y **no transfiere**: entrenado en CRAFT y aplicado a MaterioMiner
+> resta 2,1 puntos. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.12.
+>
+> **Ajuste completo en vez de LoRA**, apartándose de la letra del spec: LoRA existe para no tocar
+> todos los pesos de un modelo grande, y éste tiene 33 millones de parámetros y entrena en 79
+> segundos. Agregar `peft` para evitar un costo que no existe sería complejidad sin
+> contrapartida; la sustancia es la misma.
+>
+> Lo que queda abierto es el circuito que el spec describe: hoy las etiquetas salen de un par
+> anotado, y la idea era que salieran solas de las decisiones de zona gris del usuario.
+> `grey labels --export` ya escribe ese formato y hay **cero** respuestas acumuladas, así que esa
+> mitad sigue esperando a que alguien conteste.
+
+<details>
+<summary>Lo que decía antes de medirlo</summary>
+
+### LoRA (§6.3) — la única pieza del plan bloqueada por falta de datos, no de código
 
 El spec pone el ajuste del matcher como el arreglo de la compuerta no-go: si la tasa de falsos
 huérfanos es alta, mejor modelo, mejores glosas, **LoRA con las primeras etiquetas**. Las
@@ -409,7 +429,9 @@ Cuánto hace falta es desconocido, y el techo disponible es más bajo de lo que 
 versión quedó tipada contra una capa de menciones que después se volvió a extraer—. Un re-ranker
 entrenado con ciento y pico de ejemplos es una apuesta, no una medición.
 
-**Hay una fuente de etiquetas que no requiere trabajo humano y conviene mirar antes:** el par de
+</details>
+
+**La fuente de etiquetas que no requiere trabajo humano, que resultó ser la buena:** el par de
 calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
 medible hoy mismo, sin que nadie conteste nada. Lo que no dice es cuánto **transfiere** a otro
 dominio, y con el entregable siendo la caracterización del sistema esa pregunta deja de ser una

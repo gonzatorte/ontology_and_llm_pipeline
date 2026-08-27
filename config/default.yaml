@@ -136,9 +136,15 @@ matching:
                                    # gloss is a sentence, and a symmetric encoder loses more on
                                    # that difference in shape than it gains in meaning.
                                    # Revisit with an asymmetric encoder, not with a threshold.
-  # SETTLED OFF, y reconfirmado con holdout: separación -0,50, F1 0,127 contra 0,774 del
-  # bi-encoder, en su propio mejor umbral. No es que haga falta otro umbral; el orden que
-  # produce está anticorrelacionado con el correcto.
+  # OFF **de fábrica**: separación -0,50, F1 0,127 contra 0,774 del bi-encoder. No es que haga
+  # falta otro umbral; el orden que produce está anticorrelacionado con el correcto.
+  #
+  # ON cuando hay uno **ajustado a este dominio**. `onto-pipeline tune <par> --out <dir>` lo
+  # entrena, y después se apunta `cross_encoder` a ese directorio y se pone esto en `true`.
+  # Medido sobre documentos no vistos: +9,9 puntos en CRAFT (66,3% -> 76,2%, el 88% del margen
+  # disponible) y +11,6 en MaterioMiner. Es la mejora más grande que se midió acá.
+  # Lo que NO se puede hacer es reutilizarlo entre dominios: el de CRAFT aplicado a
+  # MaterioMiner da -2,1 puntos, peor que no usar ninguno.
   use_cross_encoder: false         # Same run, re-ranking the bi-encoder's top-5:
                                    # recall@1 falls from 6.090 to 2.220 and the separation goes
                                    # to -0,56 (right top-1 median 0,143, wrong 0,325). It both
