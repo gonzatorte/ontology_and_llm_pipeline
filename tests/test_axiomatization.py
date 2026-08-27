@@ -217,7 +217,7 @@ def test_precedents_carry_the_comment_because_that_is_what_transfers():
     """El veredicto dice qué pasó; el comentario dice por qué, que es lo único aplicable a una
     propuesta distinta."""
     rendered = ax.render_precedents([
-        {"normalized_axioms": "X subClassOf Y", "status": "rejected",
+        {"normalized_axioms": "X subClassOf Y", "status": "not_chosen",
          "comment": "el padre ya lo cubre"},
     ])
     assert "se descartó" in rendered and "el padre ya lo cubre" in rendered
@@ -230,6 +230,6 @@ def test_no_precedents_says_so_rather_than_showing_nothing():
 def test_the_prompt_says_precedents_are_evidence_and_not_rules():
     rendered = ax.PROMPT.render(**ax.payload(
         PROPOSAL, [{"label": "Technique", "gloss": "A systematic procedure."}], ["focus group"],
-        [{"normalized_axioms": "X subClassOf Y", "status": "rejected", "comment": "porque sí"}],
+        [{"normalized_axioms": "X subClassOf Y", "status": "not_chosen", "comment": "porque sí"}],
     ))
     assert "precedents, not rules" in rendered and "porque sí" in rendered

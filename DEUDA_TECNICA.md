@@ -699,7 +699,7 @@ desambiguación sí.
 > **Resuelto el 2026-09-10.** El registro y su destino, que era lo que lo justificaba.
 >
 > **El registro.** `decisions` se escribe: una fila por (rama, eje) con las seis categorías
-> fijas, el estado `invalid` separado de `rejected`, el comentario y el hash del estado contra el
+> fijas, el estado `invalid` separado de `not_chosen`, el comentario y el hash del estado contra el
 > que se decidió. `branches` sigue siendo la cola de propuestas —su trabajo— y dejó de ser el
 > registro.
 >
@@ -731,7 +731,7 @@ los campos que pide `ITER-FEEDBACK` —`status`, `axis`, `comment`, `normalized_
 **cero filas**: `branching` guarda su propia versión más pobre en `branches.status` y
 `branches.note`. Son dos lugares para lo mismo, y el que se usa es el que menos guarda:
 
-- `status` en `branches` es `chosen`/`rejected`; `GRADED-FEEDBACK` distingue además **`invalid`**, y esa
+- `status` en `branches` es `chosen`/`not_chosen`; `GRADED-FEEDBACK` distingue además **`invalid`**, y esa
   distinción es el punto — separa la señal fuerte ("esto está mal") del rechazo blando ("elegí
   otra"), que colapsadas se pierden.
 - `axis` en `branches` es el id del eje detectado (`attribute_as_class:6c6b32…`); `GRADED-FEEDBACK` quiere una de

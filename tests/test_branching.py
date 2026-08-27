@@ -367,7 +367,7 @@ def test_choosing_one_branch_rejects_its_siblings(tmp_path):
 
     status = {row["id"]: row["status"] for row in br.load(conn, "v1")}
     assert status.pop(chosen.id) == br.CHOSEN
-    assert set(status.values()) == {br.REJECTED}
+    assert set(status.values()) == {br.NOT_CHOSEN}
 
 
 def test_history_is_empty_before_anything_was_decided(tmp_path):
@@ -403,7 +403,7 @@ def test_a_settled_decision_is_not_re_opened_by_proposing_again(tmp_path):
     br.persist(conn, "v1", [decision])
 
     assert len(br.history(conn)) == 2
-    assert {row["status"] for row in br.load(conn, "v1")} == {br.CHOSEN, br.REJECTED}
+    assert {row["status"] for row in br.load(conn, "v1")} == {br.CHOSEN, br.NOT_CHOSEN}
 
 
 # ─────────────  el registro de decisiones (ITER-FEEDBACK, esquema GRADED-FEEDBACK)  ─────────────
@@ -426,7 +426,7 @@ def test_choosing_writes_the_d9_record_not_only_the_branch_status(tmp_path):
     copia más pobre. Una sola."""
     conn, _ = settled(tmp_path)
     assert len(rows(conn)) == 2
-    assert {row["status"] for row in rows(conn)} == {br.CHOSEN, br.REJECTED}
+    assert {row["status"] for row in rows(conn)} == {br.CHOSEN, br.NOT_CHOSEN}
 
 
 def test_invalid_is_a_different_signal_from_rejected(tmp_path):
@@ -504,7 +504,7 @@ def test_a_proposal_already_rejected_is_found_by_its_normal_form(tmp_path):
     forms = {b.id: "Focus Group subClassOf Technique" for b in decision.branches}
     br.settle(conn, decision.branches[0].id, note="ya se probó", normal_forms=forms)
     found = br.already_rejected(conn, "Focus Group subClassOf Technique")
-    assert found and found["status"] in (br.REJECTED, br.INVALID)
+    assert found and found["status"] in (br.NOT_CHOSEN, br.INVALID)
 
 
 def test_the_chosen_one_is_not_reported_as_rejected(tmp_path):

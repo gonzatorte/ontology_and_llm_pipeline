@@ -49,12 +49,11 @@ KIND_MODELLING = "modelling"
 
 PROPOSED = "proposed"
 CHOSEN = "chosen"
-REJECTED = "rejected"
-# La cuarta del esquema GRADED-FEEDBACK (ITER-FEEDBACK), y la que hace que el registro sirva: separa
-# la señal fuerte
+NOT_CHOSEN = "not_chosen"
+# La tercera de GRADED-FEEDBACK, y la que hace que el registro sirva: separa la señal fuerte
 # —"esto está mal"— del rechazo blando —"elegí otra"—. Colapsadas, se pierde.
 INVALID = "invalid"
-SETTLED = (CHOSEN, REJECTED, INVALID)
+SETTLED = (CHOSEN, NOT_CHOSEN, INVALID)
 
 # Las seis categorías fijas de ITER-FEEDBACK. El eje detectado es específico de la iteración
 # (`attribute_as_class:6c6b32f28f86`); esto es lo que hace comparables dos decisiones de
@@ -805,7 +804,7 @@ def settle(
     for other in siblings:
         conn.execute(
             "UPDATE branches SET status = ? WHERE id = ?",
-            (INVALID if other["id"] in invalid else REJECTED, other["id"]),
+            (INVALID if other["id"] in invalid else NOT_CHOSEN, other["id"]),
         )
     conn.execute("UPDATE branches SET status = ?, note = ? WHERE id = ?",
                  (CHOSEN, note or row["note"] or "", branch_id))
@@ -819,7 +818,7 @@ def settle(
     for other in siblings:
         _record(
             conn, other | {"normal_form": normal_forms.get(other["id"], "")},
-            INVALID if other["id"] in invalid else REJECTED, state_hash,
+            INVALID if other["id"] in invalid else NOT_CHOSEN, state_hash,
         )
     conn.commit()
     return dict(row)
@@ -864,7 +863,7 @@ def already_rejected(conn: sqlite3.Connection, normal: str) -> dict | None:
     row = conn.execute(
         "SELECT * FROM decisions WHERE normalized_axioms = ? AND status IN (?, ?) "
         "ORDER BY (status = ?) DESC, created_at DESC LIMIT 1",
-        (normal, REJECTED, INVALID, INVALID),
+        (normal, NOT_CHOSEN, INVALID, INVALID),
     ).fetchone()
     return dict(row) if row else None
 
@@ -927,7 +926,7 @@ def history(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
     """
     install(conn)
     tally: dict[tuple[str, str], int] = {}
-    weights = {CHOSEN: 1, REJECTED: -1, INVALID: -2}
+    weights = {CHOSEN: 1, NOT_CHOSEN: -1, INVALID: -2}
     for row in conn.execute(
         f"SELECT axes, status FROM branches WHERE status IN ({','.join('?' * len(SETTLED))})",
         SETTLED,

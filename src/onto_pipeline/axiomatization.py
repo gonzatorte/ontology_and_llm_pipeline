@@ -179,7 +179,7 @@ def render_precedents(precedents: Sequence[dict]) -> str:
         return "(ninguna todavía — es la primera iteración, o nada parecido se decidió antes)"
     lines = []
     for item in precedents:
-        verdict = {"chosen": "se eligió", "rejected": "se descartó",
+        verdict = {"chosen": "se eligió", "not_chosen": "se descartó",
                    "invalid": "se marcó INVÁLIDA"}.get(item["status"], item["status"])
         because = f" — «{item['comment']}»" if item.get("comment") else ""
         lines.append(f"- {item['normalized_axioms']}: {verdict}{because}")

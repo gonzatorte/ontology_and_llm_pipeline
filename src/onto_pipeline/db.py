@@ -105,4 +105,11 @@ def connect(work_dir: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(SCHEMA)
+    # GRADED-FEEDBACK nombra el rechazo blando `not_chosen`; el código escribió `rejected` hasta
+    # el 2026-09-10. Un almacén viejo se corrige solo. Las dos tablas las crea `branching`, así
+    # que en un almacén que todavía no ramificó no existen.
+    existing = {row["name"] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'")}
+    for table in existing & {"branches", "decisions"}:
+        conn.execute(f"UPDATE {table} SET status = 'not_chosen' WHERE status = 'rejected'")
     return conn
