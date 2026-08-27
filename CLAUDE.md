@@ -12,7 +12,9 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología semilla, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~15.200 líneas en 45 módulos, 546 tests, CLI con ~40 comandos.
+con `uv`, ~17.800 líneas en 53 módulos, 563 tests. **Dos interfaces sobre el mismo pipeline**:
+un CLI de ~40 comandos y `wizard`, que recorre el mismo plan preguntando en cada punto de
+decisión. Las dos llaman a `services/`.
 
 El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentación y los
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
@@ -60,6 +62,8 @@ uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
 uv run onto-pipeline --help
 uv run onto-pipeline next              # qué corresponde correr, y qué espera al usuario
+uv run onto-pipeline wizard            # lo mismo, pero preguntando en vez de frenar
+uv run onto-pipeline export            # la ontología terminada: TBox + ABox + manifiesto
 ```
 
 Las etapas que llaman al modelo necesitan `--env-file opencode.env` **antes** del subcomando:
@@ -88,6 +92,13 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
    (`LAYERS-ONTOLOGY-NOT-GRAPH`). Clustering sobre el grafo de menciones huérfanas sí está permitido.
 8. **Mundo abierto.** No asertar X y asertar ¬X son cosas distintas. Ausencia de contraejemplo no
    es prueba; sólo el contraejemplo es conocimiento.
+9. **Ningún servicio importa `typer` ni `rich`.** Hay dos interfaces sobre el mismo pipeline —el
+   CLI de banderas y `wizard`— y el cuerpo de una etapa no puede pertenecer a ninguna de las
+   dos. El contrato está en `services/__init__.py`; un test lo fija leyendo los imports. Etapa
+   nueva: va en `services/`, se muestra en `render.py`, y las dos interfaces la llaman.
+10. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno y `wizard` lo
+    pregunta; las dos cosas son la misma regla. Correr lo que viene después de una decisión que
+    nadie tomó es tomarla por default, que es lo que `BRANCH-ONLY-REVIEW` nombra.
 
 ## Convenciones de trabajo
 
@@ -124,7 +135,16 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 
 ```
 src/onto_pipeline/
-  cli.py            todos los comandos (Typer). Grande a propósito: una etapa, un comando
+  services/         **los cuerpos de las etapas, sin interfaz.** Una etapa, una función; recibe
+                    una Session, devuelve un resultado tipado, y no importa typer ni rich
+    session.py      config + almacén + versión + modelo; StageError
+    prep.py         PREP: ingesta, semilla, glosas, alineación, CQ
+    iterate.py      ITER: menciones, tipado, puentes, clases, axiomas, ramas, validación
+    evaluate.py     EVAL: parada, CQ, retención, calibración, ajuste
+    deliver.py      DELIVERABLES: diff, DAG, telemetría y `export`
+  render.py         cómo se ve cada resultado. Compartido por las dos interfaces
+  cli.py            la interfaz de banderas: leer, llamar a un servicio, renderizar
+  wizard.py         la interfaz guiada: el mismo plan, preguntando en vez de frenar
   config.py         la superficie de configuración; rechaza valores no implementados
   seed.py           `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
   parse.py ingest.py classify.py boilerplate.py chunking.py     corpus -> bloques -> chunks

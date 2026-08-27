@@ -57,7 +57,9 @@ Este índice existe para encontrar las cosas, no para traducirlas: **no hay cód
 | `ITER-APPLY-REGENERATE` | Recomputa el ABox desde las menciones | `regenerate` |
 
 Sin sección propia en el spec, pero son comandos: `chunk` (agrupa bloques sin partir tablas),
-`next` (qué corresponde correr), `alignment` (¿el corpus habla de lo que la ontología nombra?).
+`next` (qué corresponde correr), `wizard` (la ruta guiada: te pregunta en cada punto de decisión
+en vez de frenar), `export` (la ontología terminada, con toda la historia aplicada), `alignment`
+(¿el corpus habla de lo que la ontología nombra?).
 
 ### El resto del diseño
 
@@ -164,8 +166,10 @@ existe para que no se pierdan entre las entradas.
 | Conflictos fácticos (`ITER-CONFLICTS`) | listo (`conflicts`, `mark`) |
 | Propiedades funcionales (`ITER-APPLY`) | listo (`functional`); sin propiedades que mirar todavía |
 | Criterios de parada (`EVAL-STOPPING`) | listo (`stop`); los cuatro |
-| Guía de iteración | listo (`next`); no ejecuta, ver deuda |
+| Guía de iteración | listo (`next`); corre una etapa con `--run` y nunca cruza una decisión |
+| Sesión interactiva | listo (`wizard`); qué cubre y qué falta, en `DEBT-WIZARD-COVERAGE` |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
+| Entrega de la ontología terminada | listo (`export`); TBox + ABox + manifiesto de procedencia |
 
 
 ```mermaid
@@ -232,11 +236,12 @@ implementado, que hoy son el ajuste del matcher y la mitad que falta del registr
 —extraído, correferido, tipado, puenteado, inducido, axiomatizado, validado por siete filtros y
 ramificado— y la semilla hasta una TBox normalizada, glosada y enriquecida desde el corpus.
 
-**No hay sesión interactiva.** Hoy esto es un CLI de comandos discretos. El spec tiene varios
-puntos donde el usuario decide —elegir rama (`ITER-BRANCH`), zona gris del matcher (`ITER-MATCH`), pregunta por
-propiedad funcional (`ITER-APPLY`), validación de CQ (`PREP-CQ-GENERATED`), revisión de erratas en bloque (`PREP-NORMALIZE`)— y
-ninguno tiene interfaz todavía. Lo que sí existe es la maquinaria que **produce** esas
-preguntas: quedan en archivos JSON bajo `data/review/` y en los objetos `Decision` de `ITER-MATCH`.
+**Hay dos interfaces sobre el mismo pipeline.** El CLI de banderas —un comando por etapa, que
+es lo que documenta la sección Uso— y `wizard`, que recorre el plan preguntando en cada punto de
+decisión en vez de frenar ante él. Las dos llaman a las mismas funciones: los cuerpos de las
+etapas viven en `services/`, no en ninguna de las dos interfaces, y hay un test que fija que
+ningún servicio importe `typer` ni `rich`. Qué cubre el wizard y qué le falta está en
+[`DEBT-WIZARD-COVERAGE`](DEUDA_TECNICA.md).
 
 ## Instalación
 
@@ -266,7 +271,7 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
-  calibration_root: ../../calibration    # pares de calibración; ver la sección 9 de Uso
+  calibration_root: ../../calibration    # pares de calibración; ver Calibración, en Uso
 ```
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
@@ -316,7 +321,8 @@ sus constantes no se pueden calibrar con ningún experimento.
 `--env-file` es una opción global y va **antes** del subcomando.
 
 Cada comando es una etapa discreta que deja su salida en disco; el siguiente la levanta de ahí.
-No hay estado en memoria entre comandos.
+No hay estado en memoria entre comandos. **`wizard` es la otra puerta a lo mismo** —abajo—: no
+reimplementa ninguna etapa, llama a estas mismas funciones y agrega el diálogo.
 
 ```mermaid
 flowchart LR
@@ -329,6 +335,7 @@ flowchart LR
     r["report"]
     a["hold-out · annotate · export-annotations"]
     s["versions · status"]
+    e["export"]
   end
 
   db[("pipeline.sqlite3<br/>blocks · documents · mentions<br/>work_units · decisions · versions · CQs")]
@@ -338,6 +345,7 @@ flowchart LR
   rv[/"data/review/seed_review.json"/]
   rp[/"data/reports/ · `DELIVERABLES-PENDING-PARSER-EVAL`"/]
   an[/"data/annotate/ · data/brat/"/]
+  ex[/"ontología terminada + manifiesto"/]
   di["diagnóstico: perfil · ELK · HermiT · métricas"]
   pr["tasa de aprobación por iteración"]
 
@@ -356,11 +364,50 @@ flowchart LR
   db --> a --> an
   md --> a
   db --> s
+  db --> e --> ex
 
   classDef store fill:#e6e8eb,stroke:#6b7280,color:#1f2937
-  class db,md,as,on,rv,rp,an store
+  class db,md,as,on,rv,rp,an,ex store
 ```
 
+
+### La ruta guiada — `wizard`
+
+```bash
+uv run onto-pipeline wizard
+uv run onto-pipeline wizard --corpus ../otro/corpus --seed-ontology ../otra.owl
+uv run onto-pipeline wizard --run-env-file opencode.env
+```
+
+No es un paso de la secuencia que sigue: es la secuencia entera, con alguien a quien
+preguntarle. `next` contesta qué corresponde hacer y **frena** cuando lo siguiente es una
+decisión tuya, porque cruzarla sería decidirla por default. `wizard` contesta la misma pregunta
+y, en vez de frenar, la hace.
+
+Qué hace, en orden:
+
+1. **Confirma la configuración** y dice que toda clave que el archivo no defina toma su default.
+2. **Pregunta el par (corpus, semilla) siempre**, aunque el archivo lo tenga: qué par se usa es
+   un parámetro de la corrida, no una decisión de configuración. Que hoy viva en `CONFIG` es
+   deuda — [`DEBT-RUN-PARAMETERS`](DEUDA_TECNICA.md).
+3. **Normaliza la semilla** si todavía no hay ninguna versión, y ofrece escribir las glosas que
+   falten.
+4. **Recorre el plan** de `next` etapa por etapa: corre lo que se corre solo, pregunta en los
+   puntos de decisión, y dice por qué no corre lo que está bloqueado.
+5. **Ofrece la entrega** (`export`) al final.
+
+Tres cosas que no hace, y las tres a propósito:
+
+- **No arranca una etapa que llama al modelo sin decírtelo y esperar un sí.** Una corrida de
+  horas empezada por un Enter distraído es exactamente lo que no puede pasar.
+- **No inventa una respuesta cuando salteás una pregunta.** Saltear deja el punto abierto y las
+  etapas que dependían de él siguen bloqueadas, que es la verdad. «Ninguna» sí es una respuesta
+  —la mención se vuelve huérfana y la ve la inducción— y va al almacén como tal.
+- **No reimplementa ninguna etapa.** Todo lo que corre son las funciones de `services/`, las
+  mismas que corren los comandos de abajo.
+
+Cortarlo a la mitad y volver mañana es lo normal: el estado vive en el almacén, no en la
+sesión.
 
 ### 1. Ingesta del corpus (`PREP-CLASSIFY` + `PREP-PARSE`)
 
@@ -434,6 +481,9 @@ uv run onto-pipeline next --run --run-env-file opencode.env  # si la etapa neces
 nada y sale con error: cruzarlo sería decidirlo por default. Lo ejecuta como subproceso —el mismo
 comando que imprime— así que la salida, los errores y el código de retorno son los del comando,
 no una reimplementación.
+
+**`wizard` es la otra respuesta a esta misma pregunta**: en vez de frenar ante la decisión, te la
+hace. Ver «La ruta guiada», arriba.
 
 ### 4. Iteración sobre el corpus (`ITER-EXTRACT` → `ITER-INDUCE`)
 
@@ -852,7 +902,38 @@ conviene saber al leer la salida:
 La versión queda estampada con el hash de las reglas que produjeron su ABox, así que re-correr
 con las mismas reglas no hace nada y lo dice.
 
-### 12. Inspección
+### 12. La ontología terminada (`export`)
+
+```bash
+uv run onto-pipeline export                          # la versión más nueva
+uv run onto-pipeline export --version v7 --out out.trig
+uv run onto-pipeline export --tbox-only --format ttl
+```
+
+Lo que se entrega. Hasta acá la ontología estaba partida en dos: la TBox versionada vive en
+SQLite —cada versión guarda su Turtle entero— y el ABox en `data/ontology/<versión>.abox.trig`.
+`export` junta las dos mitades en un archivo.
+
+**Qué quiere decir «aplicar toda la historia».** No hay deltas que reproducir: la cabeza de un
+linaje ya *es* la acumulación de todo lo que se aplicó para llegar hasta ella. Lo que agrega el
+comando es recorrer el linaje para poder decir **qué aportó cada iteración** —cuántos axiomas
+agregó, cuántos sacó, cuántas anotaciones cambió— y eso va en la tabla que imprime y en el
+manifiesto que escribe al lado.
+
+**El ABox se regenera antes de exportar.** Es función pura de (menciones, tipados, reglas), así
+que ponerlo al día no llama al modelo ni al razonador y no puede sorprender a nadie; exportar
+uno viejo, en cambio, entrega instancias que no corresponden a la TBox que va en el mismo
+archivo. `--no-refresh-abox` lo desactiva.
+
+**La procedencia va afuera de la ontología, en un manifiesto JSON.** Escribirla adentro pediría
+propiedades de anotación que la semilla no declara, y eso saca la ontología de OWL 2 DL sin dar
+ningún error: el síntoma sería ELK salteándose en silencio (`seed.DECLARED_ANNOTATIONS`). Hay un
+test que fija que el export no escriba ninguna.
+
+`--format trig` —el default— conserva la procedencia por documento en grafos con nombre.
+`--format ttl` la aplana y **lo dice**: perderla está permitido, perderla en silencio no.
+
+### 13. Inspección
 
 ```bash
 uv run onto-pipeline report                 # `DELIVERABLES-PENDING-PARSER-EVAL`: HTML por documento
@@ -880,7 +961,7 @@ el render de cada página al lado de lo que el parser entendió, mostrando clase
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
 
-### 13. Ajustar el matcher (`ITER-TUNE`)
+### 14. Ajustar el matcher (`ITER-TUNE`)
 
 ```bash
 uv run onto-pipeline tune craft-cl --out data/models/reranker-craft
@@ -919,7 +1000,7 @@ Tres cosas de método, porque sin ellas el número no significa nada:
 Para usarlo: apuntar `matching.cross_encoder` al directorio guardado y poner
 `use_cross_encoder: true`.
 
-### 14. Conjunto de retención
+### 15. Conjunto de retención
 
 Son 5–10 documentos anotados por vos que **nunca entran al proceso** (`EVAL-PIPELINE`). Sirven para medir
 la tasa de falsos huérfanos, que es lo que gobierna el punto de decisión no-go de `BUILD-NO-GO-GATE`.
@@ -983,7 +1064,7 @@ desalinear en silencio.
 El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
-### 15. Calibración contra un corpus publicado
+### 16. Calibración contra un corpus publicado
 
 El conjunto de retención mide un par anotado a mano, documento por documento. Para fijar los
 umbrales hace falta otra cosa: un corpus **ya** anotado contra una ontología, donde `in_seed` es

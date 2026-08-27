@@ -520,20 +520,56 @@ números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md
 
 ## Alcance pendiente del spec
 
-### DEBT-INTERACTIVE-SESSION — Sesión interactiva
+### DEBT-INTERACTIVE-SESSION — Sesión interactiva — RESUELTA, y lo que dejó abierto
 
-El spec tiene cinco puntos donde decide el usuario —elegir rama (`ITER-BRANCH`), zona gris del matcher
-(`ITER-MATCH`), propiedad funcional (`ITER-APPLY`), validación de CQ (`PREP-CQ-GENERATED`), revisión de erratas (`PREP-NORMALIZE`)— y los
-cinco tienen ahora por dónde contestarse: `branch --choose`, `grey answer`, `functional
---declare`, `cq`, `review resolve`. Las decisiones sobreviven a re-correr en los cinco casos.
+**Cerrada el 2026-09-10** con `wizard`, la segunda interfaz. Los cinco puntos de decisión del
+spec —rama (`ITER-BRANCH`), zona gris (`ITER-MATCH`), propiedad funcional (`ITER-APPLY`),
+validación de CQ (`PREP-CQ-GENERATED`), errata de la semilla (`PREP-NORMALIZE`)— ya tenían por
+dónde contestarse desde el CLI de banderas; lo que faltaba era una interfaz encima, y ahora
+está: `wizard` recorre el plan de `orchestration.survey`, corre lo que se corre solo y pregunta
+en cada punto en vez de frenar.
 
-Lo que falta es **una interfaz encima**, no la maquinaria. Contestar 219 pares de zona gris de a
-uno por CLI es correcto y es tedioso; el anotador de navegador del conjunto de retención ya
-demuestra que la forma existe, y aplicarla acá es trabajo conocido. Y falta que `next` pueda
-ejecutar la etapa siguiente además de nombrarla — ver `DEBT-NEXT-RUNS`.
+Lo que la hizo posible fue partir `cli.py` en `services/` + `render.py`: mientras el cuerpo de
+cada etapa estuvo pegado a Typer, cualquier segunda interfaz era una copia. El contrato de la
+capa está en `services/__init__.py` y hay un test que fija su invariante — **ningún servicio
+importa `typer` ni `rich`**.
 
-Cuando exista, `review_items` también es donde viven las excepciones por caso de las reglas de
-mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
+`review_items` sigue siendo donde viven las excepciones por caso de las reglas de mapeo — ver
+[`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
+
+Lo que queda abierto es `DEBT-WIZARD-COVERAGE`, abajo.
+
+### DEBT-WIZARD-COVERAGE — Lo que el wizard todavía no pregunta
+
+El wizard cubre los tres puntos que `orchestration.survey` reporta como decisiones —zona gris,
+rama y la cola de `review`— y ofrece la entrega al final. Tres cosas quedaron afuera, y ninguna
+por accidente:
+
+- **`functional --declare`.** El wizard muestra las candidatas a propiedad funcional a través de
+  `review`, pero contestar «sí, es funcional» sin ver primero qué individuos fusionaría sería
+  exactamente el error que esa etapa existe para hacer ruidoso. Meterlo bien es dos preguntas
+  encadenadas —mostrar la fusión, después confirmar— y hoy hay una sola.
+- **Las CQ.** `cq propose` y `cq import` no están en el plan del survey, así que el wizard no
+  llega a ofrecerlas. Aceptar una CQ propuesta es el cuarto punto de decisión del spec y hoy se
+  contesta sólo por `cq accept`.
+- **La cola larga.** 131 pares de zona gris de a uno es mejor que por CLI y sigue siendo
+  tedioso. El anotador de navegador del conjunto de retención ya demuestra que la forma existe;
+  aplicarla a la zona gris es trabajo conocido, y es lo que además destraba `ITER-TUNE`, que
+  está bloqueado por falta de pares contestados y no por falta de código.
+
+### DEBT-RUN-PARAMETERS — El par (corpus, semilla) es un parámetro, y vive en la configuración
+
+`paths.corpus_root` y `paths.seed_ontology` están en `config/default.yaml`, junto a los
+umbrales. No son la misma clase de cosa: un umbral es una decisión sobre **cómo** se comporta
+el pipeline y el par es **sobre qué** corre, y todos los pares son instrumentos
+(`SCOPE-PURPOSE`). Correr el mismo pipeline sobre dos pares hoy pide dos archivos de
+configuración que difieren en dos líneas.
+
+Como paliativo, `wizard` pregunta el par siempre —aunque el archivo lo tenga— y
+`Session.open()` acepta sobreescrituras. Eso resuelve el síntoma, no la forma: la superficie
+correcta probablemente sea un `--pair`, con los pares descritos como los de calibración (un
+directorio con su `pair.yml`, ver `../calibration/README.md`). Queda para discutir antes de
+tocarlo, porque cambia `CONFIG` del spec.
 
 ### DEBT-OPEN-WORLD — Mundo abierto: lo que falta
 
