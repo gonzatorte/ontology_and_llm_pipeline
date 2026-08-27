@@ -82,7 +82,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 |---|---|---|---|
 | ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [hallazgo 1.12](HALLAZGOS.md) |
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
-| 3 | **Unificar el registro de decisiones** en una sola tabla | Hoy hay dos y se usa la que menos guarda; es barato y desbloquea el resto de esa entrada | [deuda 20](DEUDA_TECNICA.md) |
+| ~~3~~ | ~~Unificar el registro de decisiones~~ — **hecho**: una tabla, seis categorías fijas, `invalid` separado de `rejected`. Falta llevar los precedentes al prompt | Lo rechazado no está en ningún otro lado | [deuda 20](DEUDA_TECNICA.md) |
 | 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
 | 5 | **Terminar C8**: correr el pipeline entero sobre un par publicado. La ingesta ya está | Primera vez que se mediría algo posterior al tipado contra una respuesta conocida | [plan](plan_cambio_corpus_calibracion.md) |
 | ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
@@ -114,7 +114,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
 | Ajuste del matcher · LoRA (§6.3) | **no implementado** — bloqueado por datos, no por código; ver deuda 8i |
-| Registro de decisiones (§6.7) | **a medias**: se graban los rechazos; falta el esquema D9, la recuperación de precedentes y la forma normal. Ver deuda 20 |
+| Registro de decisiones (§6.7) | **a medias**: esquema D9 completo y consultable; falta inyectar los precedentes en el prompt y la forma normal. Ver deuda 20 |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |
 | Propiedades funcionales (§6.8) | listo (`functional`); sin propiedades que mirar todavía |
@@ -479,6 +479,11 @@ Cada rama trae su puntaje —cobertura de huérfanas, costo de reorganización, 
 regeneración del ABox— y el hash del estado que produciría, así que una rama que vuelve a una
 versión ya visitada te lo avisa antes de elegirla. La afinidad histórica llega vacía hasta que
 haya algo decidido: es el cold start de §11, reportado como ausente y no como cero.
+
+`--invalid <rama>` marca una hermana que además de no elegida está **mal**. Es la distinción que
+§6.7 pide y que colapsada se pierde: "elegí otra" y "esto no puede ser" son señales de fuerza
+distinta, y sólo la segunda sirve para descartar de entrada una propuesta parecida. Pesa el doble
+en la afinidad histórica.
 
 Elegir una rama es lo que **graba los rechazos**. Lo aceptado ya está en la ontología; lo
 rechazado no está en ningún otro lado, y es lo que una iteración posterior lee para no volver a

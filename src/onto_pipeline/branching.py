@@ -49,6 +49,35 @@ KIND_MODELLING = "modelling"
 PROPOSED = "proposed"
 CHOSEN = "chosen"
 REJECTED = "rejected"
+# La cuarta del esquema D9 (§6.7), y la que hace que el registro sirva: separa la señal fuerte
+# —"esto está mal"— del rechazo blando —"elegí otra"—. Colapsadas, se pierde.
+INVALID = "invalid"
+SETTLED = (CHOSEN, REJECTED, INVALID)
+
+# Las seis categorías fijas de §6.7. El eje detectado es específico de la iteración
+# (`attribute_as_class:6c6b32f28f86`); esto es lo que hace comparables dos decisiones de
+# iteraciones distintas, que es para lo que el historial existe.
+GRANULARITY = "granularity"
+DIVISION_CRITERION = "division_criterion"
+PROPERTY_VS_CLASS = "property_vs_class"
+DIRECTIONALITY = "directionality"
+SCOPE = "scope"
+TERMINOLOGY = "terminology"
+CATEGORIES = (GRANULARITY, DIVISION_CRITERION, PROPERTY_VS_CLASS, DIRECTIONALITY, SCOPE,
+              TERMINOLOGY)
+
+# Cada detector del catálogo y el eje lógico del que es un caso. Un eje que no esté acá cae en
+# `scope`, que es el cajón honesto: mejor una categoría genérica que inventarle una precisa.
+_CATEGORY_OF = {
+    "attribute_as_class": PROPERTY_VS_CLASS,
+    "division_criterion": DIVISION_CRITERION,
+    "conflict": SCOPE,
+}
+
+
+def category_of(axis_id: str) -> str:
+    """La categoría fija a la que pertenece un eje detectado."""
+    return _CATEGORY_OF.get(axis_id.split(":", 1)[0].rstrip("0123456789_"), SCOPE)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS branches (
@@ -668,6 +697,8 @@ def _name(axiom_id: str, axioms: Sequence[Axiom], labels: dict[str, str]) -> str
 
 
 def install(conn: sqlite3.Connection) -> None:
+    """`branches` es de este módulo; `decisions` la crea `db.connect`, porque es el registro
+    de §6.7 y no una tabla de la etapa de ramas."""
     conn.executescript(SCHEMA)
     conn.commit()
 
@@ -741,25 +772,92 @@ def find(conn: sqlite3.Connection, branch_id: str) -> dict | None:
     return dict(row) if row else None
 
 
-def settle(conn: sqlite3.Connection, branch_id: str, *, note: str = "") -> dict:
-    """Mark one branch chosen and its siblings rejected.
+def settle(
+    conn: sqlite3.Connection, branch_id: str, *, note: str = "",
+    invalid: Sequence[str] = (), state_hash: str = "",
+) -> dict:
+    """Elegir una rama, y grabar la decisión en `decisions`, que es el registro de §6.7.
 
-    The rejections are the point. What was accepted is in the ontology already; what was
-    rejected exists nowhere else, and it is what a later iteration needs in order not to
-    propose the same thing again (spec 6.7).
+    Los rechazos son el punto. Lo aceptado ya está en la ontología; lo rechazado no está en
+    ningún otro lado, y es lo que una iteración posterior necesita para no volver a proponer lo
+    mismo.
+
+    `invalid` nombra hermanas que además de no elegidas están **mal**. Es la distinción que D9
+    pide y que colapsada se pierde: "elegí otra" y "esto no puede ser" son señales de fuerza
+    distinta, y sólo la segunda sirve para descartar de entrada una propuesta parecida.
     """
     install(conn)
     row = conn.execute("SELECT * FROM branches WHERE id = ?", (branch_id,)).fetchone()
     if row is None:
         raise KeyError(f"no branch {branch_id!r}")
-    conn.execute(
-        "UPDATE branches SET status = ? WHERE version_id = ? AND decision_id = ? AND id != ?",
-        (REJECTED, row["version_id"], row["decision_id"], branch_id),
-    )
+    invalid = set(invalid)
+
+    siblings = [
+        dict(other) for other in conn.execute(
+            "SELECT * FROM branches WHERE version_id = ? AND decision_id = ? AND id != ?",
+            (row["version_id"], row["decision_id"], branch_id),
+        )
+    ]
+    for other in siblings:
+        conn.execute(
+            "UPDATE branches SET status = ? WHERE id = ?",
+            (INVALID if other["id"] in invalid else REJECTED, other["id"]),
+        )
     conn.execute("UPDATE branches SET status = ?, note = ? WHERE id = ?",
                  (CHOSEN, note or row["note"] or "", branch_id))
+
+    chosen = dict(row) | {"status": CHOSEN, "note": note or row["note"] or ""}
+    _record(conn, chosen, CHOSEN, state_hash)
+    for other in siblings:
+        _record(conn, other, INVALID if other["id"] in invalid else REJECTED, state_hash)
     conn.commit()
     return dict(row)
+
+
+def _record(conn: sqlite3.Connection, branch: dict, status: str, state_hash: str) -> None:
+    """Una fila por (rama, eje) en `decisions`, el esquema D9.
+
+    Una fila por eje y no por rama: el historial se consulta por categoría —"¿qué se decidió
+    antes sobre granularidad?"— y una rama con dos ejes acoplados responde a dos preguntas.
+    """
+    entries = json.loads(branch["axes"]) or [{"axis": "", "option": ""}]
+    for entry in entries:
+        conn.execute(
+            "INSERT OR REPLACE INTO decisions (id, iteration, branch_id, status, axis, "
+            "comment, normalized_axioms, ontology_state, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                f"{branch['id']}:{entry['axis']}",
+                branch["iteration"],
+                branch["id"],
+                status,
+                category_of(entry["axis"]),
+                branch["note"] or "",
+                branch["add_axioms"],
+                state_hash or branch["state_hash"] or "",
+                _now(),
+            ),
+        )
+
+
+def precedents(
+    conn: sqlite3.Connection, category: str, *, limit: int = 5
+) -> list[dict]:
+    """Las decisiones anteriores sobre esta categoría, la más reciente primero.
+
+    Es lo que §6.7 quiere hacer con el registro: ante una propuesta nueva, traer los casos
+    parecidos y mostrárselos al modelo con el comentario del usuario. El spec elige esto sobre
+    el fine-tuning por volumen —decenas de decisiones no ajustan nada— y por algo mejor: es
+    **inspeccionable**, se puede ver qué precedentes se usaron.
+    """
+    install(conn)
+    return [
+        dict(row) for row in conn.execute(
+            "SELECT * FROM decisions WHERE axis = ? ORDER BY created_at DESC, rowid DESC "
+            "LIMIT ?",
+            (category, limit),
+        )
+    ]
 
 
 def history(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
@@ -770,9 +868,14 @@ def history(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
     """
     install(conn)
     tally: dict[tuple[str, str], int] = {}
-    for row in conn.execute("SELECT axes, status FROM branches WHERE status IN (?, ?)",
-                            (CHOSEN, REJECTED)):
-        delta = 1 if row["status"] == CHOSEN else -1
+    weights = {CHOSEN: 1, REJECTED: -1, INVALID: -2}
+    for row in conn.execute(
+        f"SELECT axes, status FROM branches WHERE status IN ({','.join('?' * len(SETTLED))})",
+        SETTLED,
+    ):
+        # `invalid` pesa el doble que `rejected`: una es "elegí otra" y la otra "esto no puede
+        # ser", y son las dos cosas que D9 separa.
+        delta = weights[row["status"]]
         for entry in json.loads(row["axes"]):
             key = (entry["axis"], entry["option"])
             tally[key] = tally.get(key, 0) + delta

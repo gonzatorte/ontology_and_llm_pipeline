@@ -649,7 +649,22 @@ Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
 Lo que **no** arregla nada es tocar el esquema de IRIs. La identidad no es el problema; la
 desambiguación sí.
 
-### 20. El historial de feedback (§6.7) está a medias, y en dos lugares
+### 20. El historial de feedback (§6.7) — unificado; falta llevarlo al prompt
+
+> **Parcialmente resuelto el 2026-09-10.** `decisions` ya se escribe: una fila por (rama, eje)
+> con las seis categorías fijas, el estado `invalid` separado de `rejected`, el comentario y el
+> hash del estado contra el que se decidió. `branches` sigue existiendo como cola de propuestas
+> —que es su trabajo— y dejó de ser el registro. `branching.precedents(categoría)` devuelve los
+> casos anteriores.
+>
+> **Lo que falta es lo que justifica todo esto:** inyectar esos precedentes en el prompt de la
+> iteración siguiente. Hoy `precedents` no tiene llamador. Y sigue faltando la comparación por
+> forma normal: `versioning.logical_axioms` canonicaliza y `decisions.normalized_axioms` guarda
+> los ids de axioma, no la forma normal, así que el mismo compromiso vuelve con IRIs distintos y
+> no se detecta.
+
+<details>
+<summary>El diagnóstico original</summary>
 
 `branch --choose` graba qué rama se eligió y marca rechazadas a sus hermanas, que es la mitad que
 importa —lo aceptado ya está en la ontología, lo rechazado no está en ningún otro lado—. Lo que
@@ -682,9 +697,10 @@ enchufado a `decisions`, así que el mismo compromiso vuelve con IRIs distintos 
 como re-proposición. Ver también la entrada 16, que reúne las preguntas que el spec deja abiertas
 sobre este mismo aparato.
 
-Orden razonable si se retoma: unificar en `decisions` (una tabla, no dos) → mapear el eje a las
-seis categorías → recuperación por embedding → forma normal. Lo primero es barato y lo que
-desbloquea el resto.
+Orden razonable si se retoma: ~~unificar en `decisions`~~ → ~~mapear el eje a las seis
+categorías~~ → recuperación por embedding → forma normal. Los dos primeros están hechos.
+
+</details>
 
 ### 21. El hash de estado no escalaba a una ontología con axiomas de verdad — RESUELTO
 

@@ -145,6 +145,11 @@ ChooseOption = typer.Option(
     None, "--choose", help="Apply this branch. Its siblings are recorded as rejected."
 )
 WhyOption = typer.Option("", "--why", help="Why this branch, in your words. Kept with it.")
+InvalidOption = typer.Option(
+    [], "--invalid",
+    help="Repetible: hermanas que además de no elegidas están MAL. Señal más fuerte que "
+         "rechazarlas, y §6.7 las separa a propósito.",
+)
 PairOption = typer.Argument(..., help="Calibration pair: a directory under calibration_root.")
 MatchAgainstOption = typer.Option(
     [], "--match-against", "-m", help="Repeatable: label | gloss | label_and_gloss."
@@ -1651,6 +1656,7 @@ def branch_cmd(
     version: str | None = VersionOption,
     choose: str | None = ChooseOption,
     why: str = WhyOption,
+    invalid: list[str] = InvalidOption,
     apply_changes: bool = ApplyOption,
 ) -> None:
     """Find the decision axes in this iteration's proposed axioms, and put them to the user.
@@ -1677,7 +1683,8 @@ def branch_cmd(
     by_id = {axiom.id: axiom for axiom in axioms}
 
     if choose is not None:
-        _apply_branch(config, conn, version_id, graph, by_id, choose, why, apply_changes)
+        _apply_branch(config, conn, version_id, graph, by_id, choose, why, apply_changes,
+                      invalid=invalid)
         return
 
     labels = versioning.label_index(graph)
@@ -1855,7 +1862,9 @@ def _text_similarity(config):
     return similarity
 
 
-def _apply_branch(config, conn, version_id, graph, by_id, branch_id, why, apply_changes) -> None:
+def _apply_branch(
+    config, conn, version_id, graph, by_id, branch_id, why, apply_changes, invalid=()
+) -> None:
     """Commit the state a branch names, and only then settle the decision.
 
     In that order on purpose: the reasoner still gets to reject the branch, and a decision
@@ -1878,10 +1887,15 @@ def _apply_branch(config, conn, version_id, graph, by_id, branch_id, why, apply_
     if not committed:
         console.print("[yellow]decision not recorded[/]: nothing was applied")
         return
-    branching.settle(conn, branch_id, note=why)
+    branching.settle(
+        conn, branch_id, note=why, invalid=invalid,
+        state_hash=versioning.state_hash(axiomatization.apply(graph, chosen)),
+    )
     console.print(
-        f"[green]chose[/] {branch_id}. Its siblings are recorded as rejected — that record is "
-        "what a later iteration reads so it does not propose the same thing again."
+        f"[green]chose[/] {branch_id}. Its siblings are recorded as rejected"
+        + (f", {len(invalid)} of them as invalid" if invalid else "")
+        + " — that record is what a later iteration reads so it does not propose the same "
+        "thing again."
     )
 
 

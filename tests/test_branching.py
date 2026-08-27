@@ -404,3 +404,83 @@ def test_a_settled_decision_is_not_re_opened_by_proposing_again(tmp_path):
 
     assert len(br.history(conn)) == 2
     assert {row["status"] for row in br.load(conn, "v1")} == {br.CHOSEN, br.REJECTED}
+
+
+# ─────────────  el registro de decisiones (§6.7, esquema D9)  ─────────────
+
+
+def settled(tmp_path, **kwargs):
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    br.settle(conn, decision.branches[0].id, note="porque sí", **kwargs)
+    return conn, decision
+
+
+def rows(conn):
+    return [dict(row) for row in conn.execute("SELECT * FROM decisions ORDER BY status")]
+
+
+def test_choosing_writes_the_d9_record_not_only_the_branch_status(tmp_path):
+    """La tabla `decisions` estaba en el esquema con cero filas mientras `branches` guardaba una
+    copia más pobre. Una sola."""
+    conn, _ = settled(tmp_path)
+    assert len(rows(conn)) == 2
+    assert {row["status"] for row in rows(conn)} == {br.CHOSEN, br.REJECTED}
+
+
+def test_invalid_is_a_different_signal_from_rejected(tmp_path):
+    """"Elegí otra" y "esto no puede ser" son señales de fuerza distinta; colapsadas se pierde
+    la segunda, que es la que sirve para descartar de entrada."""
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    br.settle(conn, decision.branches[0].id, invalid=[decision.branches[1].id])
+    assert {row["status"] for row in rows(conn)} == {br.CHOSEN, br.INVALID}
+
+
+def test_an_invalid_weighs_more_against_its_option_than_a_rejection(tmp_path):
+    plain = settled(tmp_path / "a")[0]
+    strong = connect(tmp_path / "b")
+    decision = stored_decision()
+    br.persist(strong, "v1", [decision])
+    br.settle(strong, decision.branches[0].id, invalid=[decision.branches[1].id])
+    assert min(br.history(strong).values()) < min(br.history(plain).values())
+
+
+def test_the_axis_is_recorded_as_one_of_the_six_fixed_categories(tmp_path):
+    """El eje detectado es de la iteración (`attribute_as_class:6c6b32…`); la categoría fija es
+    lo que hace comparables dos decisiones de iteraciones distintas."""
+    conn, _ = settled(tmp_path)
+    assert {row["axis"] for row in rows(conn)} == {br.DIVISION_CRITERION}
+    assert br.DIVISION_CRITERION in br.CATEGORIES
+
+
+def test_an_unknown_axis_lands_in_a_generic_category_not_an_invented_one():
+    assert br.category_of("algo_que_no_existe:abc") == br.SCOPE
+    assert br.category_of("attribute_as_class:6c6b") == br.PROPERTY_VS_CLASS
+
+
+def test_the_comment_travels_with_the_decision(tmp_path):
+    """§6.7 dice que es el campo que más rinde en recuperación."""
+    conn, _ = settled(tmp_path)
+    assert any(row["comment"] == "porque sí" for row in rows(conn))
+
+
+def test_precedents_come_back_by_category(tmp_path):
+    conn, _ = settled(tmp_path)
+    found = br.precedents(conn, br.DIVISION_CRITERION)
+    assert len(found) == 2
+    assert br.precedents(conn, br.TERMINOLOGY) == []
+
+
+def test_precedents_are_capped(tmp_path):
+    conn, _ = settled(tmp_path)
+    assert len(br.precedents(conn, br.DIVISION_CRITERION, limit=1)) == 1
+
+
+def test_the_resulting_state_is_recorded_with_the_decision(tmp_path):
+    """Sin él no se puede saber contra qué estado de la ontología se decidió, que es lo que la
+    expiración de rechazos va a necesitar."""
+    conn, _ = settled(tmp_path, state_hash="sha256:abc")
+    assert all(row["ontology_state"] == "sha256:abc" for row in rows(conn))
