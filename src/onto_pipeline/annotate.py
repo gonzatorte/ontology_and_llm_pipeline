@@ -1,4 +1,4 @@
-"""Annotation tool for the retention set (EVAL-PIPELINE, 10.2).
+"""Annotation tool for the retention set (EVAL-PIPELINE, EVAL-ANNOTATION-FORMAT).
 
 A self-contained HTML file per held-out document, not a hosted page: it embeds the document's
 Markdown and the seed's classes, and the corpus never leaves the machine.

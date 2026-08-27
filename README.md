@@ -90,7 +90,7 @@ el pipeline completo antes de ver datos. **Los cinco pasos están dados**, con u
 | `BUILD-STEP-4` | De `ITER-AXIOMATIZE` a `ITER-VALIDATE` sin ramas, aplicación directa | **hecho** — `axiomatize` + la cadena de siete filtros |
 | `BUILD-STEP-5` | De `ITER-BRANCH` a `ITER-APPLY-REGENERATE`: ramas, scoring, DAG completo | **hecho** — `branch`, `versions`, `diff` |
 
-**Sobre la compuerta no-go del paso 3 (`BUILD-NO-GO-GATE`).** El spec dice: si la tasa de falsos huérfanos es
+**Sobre `BUILD-NO-GO-GATE`, entre `BUILD-STEP-3` y `BUILD-STEP-4`.** El spec dice: si la tasa de falsos huérfanos es
 alta, no seguir construyendo, porque cada falso huérfano se vuelve una clase espuria en la
 inducción y con multi-rama se estaría eligiendo entre variantes de ruido. Eso está escrito
 suponiendo un dominio objetivo, y **este proyecto no tiene uno**: el entregable es el sistema y su
@@ -152,11 +152,11 @@ existe para que no se pierdan entre las entradas.
 | `ITER-INDUCE` inducción de clases | listo (`induce`) |
 | `ITER-AXIOMATIZE` axiomatización | listo (`axiomatize`) |
 | `ITER-AXIOMATIZE-ENRICH` enriquecimiento de glosas | listo (`enrich`, `circular`) |
-| `ITER-VALIDATE` filtros 1, 2, 7 (ELK, HermiT, estructurales) | listo |
-| `ITER-VALIDATE` filtro 3 (SHACL) | listo (`--extra validation`); las shapes se escriben a mano |
-| `ITER-VALIDATE` filtro 4 (OntoClean) | listo (`metaproperties` + `validate`) |
-| `ITER-VALIDATE` filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
-| `ITER-VALIDATE` filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
+| `ITER-VALIDATE-1-ELK`, `ITER-VALIDATE-2-HERMIT`, `ITER-VALIDATE-7-STRUCTURE` | listo |
+| `ITER-VALIDATE` ITER-VALIDATE-3-SHACL (SHACL) | listo (`--extra validation`); las shapes se escriben a mano |
+| `ITER-VALIDATE` ITER-VALIDATE-4-ONTOCLEAN (OntoClean) | listo (`metaproperties` + `validate`) |
+| `ITER-VALIDATE` ITER-VALIDATE-5-PITFALLS (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
+| `ITER-VALIDATE` ITER-VALIDATE-6-EVIDENCE (evidencia textual) | listo; sólo para procedencia `textual` |
 | `ITER-BRANCH` construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
 | Ajuste del matcher (`ITER-TUNE`) | listo (`tune`), completo o LoRA según el tamaño del modelo |
 | Registro de decisiones (`ITER-FEEDBACK`) | **a medias**: esquema `GRADED-FEEDBACK` completo y consultable; falta inyectar los precedentes en el prompt y la forma normal. Ver `DEBT-FEEDBACK-HISTORY` |
@@ -659,11 +659,11 @@ un axioma individual (`BRANCH-ONLY-REVIEW`): ve ramas, y la cadena decide qué e
 
 Tres cosas de la cadena que no son obvias:
 
-- **El filtro 6 se aplica a una procedencia y no a la otra.** La regla "todo axioma sin cita se
+- **El ITER-VALIDATE-6-EVIDENCE se aplica a una procedencia y no a la otra.** La regla "todo axioma sin cita se
   descarta" borraría justamente los puentes que hacen útil a la semilla: un axioma
   `world_knowledge` no tiene cita por construcción (`ITER-BRIDGE`), y eso es para lo que existe.
   Aplicárselo no es una política más estricta, es otra y equivocada.
-- **El filtro 5 nunca rechaza.** Un pitfall es un olor —una clase sin definición, una propiedad
+- **El ITER-VALIDATE-5-PITFALLS nunca rechaza.** Un pitfall es un olor —una clase sin definición, una propiedad
   sin dominio, un ciclo en la jerarquía— y algunos son deliberados. Lo que hay implementado es
   un **subconjunto local del catálogo OOPS!**, no OOPS!: el scanner real es un servicio web, y
   mandarle la ontología de alguien a un tercero es una decisión de su dueño, no un paso que un
@@ -674,7 +674,7 @@ Tres cosas de la cadena que no son obvias:
   que es exactamente la lectura de mundo cerrado que este proyecto no está haciendo. Sin shapes
   el filtro reporta que **no corrió**, que no es lo mismo que pasar.
 
-#### OntoClean (filtro 4)
+#### `ITER-VALIDATE-4-ONTOCLEAN`
 
 ```bash
 uv run onto-pipeline --env-file opencode.env metaproperties   # etiquetar las clases
@@ -703,7 +703,7 @@ Es la parte más débil de la cadena y el spec lo dice: con ontología superior 
 se heredan; sin ella las etiqueta el LLM, que es "factible, menos confiable, y trabajo adicional
 que contradice parcialmente `BRANCH-ONLY-REVIEW`".
 
-Instalación del filtro 3: `uv sync --extra validation`.
+Instalación de `ITER-VALIDATE-3-SHACL`: `uv sync --extra validation`.
 
 Perfil OWL, ELK, HermiT con justificaciones, y métricas estructurales.
 
@@ -875,7 +875,7 @@ Cada comando que commitea una versión lo emite solo: además de la ontología e
 diff contra la versión inmediatamente anterior del DAG. Una versión raíz lo dice y no genera
 archivo.
 
-El **reporte `DELIVERABLES-PENDING-PARSER-EVAL`** es el criterio de avance del paso 1: un HTML autocontenido por documento con
+El **reporte `DELIVERABLES-PENDING-PARSER-EVAL`** es el criterio de avance de `BUILD-STEP-1`: un HTML autocontenido por documento con
 el render de cada página al lado de lo que el parser entendió, mostrando clase de página con
 sus señales, tipo de bloque, bbox, idioma y span en el Markdown. Los bloques que el filtro de
 boilerplate descartó aparecen atenuados.
@@ -936,7 +936,7 @@ Markdown que produce `PREP-PARSE`, así que sin parsear no hay a qué anclarlos.
 diferencia; sin esa marca el conjunto se filtra a `ITER-EXTRACT` y la evaluación mediría el pipeline contra
 su propio insumo. La marca sobrevive a una re-ingesta.
 
-**La herramienta de anotación** (paso 3) es un HTML autocontenido por documento en
+**La herramienta de anotación** (`BUILD-STEP-3`) es un HTML autocontenido por documento en
 `data/annotate/`. Se abre en el navegador —el corpus no sale de tu máquina— y tiene tres
 acciones: seleccionar texto y elegir una clase de la semilla, escribir una clase que la semilla
 no tiene, o marcar la mención como válida sin clase asignable.
@@ -968,7 +968,7 @@ flowchart TB
   HIT --> RATE
   RATE --> GATE{"`BUILD-NO-GO-GATE`"}
   GATE -->|"alta"| STOP["no seguir construyendo:<br/>arreglar el matcher primero"]
-  GATE -->|"aceptable"| GO2["seguir al paso 4"]
+  GATE -->|"aceptable"| GO2["seguir a BUILD-STEP-4"]
 
   classDef bad fill:#fbdcdc,stroke:#c53030,color:#4d1414
   classDef good fill:#d7f2dc,stroke:#2f855a,color:#1a3c26

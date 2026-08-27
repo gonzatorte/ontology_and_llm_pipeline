@@ -1,4 +1,5 @@
-"""ITER-AXIOMATIZE-ENRICH — gloss enrichment from definitional passages (ITER-AXIOMATIZE, 4.3).
+"""ITER-AXIOMATIZE-ENRICH — gloss enrichment from definitional passages
+(ITER-AXIOMATIZE, PREP-NORMALIZE).
 
 A gloss is not a fixed value of PREP-NORMALIZE. It is bootstrapped from the structural
 neighbourhood, and

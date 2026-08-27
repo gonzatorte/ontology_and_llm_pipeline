@@ -311,7 +311,7 @@ llm:
   iter_axiomatize:  {tier: large,  temperature: 0.7}
   iter_axiomatize_enrich:     {tier: medium, temperature: 0.3}
   # Metapropiedades de OntoClean. Temperatura 0: no es una pregunta creativa, y la misma clase
-  # tiene que dar la misma respuesta en dos corridas o el filtro 4 deja de ser determinista.
+  # tiene que dar la misma respuesta en dos corridas o el ITER-VALIDATE-4-ONTOCLEAN deja de ser determinista.
   iter_validate_ontoclean:       {tier: large,  temperature: 0.0}
   iter_branch:       {tier: large,  temperature: 0.3}
   regeneration_retry: {tier: large,  temperature: 0.7}

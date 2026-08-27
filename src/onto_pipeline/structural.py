@@ -1,4 +1,4 @@
-"""ITER-VALIDATE filter 7 — structural metrics over the TBox (ITER-BRANCH).
+"""ITER-VALIDATE-7-STRUCTURE — structural metrics over the TBox.
 
 Rejection, not warning. Two of these also intercept a known bias of the generator rather than
 merely describing the ontology (ITER-EXTRACT): a model over-generates hierarchy, so a level with a

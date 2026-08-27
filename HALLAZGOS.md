@@ -463,7 +463,7 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
 - **El filtro de evidencia se aplica a `textual` y a nada más.** "Todo axioma sin cita se descarta"
   borraría justamente los puentes que hacen útil a la semilla: un axioma `world_knowledge` no
   tiene cita por construcción, y eso es para lo que existe.
-- **El filtro 5 es un subconjunto local del catálogo OOPS!, no OOPS!.** El scanner real es un
+- **El ITER-VALIDATE-5-PITFALLS es un subconjunto local del catálogo OOPS!, no OOPS!.** El scanner real es un
   servicio web, y mandarle la ontología de alguien a un tercero es una decisión de su dueño, no un
   paso que un pipeline dé por su cuenta. Qué pitfalls quedan afuera está en la deuda.
 - **Las shapes de SHACL se escriben a mano y no se derivan de la TBox.** OWL dice qué tiene que ser

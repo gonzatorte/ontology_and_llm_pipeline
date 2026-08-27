@@ -291,7 +291,7 @@ instrumento como la ausencia del hallazgo.
 
 ### DEBT-VALIDATION-CHAIN — La cadena `ITER-VALIDATE` está completa, y su eslabón flojo es de dónde salen las etiquetas
 
-**OntoClean (filtro 4) está, y su punto débil es de dónde salen las etiquetas.** Las cuatro
+**OntoClean (ITER-VALIDATE-4-ONTOCLEAN) está, y su punto débil es de dónde salen las etiquetas.** Las cuatro
 restricciones son mecánicas y no tienen deuda; el insumo sí. Con ontología superior las
 metapropiedades se heredan, y sin ella las etiqueta el LLM — que el propio spec reconoce como
 "factible, menos confiable, y trabajo adicional que contradice parcialmente `BRANCH-ONLY-REVIEW`". Nadie ha medido
@@ -305,7 +305,7 @@ automático tras `axiomatize` no está. Y las etiquetas viajan entre versiones a
 es correcto para un concepto estable y **equivocado si una clase cambia de significado**
 conservando el IRI — un caso que hoy nada detecta.
 
-**El filtro 5 no es OOPS!, es un subconjunto local.** Están implementados P06 (ciclos en la
+**El ITER-VALIDATE-5-PITFALLS no es OOPS!, es un subconjunto local.** Están implementados P06 (ciclos en la
 jerarquía), P08 (clase sin etiqueta o sin definición), P11 (propiedad sin dominio o sin rango),
 P19 (varios dominios, que OWL lee como intersección) y P24 (definición recursiva). Quedan afuera
 los que necesitan juicio semántico —P02 sinónimos como clases, P03 subclase donde iba instancia,
@@ -418,7 +418,7 @@ pregunta inferencial correcta sobre `Interview ⊑ Technique ⊑ Methodological 
 pasaje que anuncia las secciones del paper. La pregunta sirve; la cita no la sostiene. Verificar
 eso mecánicamente no es obvio —haría falta algo como el chequeo de solapamiento léxico entre
 pregunta y pasaje, con su propio umbral sin calibrar— así que por ahora es carga de la revisión
-humana del paso 4, y conviene que quien revise lo sepa.
+humana de `BUILD-STEP-4`, y conviene que quien revise lo sepa.
 
 Dos huecos concretos en la etapa:
 

@@ -20,7 +20,7 @@ def described(*iris) -> Graph:
     return graph
 
 
-# ─────────────────────  filter 6 — textual evidence  ─────────────────────
+# ─────────────────────  ITER-VALIDATE-6-EVIDENCE — textual evidence  ─────────────────────
 
 
 def test_a_textual_axiom_with_no_citation_is_rejected():
@@ -50,7 +50,7 @@ def test_the_filter_rejects_axioms_and_not_the_batch():
     assert kept == [good] and len(dropped) == 1
 
 
-# ─────────────────────────  filter 5 — pitfalls  ─────────────────────────
+# ─────────────────────────  ITER-VALIDATE-5-PITFALLS — pitfalls  ─────────────────────────
 
 
 def test_a_well_described_ontology_raises_nothing():
@@ -58,7 +58,8 @@ def test_a_well_described_ontology_raises_nothing():
 
 
 def test_a_pitfall_is_a_warning_and_never_a_rejection():
-    """Some of these are deliberate. The spec makes filter 5 a warning and the chain treats it
+    """Some of these are deliberate. The spec makes ITER-VALIDATE-5-PITFALLS a warning
+    and the chain treats it
     as one: it is reported and nothing is dropped."""
     graph = Graph()
     graph.add((C, RDF.type, OWL.Class))
@@ -83,7 +84,8 @@ def test_rdfs_naming_counts_as_naming():
 
 
 def test_a_cycle_in_the_hierarchy_is_reported():
-    """Filter 7 cannot see it: the depth metric stops at a repeated node rather than saying
+    """ITER-VALIDATE-7-STRUCTURE cannot see it: the depth metric stops at a repeated node
+    rather than saying
     that it repeated."""
     graph = described(C, D)
     graph.add((C, RDFS.subClassOf, D))
@@ -119,7 +121,7 @@ def test_a_class_equivalent_to_itself_is_a_recursive_definition():
     assert any("P24" in item for item in validation.pitfalls(graph).findings)
 
 
-# ─────────────────────────  filter 3 — SHACL  ─────────────────────────
+# ─────────────────────────  ITER-VALIDATE-3-SHACL — SHACL  ─────────────────────────
 
 
 def shape_requiring_a_label() -> Graph:

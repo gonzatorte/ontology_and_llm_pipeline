@@ -23,7 +23,7 @@ def answer(question: str, sparql: str = ASKS, index: int = 1, language: str = "e
     return {"question": question, "sparql": sparql, "passage": index, "language": language}
 
 
-# ─────────────────────────  step 1: the strata  ─────────────────────────
+# ─────────────────────────  PREP-CQ-GENERATED-1-SAMPLING: the strata  ─────────────────────────
 
 
 @pytest.mark.parametrize("text,stratum", [
@@ -67,7 +67,7 @@ def test_a_small_stratum_is_taken_whole():
     assert len(gen.sample(blocks, per_stratum=12)["definitions"]) == 1
 
 
-# ─────────────────────────  step 2: the prompt  ─────────────────────────
+# ─────────────────────────  PREP-CQ-GENERATED-2-DRAFT: the prompt  ─────────────────────────
 
 
 def test_the_prompt_says_what_the_type_demands_of_the_ontology():
@@ -91,7 +91,7 @@ def test_parse_refuses_an_answer_that_is_not_json():
         gen.parse("Here are some questions.", {})
 
 
-# ─────────────────────────  step 3: the mechanical filter  ─────────────────────────
+# ─────────────────────────  PREP-CQ-GENERATED-3-FILTER  ─────────────────────────
 
 
 def screen(entries, existing=(), **kwargs):

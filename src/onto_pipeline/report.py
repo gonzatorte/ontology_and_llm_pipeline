@@ -1,7 +1,8 @@
-"""T1 — manual parser evaluation report (DELIVERABLES-PENDING, step 1 of the build sequence).
+"""DELIVERABLES-PENDING-PARSER-EVAL — manual parser evaluation report, the advance
+criterion of BUILD-STEP-1.
 
 One self-contained HTML file per document: the rendered page beside what the parser made of
-it, so the advance criterion of step 1 ("visual inspection: the parse is acceptable") can
+it, so that criterion ("visual inspection: the parse is acceptable") can
 actually be exercised. Everything the parse decided is visible — page class with the signals
 that produced it, block type, bbox, language and its source, Markdown span, and which blocks
 the boilerplate filter removed.

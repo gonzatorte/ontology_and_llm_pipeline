@@ -1,4 +1,5 @@
-"""ITER-INDUCE — class induction from orphan mentions (ITER-EXTRACT, 6.6, 3.1).
+"""ITER-INDUCE — class induction from orphan mentions
+(ITER-EXTRACT, ITER-VALIDATE, LAYERS-ONTOLOGY-NOT-GRAPH).
 
 The division of labour is the pipeline's governing principle: **the code clusters, the model
 names.** Grouping mentions by similarity is arithmetic and belongs in code; deciding what a
@@ -10,7 +11,8 @@ algorithms over the *orphan mention graph* — raw ABox — and forbids them ove
 serialization, because disjointness inverts its sign under structural similarity: two classes
 declared incompatible come out looking connected.
 
-Two guards against the generator's known bias of over-producing hierarchy (ITER-EXTRACT, 6.6):
+Two guards against the generator's known bias of over-producing hierarchy
+(ITER-EXTRACT, ITER-VALIDATE):
 
 - A cluster below `min_support` is not a class. One mention proposing a class is noise, and the
   validator rejects levels with a single subclass anyway.
@@ -113,7 +115,7 @@ CREATE TABLE IF NOT EXISTS proposed_classes (
   version_id    TEXT NOT NULL,      -- proposed against this state of the ontology
   label         TEXT NOT NULL,
   gloss         TEXT,
-  criterion     TEXT,               -- what separates it; 6.6 rejects a class without one
+  criterion     TEXT,               -- what separates it; ITER-VALIDATE rejects one without it
   nearest_iri   TEXT,               -- a candidate parent for ITER-AXIOMATIZE,
                                     -- not an asserted subsumption
   nearest_score REAL,

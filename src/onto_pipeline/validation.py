@@ -14,12 +14,14 @@ one.
 
 Two of these have a shape worth stating up front.
 
-**Filter 6 applies to one provenance and not the other.** The rule "every axiom without a
+**ITER-VALIDATE-6-EVIDENCE applies to one provenance and not the other.** The rule "every axiom
+without a
 citation is discarded" would delete exactly the bridges that make a seed useful: a
 `world_knowledge` axiom has no citation by construction (6.2b), and that is what it is for.
 Applying the evidence filter to it is not a stricter policy, it is a different and wrong one.
 
-**Filter 5 never rejects.** A pitfall is a smell: a class with no definition, a property with no
+**ITER-VALIDATE-5-PITFALLS never rejects.** A pitfall is a smell: a class with no definition, a
+property with no
 domain, a cycle in the hierarchy. Some of those are deliberate. The spec makes it a warning and
 the chain treats it as one — it is reported and nothing is dropped.
 
@@ -58,7 +60,7 @@ class Verdict:
         return self.decision == REJECT
 
 
-# ─────────────────────────  filter 6 — textual evidence  ─────────────────────────
+# ─────────────────────────  ITER-VALIDATE-6-EVIDENCE — textual evidence  ─────────────────────────
 
 
 def evidence(axioms: Sequence[Axiom]) -> tuple[list[Axiom], list[tuple[Axiom, str]]]:
@@ -76,7 +78,7 @@ def evidence(axioms: Sequence[Axiom]) -> tuple[list[Axiom], list[tuple[Axiom, st
     return kept, dropped
 
 
-# ─────────────────────────  filter 3 — SHACL  ─────────────────────────
+# ─────────────────────────  ITER-VALIDATE-3-SHACL — SHACL  ─────────────────────────
 
 
 class ShapesUnavailable(RuntimeError):
@@ -112,7 +114,7 @@ def load_shapes(path: Path | None) -> Graph | None:
     return Graph().parse(str(path))
 
 
-# ─────────────────────────  filter 5 — pitfalls  ─────────────────────────
+# ─────────────────────────  ITER-VALIDATE-5-PITFALLS — pitfalls  ─────────────────────────
 
 # Each entry is one OOPS! pitfall that can be decided from the graph alone. The identifiers are
 # theirs; the implementations are ours, and deliberately conservative — a warning nobody trusts
@@ -121,7 +123,7 @@ PITFALLS = ("P06", "P08", "P11", "P19", "P24")
 
 
 def pitfalls(graph: Graph) -> Verdict:
-    """Modelling smells. A warning, never a rejection (ITER-BRANCH, filter 5)."""
+    """Modelling smells. A warning, never a rejection (ITER-VALIDATE-5-PITFALLS)."""
     findings: list[str] = []
     classes = {s for s in graph.subjects(RDF.type, OWL.Class) if isinstance(s, URIRef)}
     properties = {
@@ -175,7 +177,8 @@ def _cycles(graph: Graph, classes: set[URIRef]) -> list[str]:
     """Classes reachable from themselves through `rdfs:subClassOf`.
 
     A cycle makes every class in it equivalent, which is almost never intended and which the
-    depth metric of filter 7 cannot see — that one stops at a repeated node rather than
+    depth metric of ITER-VALIDATE-7-STRUCTURE cannot see — that one stops at a repeated node rather
+    than
     reporting it.
     """
     parents: dict[URIRef, set[URIRef]] = {}

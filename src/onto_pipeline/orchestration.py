@@ -1,4 +1,4 @@
-"""What to run next, and what is waiting on a person (REORG, 6, 10.3).
+"""What to run next, and what is waiting on a person (REORG, ITER, EVAL-STOPPING).
 
 The pipeline is a sequence of stages with five points where the *user* decides — the matcher's
 grey zone (6.2), the branch (6.6), a functional property (6.8), a competency question (4.4), a

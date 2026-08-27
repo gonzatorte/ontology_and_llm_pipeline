@@ -10,7 +10,7 @@ resultados de los barridos que este plan hizo posibles están en
 
 ## Problema
 
-El paso 3 del `BUILD` hace pivotar la decisión no-go sobre la **tasa de falsos huérfanos**, medida
+`BUILD-STEP-3` hace pivotar la decisión no-go sobre la **tasa de falsos huérfanos**, medida
 contra el conjunto de retención: 5 documentos del corpus de ciencia abierta anotados a mano
 contra la semilla de metodología cualitativa. Tres hallazgos hacen que esa medición no pueda
 sostener la decisión.

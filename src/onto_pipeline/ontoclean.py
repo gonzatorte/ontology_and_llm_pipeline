@@ -1,4 +1,4 @@
-"""ITER-VALIDATE filter 4 — OntoClean over the subsumption hierarchy (ITER-BRANCH).
+"""ITER-VALIDATE-4-ONTOCLEAN — OntoClean over the subsumption hierarchy.
 
 A hard reject, and the only filter in the chain that catches a *badly formed subsumption*
 rather than an inconsistent one. `Student ⊑ Person` is fine; `Person ⊑ Student` is perfectly

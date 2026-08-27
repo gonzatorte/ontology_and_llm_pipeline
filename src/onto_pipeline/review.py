@@ -1,4 +1,4 @@
-"""Findings that are waiting for a human decision (PREP-NORMALIZE, 6.7).
+"""Findings that are waiting for a human decision (PREP-NORMALIZE, ITER-FEEDBACK).
 
 These used to be a JSON file, which meant nothing recorded whether a decision had been made:
 re-running PREP-NORMALIZE rewrote the file and any judgement already formed was gone. They are

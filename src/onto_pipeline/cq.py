@@ -1,4 +1,5 @@
-"""Competency questions: the store and the evaluation (PREP-CQ-GENERATED, 4.5, 10.3).
+"""Competency questions: the store and the evaluation
+(PREP-CQ-GENERATED, PREP-CQ-USER, EVAL-STOPPING).
 
 Hard requirement from the spec: every accepted CQ is paired with its SPARQL query. Without
 that pairing, evaluating the stopping criterion needs human judgement every iteration and the

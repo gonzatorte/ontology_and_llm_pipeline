@@ -268,7 +268,7 @@ def report(
     config_path: Path = ConfigOption,
     doc_id: str | None = DocIdOption,
 ) -> None:
-    """T1: self-contained HTML for manual parser evaluation."""
+    """DELIVERABLES-PENDING-PARSER-EVAL: self-contained HTML for manual parser evaluation."""
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     ids = [doc_id] if doc_id else [
@@ -767,7 +767,8 @@ def axiomatize_cmd(
         proposals, judgements, base_iri=config.seed.base_iri,
         label_to_iri=label_to_iri, support=support,
     )
-    # ITER-VALIDATE filter 6, before anything is stored: a `textual` axiom must cite the mentions it
+    # ITER-VALIDATE-6-EVIDENCE, before anything is stored: a `textual` axiom must cite the mentions
+    # it
     # came
     # from. Applied to `world_knowledge` it would delete exactly the bridges that make the seed
     # useful, so it is not applied to them (6.2b).
@@ -1379,7 +1380,7 @@ def metaproperties_cmd(
     limit: int | None = LimitOption,
     refresh: bool = RefreshOption,
 ) -> None:
-    """Label each class for OntoClean, so ITER-VALIDATE's filter 4 has something to check.
+    """Label each class for OntoClean, so ITER-VALIDATE-4-ONTOCLEAN has something to check.
 
     The model is asked four plain questions — can one stop being this? can two of them be told
     apart? is each one a whole? does each need something else to exist? — and never asked for
@@ -2092,7 +2093,7 @@ def induce_cmd(
     config_path: Path = ConfigOption,
     version: str | None = VersionOption,
 ) -> None:
-    """ITER-INDUCE: turn orphan mentions into proposed classes (ITER-EXTRACT, 6.6).
+    """ITER-INDUCE: turn orphan mentions into proposed classes (ITER-EXTRACT, ITER-VALIDATE).
 
     The code clusters, the model names. Nothing is applied: a proposal records the nearest
     existing class as a *candidate* parent for ITER-AXIOMATIZE to rule on, not as an asserted
@@ -2751,7 +2752,8 @@ def export_annotations(
     path: Path,
     config_path: Path = ConfigOption,
 ) -> None:
-    """T3: retention-set JSONL to BRAT/INCEpTION, validated against the Markdown on disk."""
+    """DELIVERABLES-PENDING-BRAT-EXPORTER: retention-set JSONL to BRAT/INCEpTION,
+    validated against the Markdown on disk."""
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
     out_dir = config.paths.work_dir / "brat"
@@ -2866,7 +2868,8 @@ def validate(
 
 
 def _shape_and_smell(config, conn, version_id, graph) -> list[validation.Verdict]:
-    """ITER-VALIDATE filters 3 and 5. Neither needs a model and only the first can reject.
+    """ITER-VALIDATE-3-SHACL and ITER-VALIDATE-5-PITFALLS. Neither needs a model, and
+    only the first can reject.
 
     SHACL runs over the ABox, not the TBox: shape constraints are about the instance data.
     With no shapes written it reports that it did not run, which is not the same as passing.
@@ -2902,7 +2905,7 @@ def _shape_and_smell(config, conn, version_id, graph) -> list[validation.Verdict
 
 
 def _ontoclean(conn, version_id, graph) -> validation.Verdict:
-    """ITER-VALIDATE filter 4. Reports what it could check, never what it assumed."""
+    """ITER-VALIDATE-4-ONTOCLEAN. Reports what it could check, never what it assumed."""
     labels = ontoclean.load(conn, version_id)
     if not labels:
         return validation.Verdict(

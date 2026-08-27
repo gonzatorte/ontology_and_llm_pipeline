@@ -83,7 +83,8 @@ class Induction(BaseModel):
 
 
 class Enrichment(BaseModel):
-    """ITER-AXIOMATIZE-ENRICH — gloss enrichment from definitional passages (ITER-AXIOMATIZE, 4.3).
+    """ITER-AXIOMATIZE-ENRICH — gloss enrichment from definitional passages
+    (ITER-AXIOMATIZE, PREP-NORMALIZE).
     """
 
     # Passages per class, spread across documents before going deep: five from one paper

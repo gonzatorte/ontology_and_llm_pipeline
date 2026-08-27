@@ -43,7 +43,7 @@ STAGE = "prep_cq_generated"
 
 PROPOSED = "proposed"
 
-# ─────────────────────────  step 1: stratified sampling  ─────────────────────────
+# ─────────────────────────  PREP-CQ-GENERATED-1-SAMPLING  ─────────────────────────
 
 # Each stratum is a cue for the kind of passage that makes one kind of question possible. A
 # random sample of paragraphs would contain almost no restrictions, and restrictive questions
@@ -125,7 +125,7 @@ def sample(
     return chosen
 
 
-# ─────────────────────────  step 2: one prompt per type  ─────────────────────────
+# ─────────────────────────  PREP-CQ-GENERATED-2-DRAFT  ─────────────────────────
 
 # What each type demands of the ontology, in the spec's own terms. The wording matters: a model
 # asked for "a competency question" writes definitional ones and nothing else.
@@ -235,7 +235,7 @@ def parse(text: str, payload: dict) -> dict:
     return {"questions": parsed}
 
 
-# ─────────────────────────  step 3: the mechanical filter  ─────────────────────────
+# ─────────────────────────  PREP-CQ-GENERATED-3-FILTER  ─────────────────────────
 
 
 @dataclass

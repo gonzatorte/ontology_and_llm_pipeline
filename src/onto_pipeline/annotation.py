@@ -128,7 +128,8 @@ def _document(entry: dict) -> AnnotatedDocument:
 
 
 def validate(document: AnnotatedDocument, markdown: str, markdown_hash: str) -> None:
-    """R9: if the parser changed, the offsets have shifted and the set has to be re-anchored,
+    """RISKS-RETENTION-OFFSETS: if the parser changed, the offsets have shifted and the
+    set has to be re-anchored,
     not reimported blind."""
     if document.markdown_hash != markdown_hash:
         raise OffsetMismatch(

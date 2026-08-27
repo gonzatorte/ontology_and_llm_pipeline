@@ -1,4 +1,4 @@
-"""Axiomatization — proposed classes become axioms (ITER-AXIOMATIZE, 6.1).
+"""Axiomatization — proposed classes become axioms (ITER-AXIOMATIZE, ITER-EXTRACT).
 
 The governing principle, stated once more because this is the stage where breaking it would do
 the most damage:

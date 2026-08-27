@@ -530,6 +530,49 @@ La regla "todo axioma sin cita se descarta" mataría exactamente los puentes que
 
 Solo el primero es un problema. Mezclados, la métrica es inútil.
 
+### ITER-INDUCE — Inducción de clases desde huérfanos
+
+> **Escrita el 2026-09-10, después de implementarla.** Esta etapa estaba referida seis veces
+> —`SEPARATE-UNTIL-CONFIRMED` le manda preguntar por `owl:hasKey`, `ITER-BRIDGE` la nombra como
+> su destino, `BUILD-NO-GO-GATE` la usa para explicar por qué un falso huérfano cuesta caro— y no
+> tenía sección propia. Lo que sigue es lo que el resto del spec ya le exigía, junto en un lugar.
+
+Los huérfanos genuinos que sobreviven a `ITER-BRIDGE` son conceptos que la semilla no cubre. Esta
+etapa los agrupa y propone una clase por grupo.
+
+**Es la única etapa que agrupa por similaridad de grafo, y `LAYERS-ONTOLOGY-NOT-GRAPH` lo
+permite explícitamente**: opera sobre el grafo de menciones huérfanas, que es ABox crudo, no sobre
+la serialización de la TBox.
+
+**Agrupamiento por enlace simple.** Las formas superficiales de un concepto forman una cadena:
+`specimen`, `the specimens`, `samples` no tienen por qué parecerse entre sí, sólo a algo
+intermedio. El umbral y el soporte mínimo son configuración (`CONFIG`), no constantes.
+
+**Soporte mínimo.** Un grupo de una sola mención no es una clase, es ruido. Y coincide con lo que
+`ITER-VALIDATE` rechaza después: un nivel con una sola subclase.
+
+**El modelo nombra el grupo; el código no le pide OWL.** Tres respuestas por grupo:
+
+| Campo | Qué es | Si falta |
+|---|---|---|
+| `is_a_class` | Puede ser `false`: el grupo no denota una clase | Se descarta el grupo, y es un resultado esperable |
+| `label` y glosa | Cómo se llama y qué significa | Propuesta inválida |
+| **criterio de división** | Qué separa a esta clase de su hermana | **Propuesta inválida.** `ITER-VALIDATE` rechaza una clase sin criterio declarado |
+
+**La clase existente más cercana se muestra, no se asume.** Entra al prompt para que el modelo
+pueda *diferenciar* la clase nueva de la que ya está, y se registra como padre **candidato**. Quien
+decide la subsunción es `ITER-AXIOMATIZE`; acá nada se aplica.
+
+**Comprobación de redundancia contra el inventario.** Antes de acuñar, el nombre del grupo se
+compara con las clases que ya existen. El matcher falla sobre el sintagma suelto y el nombre del
+grupo sí coincide: es el camino que `BUILD-NO-GO-GATE` describe —falso huérfano → clase espuria—
+atrapado un paso antes. **Lo marcado no se descarta en silencio:** que la inducción reencuentre una
+clase que ya está es un diagnóstico sobre el matcher, y borrarlo perdería la única señal de que
+pasó.
+
+**Toda clase nueva debería recibir la pregunta de clave** (`SEPARATE-UNTIL-CONFIRMED`): si tiene
+`owl:hasKey`, esa clave manda sobre los umbrales de similaridad en las iteraciones siguientes.
+
 ### ITER-TUNE — Ajuste del matcher
 
 **Único componente del pipeline que se ajusta.** Razón estructural: es clasificación de pares, no generación. Con cientos de ejemplos etiquetados, un cross-encoder mejora de forma medible; un generador no.
