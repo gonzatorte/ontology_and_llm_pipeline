@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from dataclasses import asdict
 from pathlib import Path
 
@@ -125,6 +126,12 @@ ExportLabelsOption = typer.Option(
 TermOption = typer.Option(
     [], "--term",
     help="Repetible: vocabulario que define el dominio. Si no aparece, el par no sirve.",
+)
+RunOption = typer.Option(
+    False, "--run", help="Ejecutar la etapa siguiente. Una sola, y nunca una decisión tuya."
+)
+RunEnvFileOption = typer.Option(
+    None, "--run-env-file", help="Env file para la etapa que --run ejecute, si necesita modelo."
 )
 CurveOption = typer.Option(
     False, "--curve", help="Print the accumulation curve document by document."
@@ -1029,6 +1036,8 @@ def alignment_cmd(
 def next_cmd(
     config_path: Path = ConfigOption,
     version: str | None = VersionOption,
+    run: bool = RunOption,
+    env_file: Path | None = RunEnvFileOption,
 ) -> None:
     """What to run next, and what is waiting on you.
 
@@ -1039,10 +1048,21 @@ def next_cmd(
 
     A stage whose input does not exist is reported as blocked rather than pending. Which of the
     two it is is the difference between advice and a checklist.
+
+    `--run` ejecuta **una** etapa, la siguiente, y frena. Si lo que sigue es una decisión tuya,
+    no corre nada y sale con error: cruzarla sería decidirla por default.
     """
     config = Config.load(config_path)
     conn = connect(config.paths.work_dir)
-    version_id = _resolve_version(conn, version)
+    # Sin versión todavía no es un error acá: es el estado normal de un almacén recién creado, y
+    # éste es justamente el comando que tiene que decir qué hacer primero. Las etapas anteriores
+    # a la semilla no dependen de ninguna versión.
+    versioning.install(conn)
+    found = conn.execute(
+        "SELECT id FROM versions WHERE id = COALESCE(?, id) "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1", (version,),
+    ).fetchone()
+    version_id = found["id"] if found else "(sin versión todavía)"
     # The env file is loaded by the app-level callback, so this reads the result rather than
     # the flag: `--env-file` before the subcommand is the one way in, and there is no second.
     has_provider = bool(os.environ.get(config.llm.api_key_env, ""))
@@ -1067,11 +1087,35 @@ def next_cmd(
         )
         for step in waiting:
             console.print(f"  {step.name} — [bold]{step.command}[/]")
+        if run:
+            console.print(
+                "[yellow]--run no corre nada[/]: cruzar un punto de decisión sería decidirlo "
+                "por default, que es lo que este comando existe para no hacer."
+            )
+            raise typer.Exit(code=1)
         return
     if plan.next is None:
         console.print("[green]nothing pending[/] · `onto-pipeline stop` says whether it is done")
         return
     console.print(f"[bold]next:[/] {plan.next.name} — [bold]{plan.next.command}[/]")
+    if not run:
+        return
+    if not orchestration.runnable(plan.next):
+        console.print(
+            "[yellow]no se corre sola[/]: es una decisión tuya, y correr lo que viene después "
+            "sería construir sobre una respuesta que nadie dio."
+        )
+        raise typer.Exit(code=1)
+
+    argv = orchestration.command_line(plan.next, config_path, env_file)
+    console.print(f"[dim]$ {' '.join(argv)}[/]")
+    completed = subprocess.run(argv, check=False)
+    if completed.returncode != 0:
+        console.print(f"[red]{plan.next.name} falló[/] (código {completed.returncode})")
+        raise typer.Exit(code=completed.returncode)
+    console.print(
+        f"[green]{plan.next.name} terminó[/] · `onto-pipeline next` para ver qué sigue"
+    )
 
 
 @app.command("stop")

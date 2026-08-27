@@ -141,3 +141,53 @@ def test_a_store_missing_a_stages_table_reads_as_never_run(tmp_path):
     conn = connect(tmp_path)
     plan = orchestration.survey(conn, "v1", has_provider=True)
     assert named(plan, "branch").state == BLOCKED
+
+
+# ─────────────────────────  `--run`, una etapa y no más  ─────────────────────────
+
+
+def test_a_decision_is_never_runnable():
+    """Correrla sería decidirla por default, que es lo que este comando existe para no hacer."""
+    step = orchestration.Step("grey zone", "onto-pipeline grey list", WAITING, decision=True)
+    assert not orchestration.runnable(step)
+
+
+def test_a_blocked_stage_is_not_runnable_either():
+    step = orchestration.Step("induce", "onto-pipeline induce", BLOCKED)
+    assert not orchestration.runnable(step)
+
+
+def test_a_ready_stage_is():
+    assert orchestration.runnable(orchestration.Step("ingest", "onto-pipeline ingest", READY))
+
+
+def test_nothing_pending_is_not_runnable():
+    assert not orchestration.runnable(None)
+
+
+def test_the_reader_note_never_becomes_an_argument():
+    """`(needs a provider: --env-file)` entraría como cuatro banderas inventadas."""
+    from pathlib import Path
+
+    step = orchestration.Step(
+        "extract", "onto-pipeline extract (needs a provider: --env-file)", READY
+    )
+    argv = orchestration.command_line(step, Path("config/x.yaml"))
+    assert argv == ["onto-pipeline", "extract", "--config", "config/x.yaml"]
+
+
+def test_the_env_file_goes_before_the_subcommand():
+    """Es la única vía: el callback de la app lo carga antes de que el subcomando arranque."""
+    from pathlib import Path
+
+    step = orchestration.Step("extract", "onto-pipeline extract", READY)
+    argv = orchestration.command_line(step, Path("c.yaml"), Path("opencode.env"))
+    assert argv[:3] == ["onto-pipeline", "--env-file", "opencode.env"]
+
+
+def test_what_runs_is_what_was_printed():
+    """Si `command` y lo ejecutado divergieran, el usuario vería una cosa y correría otra."""
+    from pathlib import Path
+
+    step = orchestration.Step("match", "onto-pipeline match", READY)
+    assert "match" in orchestration.command_line(step, Path("c.yaml"))

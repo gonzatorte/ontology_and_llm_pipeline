@@ -18,10 +18,15 @@ The order is the spec's own. What makes the answer useful rather than a checklis
 step knows what it *needs*: a step whose input does not exist yet is not "pending", it is
 blocked, and saying which is the difference between advice and a list.
 
-This never runs anything. It has no `--run`, on purpose for now: the stage commands live inside
-their Typer wrappers and calling them programmatically would pass option objects instead of
-values. Extracting them is recorded as debt rather than worked around here, because a
-half-working runner that skips a decision point is worse than none.
+**`--run` corre la etapa siguiente, una sola, y frena.** La ejecuta como un proceso aparte —el
+mismo comando que imprimiría— en vez de llamar a la función desde adentro. Extraer los diez
+comandos de sus envoltorios de Typer era la otra opción y es un refactor grande a cambio de nada
+que se note: el subproceso conserva la salida del comando, su manejo de errores y su código de
+retorno tal cual, que es justamente lo que un runner tiene que no romper. Lo que cuesta son un
+par de segundos de arranque por etapa, contra minutos de LLM.
+
+Lo que **no** hace, y es la parte que importa: no cruza un punto de decisión. Si lo siguiente es
+algo que decide el usuario, imprime cuál y sale sin correr nada.
 """
 
 from __future__ import annotations
@@ -155,6 +160,29 @@ def survey(conn: sqlite3.Connection, version_id: str, *, has_provider: bool) -> 
 
 def blocking(plan: Plan) -> list[Step]:
     return [step for step in plan.steps if step.decision and step.state == WAITING]
+
+
+def runnable(step: Step | None) -> bool:
+    """Si esta etapa se puede ejecutar sola. Una decisión nunca, por definición."""
+    return step is not None and step.state == READY and not step.decision
+
+
+def command_line(step: Step, config_path, env_file=None) -> list[str]:
+    """El comando de la etapa, como lista de argumentos.
+
+    Se reconstruye desde `step.command`, que es lo que el usuario vería impreso: si alguna vez
+    dejan de coincidir, lo que se ejecuta es lo que se mostró, no otra cosa.
+    """
+    # La nota entre paréntesis es para el lector, no argumentos: se corta entera, no palabra
+    # por palabra, o "(needs a provider: --env-file)" entra como cuatro banderas inventadas.
+    command = step.command.split("(", 1)[0]
+    parts = command.split()
+    if parts[:1] == ["onto-pipeline"]:
+        parts = parts[1:]
+    head = ["onto-pipeline"]
+    if env_file:
+        head += ["--env-file", str(env_file)]
+    return head + parts + ["--config", str(config_path)]
 
 
 def summarize(plan: Plan, say: Callable[[str], None]) -> None:  # pragma: no cover - printing

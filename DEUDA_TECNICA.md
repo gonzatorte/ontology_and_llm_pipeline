@@ -338,7 +338,26 @@ Dos límites del relevamiento mismo, para cuando lo tenga:
   útil y no es lo mismo. El comando lo dice, pero conviene tenerlo presente al leerlo.
 
 
-### 8g. `next` guía pero no ejecuta
+### 8g. `next` guía y ejecuta — RESUELTO
+
+> **Resuelto el 2026-09-10.** `next --run` corre **una** etapa, la siguiente, y frena. Frente a
+> un punto de decisión no corre nada y sale con error.
+>
+> La solución no fue el refactor que esta entrada daba por necesario: ejecuta el comando como
+> **subproceso**, el mismo que imprimiría. Extraer los diez comandos de sus envoltorios de Typer
+> era mucho trabajo a cambio de nada visible — el subproceso conserva la salida, el manejo de
+> errores y el código de retorno tal cual—, y cuesta un par de segundos de arranque contra
+> minutos de llamadas al modelo. Lo que se ejecuta se reconstruye desde el mismo texto que se le
+> mostró al usuario, así que no pueden divergir.
+>
+> De paso se arregló algo peor: `next` **no corría sobre un almacén nuevo**, porque exigía una
+> versión de ontología que todavía no existe. El comando que dice qué hacer primero fallaba
+> justo cuando no se había hecho nada.
+
+<details>
+<summary>El diagnóstico original</summary>
+
+### `next` guía pero no ejecuta
 
 El orquestador contesta qué corresponde hacer y se detiene donde hace falta una persona, que es
 la parte difícil y la que importa. Lo que no hace es **correr la etapa por vos**, y no por
@@ -351,6 +370,8 @@ Se dejó sin hacer en vez de resolverlo a medias porque un runner que se saltea 
 decisión es peor que no tener runner: los cinco puntos donde decide el usuario son justamente
 donde el sistema no debe elegir solo. Cuando se haga, `--run` tiene que avanzar **de a una
 etapa** y frenar en el primer `waiting on you`.
+
+</details>
 
 Dos cosas que `next` todavía no mira: si el `rules_hash` cambió desde la última regeneración (hoy
 siempre sugiere `regenerate`, que es conservador pero ruidoso) y si las glosas cambiaron desde el

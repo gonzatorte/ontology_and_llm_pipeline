@@ -83,7 +83,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [hallazgo 1.12](HALLAZGOS.md) |
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
 | ~~3~~ | ~~Unificar el registro de decisiones~~ — **hecho**: una tabla, seis categorías fijas, `invalid` separado de `rejected`. Falta llevar los precedentes al prompt | Lo rechazado no está en ningún otro lado | [deuda 20](DEUDA_TECNICA.md) |
-| 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
+| ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [deuda 8g](DEUDA_TECNICA.md) |
 | 5 | **Terminar C8**: correr el pipeline entero sobre un par publicado. La ingesta ya está | Primera vez que se mediría algo posterior al tipado contra una respuesta conocida | [plan](plan_cambio_corpus_calibracion.md) |
 | ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
 
@@ -380,7 +380,15 @@ estaría decidiendo por default, que es la falla que D5 y D21 nombran desde los 
 preguntar nunca y que el sistema elija el modelado en silencio, o preguntar todo y volverse el
 trabajo manual que vino a reemplazar.
 
-**No ejecuta nada**, a propósito por ahora — ver la deuda técnica.
+```bash
+uv run onto-pipeline next --run                              # corre UNA etapa y frena
+uv run onto-pipeline next --run --run-env-file opencode.env  # si la etapa necesita modelo
+```
+
+`--run` ejecuta **una sola** etapa, la siguiente, y para. Frente a un punto de decisión no corre
+nada y sale con error: cruzarlo sería decidirlo por default. Lo ejecuta como subproceso —el mismo
+comando que imprime— así que la salida, los errores y el código de retorno son los del comando,
+no una reimplementación.
 
 ### 4. Iteración sobre el corpus (B1 → B3)
 
