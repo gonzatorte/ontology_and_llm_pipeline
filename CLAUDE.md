@@ -30,7 +30,7 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 |---|---|---|
 | [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) | El diseño: 14 secciones, decisiones D1–D25, secuencia de construcción §12 | **Primero, siempre.** Es la referencia canónica; las etapas se citan por su §. 1.353 líneas |
 | [`README.md`](README.md) | Cómo se usa cada comando y en qué estado está cada etapa | Antes de tocar el CLI o de decir que algo falta |
-| [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió** y qué se **decidió** implementando, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política. Ahí está por qué son como son |
+| [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su §3 lista las que ya se descartaron con datos |
 | [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
 | [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
 | [`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md) | Por qué el corpus de calibración está separado del de aplicación, y las tareas C1–C5 | Al tocar `calibration.py` o interpretar un barrido |
@@ -189,6 +189,13 @@ README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes
   de precedentes en el prompt y la comparación por forma normal no existen. Deuda 20.
 - **La compuerta no-go de §12.1 sigue abierta**, y es la que decide si tiene sentido seguir
   construyendo encima. Ver el README.
+
+## Antes de proponer una idea
+
+**Mirar §3 de [`HALLAZGOS.md`](HALLAZGOS.md), "Lo que se probó y no funcionó".** Siete formas de
+meterle más texto a la comparación están medidas y todas empeoran; la cobertura léxica como
+veredicto de alineación da el resultado invertido; reusar un re-ranker entre dominios resta. Cada
+una parecía razonable antes de medirla, y por eso están anotadas.
 
 ## Antes de decir que algo falta
 

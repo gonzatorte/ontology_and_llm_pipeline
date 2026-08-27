@@ -75,8 +75,22 @@ Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `cal
 
 ### En cola
 
-Lo comprometido y todavía sin hacer, en orden de valor sobre costo. Cada uno tiene su entrada
-con el detalle; esta lista existe para que no se pierdan entre las entradas.
+Lo abierto, en orden de valor sobre costo. Cada uno tiene su entrada con el detalle; esta lista
+existe para que no se pierdan entre las entradas.
+
+| # | Qué | Por qué | Detalle |
+|---|---|---|---|
+| 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [hallazgo 1.11](HALLAZGOS.md), [1.14](HALLAZGOS.md) |
+| 2 | **Precisión de la extracción**: `Results`, `Table reference` y `Scholarly research` se volvieron clases propuestas | Son encabezados de sección y referencias cruzadas, no conceptos. Ninguno de los siete filtros los atrapa, y no son falsos huérfanos — la ontología hace bien en no tenerlos | [hallazgo 1.13](HALLAZGOS.md) |
+| 3 | **Llevar los precedentes al prompt** | Es lo que justifica guardar el registro de decisiones. `precedents()` existe y no tiene llamador | [deuda 20](DEUDA_TECNICA.md) |
+| 4 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [deuda 22](DEUDA_TECNICA.md) |
+| 5 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita | [deuda 8e](DEUDA_TECNICA.md) |
+| 6 | **El tercer punto de la curva de tamaño** (~40k clases) | Con 428 y 3.418 hay dos puntos; con tres hay forma | [plan, C5](plan_cambio_corpus_calibracion.md) |
+| 7 | **Comparación por forma normal** | Sin ella el mismo compromiso vuelve con IRIs distintos y no se detecta como re-proposición | [deuda 20](DEUDA_TECNICA.md) |
+| 8 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Tres lugares donde hoy hay que acordarse. El último es el que cierra el bucle de §4.3 | [deuda 8c](DEUDA_TECNICA.md), [8e](DEUDA_TECNICA.md) |
+
+<details>
+<summary>Lo que estaba en cola y se cerró</summary>
 
 | # | Qué | Por qué ahora | Detalle |
 |---|---|---|---|
@@ -86,6 +100,8 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [deuda 8g](DEUDA_TECNICA.md) |
 | ~~5~~ | ~~Terminar C8~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [hallazgo 1.14](HALLAZGOS.md) |
 | ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
+
+</details>
 
 | Etapa | Estado |
 |---|---|
@@ -113,7 +129,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | B5 filtro 5 (pitfalls) | listo; subconjunto local del catálogo OOPS!, no OOPS! |
 | B5 filtro 6 (evidencia textual) | listo; sólo para procedencia `textual` |
 | B6 construcción de ramas | listo (`branch`); dos patrones de modelado del catálogo |
-| Ajuste del matcher · LoRA (§6.3) | **no implementado** — bloqueado por datos, no por código; ver deuda 8i |
+| Ajuste del matcher (§6.3) | listo (`tune`), completo o LoRA según el tamaño del modelo |
 | Registro de decisiones (§6.7) | **a medias**: esquema D9 completo y consultable; falta inyectar los precedentes en el prompt y la forma normal. Ver deuda 20 |
 | B7–B8 DAG de versiones, hash de estado, loops | listo |
 | Conflictos fácticos (§6.4) | listo (`conflicts`, `mark`) |

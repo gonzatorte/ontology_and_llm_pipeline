@@ -765,3 +765,32 @@ conjunto — o sea, de los identificadores que rdflib repartió al parsear, que 
 único que había que neutralizar. El síntoma era que re-parsear la misma ontología daba otro
 hash. La actualización tiene que ser **sincrónica**: todo lo de una vuelta se calcula contra las
 etiquetas de la anterior.
+
+### 22. Ontologías que importan otras ontologías
+
+Una ontología publicada casi nunca viene sola: declara `owl:imports` hacia otras por IRI, y ese
+IRI puede no responder. La Materials Mechanics Ontology importa `https://w3id.org/pmd/co/2.0.4`,
+que hoy no contesta.
+
+**Lo que hay:** la carga ya no aborta —antes, un import roto dejaba al pipeline entero sin
+razonador— y se reporta cuáles faltaron, porque un veredicto calculado sin los axiomas de una
+importada vale sobre menos de lo que la ontología declara. Degradar en silencio es el modo de
+falla que este proyecto encontró tres veces y no conviene sumar la cuarta.
+
+**Lo que falta, en orden de utilidad:**
+
+1. **Que el usuario pueda resolver el import a mano.** Es lo más útil y lo más barato: quien
+   tiene el archivo lo pone en un directorio y el sistema lo usa en vez de salir a la red. La
+   OWL API tiene el mecanismo —un `OWLOntologyIRIMapper`, que traduce IRI a archivo local— así
+   que es cablear, no inventar. Configurable como `paths.ontology_cache`, con un mensaje que
+   diga exactamente qué IRI falta y dónde dejar el archivo.
+2. **Caché local de lo que sí resolvió.** Hoy cada carga sale a la red por cada import que
+   funciona, lo que hace lenta y frágil una etapa que no tiene por qué depender de internet.
+   Bajarlo una vez y quedárselo es lo que hace `scripts/fetch-jars.sh` con los jars.
+3. **Decir qué se perdió, no sólo qué faltó.** Un import roto no es igual de grave según lo que
+   traía: si aportaba las clases de nivel superior, la jerarquía queda sin techo y OntoClean y
+   las métricas estructurales miden otra cosa. Contar cuántas referencias del grafo quedan sin
+   resolver da la magnitud, que es distinto del nombre del archivo que faltó.
+
+Mientras tanto conviene leer los veredictos del razonador sobre una ontología con imports rotos
+sabiendo que son sobre menos axiomas. `validate` lo dice arriba de la tabla.

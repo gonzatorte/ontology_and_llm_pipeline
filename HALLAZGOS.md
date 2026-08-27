@@ -4,6 +4,11 @@ Lo que se **midió** y lo que se **decidió** construyendo el pipeline, con el n
 cada decisión. Es el complemento del registro de decisiones de diseño del spec (§2, D1–D25):
 aquéllas se tomaron antes de ver datos, éstas después.
 
+**Cuatro clases de contenido, y conviene saber cuál se busca:** lo que se **midió** (§1), lo que
+se **decidió** con eso (§2), lo que se **probó y no funcionó** (§3 — experimentos conceptuales,
+no bugs; están para que nadie los repita) y lo que hubo que **retirar** después de haberlo
+afirmado (§4).
+
 Tres documentos vecinos y qué contesta cada uno, para no duplicarlos acá:
 
 - [`README.md`](README.md) — cómo se usa lo construido y en qué estado está cada etapa.
@@ -510,7 +515,66 @@ re-ranker tuneado contra `calibrate` → recién ahí decidir si `use_cross_enco
 
 ---
 
-## 3. Conclusiones que hubo que retirar
+## 3. Lo que se probó y no funcionó
+
+**Un experimento conceptual que falla es un hallazgo, y éste es su lugar.** No están acá los
+bugs —eso se arregla y se olvida— sino las ideas que se probaron sobre datos y no dieron: cada
+una costó tiempo, cada una parecía razonable antes de medirla, y sin este registro alguien la
+vuelve a intentar.
+
+Ordenadas por cuánto cierran.
+
+### 3.1 Cerradas: no volver a intentarlas con este encoder
+
+| Idea | Por qué parecía buena | Qué dio | n |
+|---|---|---|---|
+| **Comparar contra la glosa** en vez de la etiqueta | Es lo que dice el spec (§6.2): una definición tiene más señal que un nombre | recall@1 **7,9%** contra 69,8%, y separación **−0,42**: los errores puntúan más alto que los aciertos | 8.723 |
+| **Etiqueta + glosa** | Lo mejor de los dos | 13,3%, separación −0,49 | 8.723 |
+| **Cross-encoder de fábrica** re-rankeando el top-5 | Es para lo que existen los re-rankers | Separación **−0,50**, F1 0,127 contra 0,774. Ordena peor que no hacer nada | 8.723 |
+| **Mención + su oración**, concatenadas | Desambigua por definición: `lifetime` en contexto llega a `FatigueLifetime` | @1 de 25,3% a **11,3%**; en CRAFT de 69,8% a **14,3%** | 2.229 |
+| **Ventana de ±50 caracteres** | Igual pero sin arrastrar la oración entera | **7,4%** | 2.229 |
+| **Fusión de puntajes** sintagma/contexto | No rompe la forma del sintagma, así que el contexto sólo desempata | +0,4 puntos en @1 y **pierde** uno en @5: ruido | 2.229 |
+| **Reusar un re-ranker ajustado en otro dominio** | Ajustar cuesta etiquetas; si sirviera se ajusta una vez | **−2,1 puntos**: peor que no usar ninguno | 2.229 |
+
+**Las siete dicen lo mismo y por eso están juntas.** Un encoder simétrico compara textos por su
+forma: una mención es un sintagma corto, una etiqueta también, y todo lo que agrande un lado
+—una glosa, una oración, una ventana— rompe esa simetría y pierde más de lo que gana. Lo que
+queda establecido es dónde **no** está la solución: no está en qué texto se compara. Está en el
+encoder, y hace falta uno asimétrico o entrenado.
+
+### 3.2 Cerradas: la idea servía, la métrica no
+
+| Idea | Qué dio |
+|---|---|
+| **Decidir alineación por cobertura léxica** — qué fracción de las etiquetas aparece en el corpus | **Veredicto invertido**: 20% sobre un par real anotado por expertos contra 50% sobre el par que sí estaba roto. Una ontología publicada cubre un dominio entero y un corpus cubre una franja |
+| **Restringirla a etiquetas multipalabra**, que no aparecen por casualidad | Tampoco separa: 9% contra 18% |
+
+Lo que sí decide es preguntar por términos nombrados: 0 de 5 contra 5 de 5. La diferencia es que
+ahí el que sabe del dominio pone la hipótesis, y el chequeo sólo la verifica.
+
+### 3.3 Probadas y descartadas por no aportar
+
+| Idea | Qué dio |
+|---|---|
+| **Sacar del entrenamiento las menciones cuya clase no está en el top-k** — el 57%, y su par positivo el recuperador nunca lo va a mostrar | +10,0 contra +10,4: no molestaban |
+| **Ocho negativos por mención en vez de cuatro** | +10,3 contra +10,4 |
+
+Ninguna de las dos hace daño; simplemente no paga la complejidad de tratarlas distinto.
+
+### 3.4 Casi descartada por medirla mal
+
+**LoRA con las mismas épocas que el ajuste completo** daba **−6,3 puntos**, peor que no ajustar,
+y con cuatro épocas **−5,4**. La conclusión fácil era "LoRA no sirve acá". Con doce épocas da
+**+7,0**: entrena el 0,25% de los pesos, así que necesita más pasos para llegar al mismo lugar.
+
+Vale como advertencia de método más que como resultado: **una técnica evaluada con los
+hiperparámetros de otra no se está evaluando.** Sigue por debajo del ajuste completo a este
+tamaño (+11,6), que es por qué `auto` lo prefiere mientras entre en memoria — pero eso es una
+decisión sobre el tamaño, no sobre la técnica.
+
+---
+
+## 4. Conclusiones que hubo que retirar
 
 Dos veces se sacó una conclusión con evidencia insuficiente y hubo que desdecirla. Van acá porque
 el patrón importa más que los casos.
@@ -526,7 +590,7 @@ el patrón importa más que los casos.
 
 ---
 
-## 4. Fallas silenciosas encontradas
+## 5. Fallas silenciosas encontradas
 
 No son bugs a arreglar —ya están arreglados y fijados con test— sino una clase de falla que este
 sistema produce con facilidad: **ninguna de las cuatro lanzó un error**. Todas devolvieron un
