@@ -96,21 +96,75 @@ def start_jvm(lib_dir: Path) -> None:
     _jvm_started = True
 
 
+def _offending_axioms(profile, ontology) -> set[str]:
+    """Los axiomas que violan un perfil, salteando las violaciones que no tienen uno.
+
+    `getAxiom()` **lanza** —no devuelve `None`— cuando la violación no está atada a un axioma:
+    pasa con las que apuntan a la ontología entera o a una entidad sin declarar. Preguntar por
+    `is not None` no alcanza, y una excepción de Java acá se lleva puesta toda la detección de
+    perfil. Encontrado con la Materials Mechanics Ontology.
+    """
+    offending: set[str] = set()
+    for violation in profile.checkOntology(ontology).getViolations():
+        try:
+            axiom = violation.getAxiom()
+        except Exception:  # noqa: BLE001 - el puente de JPype envuelve cualquier throwable
+            continue
+        if axiom is not None:
+            offending.add(str(axiom))
+    return offending
+
+
 class Reasoners:
     def __init__(self, lib_dir: Path, *, hermit_timeout_s: int = 120) -> None:
         start_jvm(lib_dir)
         self.hermit_timeout_s = hermit_timeout_s
 
         from org.semanticweb.owlapi.apibinding import OWLManager
+        from org.semanticweb.owlapi.model import MissingImportHandlingStrategy
 
         self._manager = OWLManager.createOWLOntologyManager()
+        # Un `owl:imports` que no resuelve no puede abortar la carga: una ontología publicada
+        # importa otras por IRI y ese IRI puede no responder —la Materials Mechanics Ontology
+        # importa `w3id.org/pmd/co/2.0.4`, que no contesta—, y quedarse sin razonador por eso
+        # es peor que razonar sobre menos. Pero **no en silencio**: `missing_imports` guarda
+        # cuáles faltaron y `load` lo deja a la vista, porque un veredicto calculado sin los
+        # axiomas de una importada es más débil que uno calculado con ellos, y este proyecto ya
+        # se quemó con etapas que degradaban sin avisar.
+        config = self._manager.getOntologyLoaderConfiguration()
+        self._manager.setOntologyLoaderConfiguration(
+            config.setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
+        )
+        self.missing_imports: list[str] = []
+        self._install_import_listener()
+
+    def _install_import_listener(self) -> None:
+        """Anota qué importaciones no resolvieron, para que el que carga pueda decirlo."""
+        import jpype
+        from org.semanticweb.owlapi.model import MissingImportListener
+
+        recorded = self.missing_imports
+
+        @jpype.JImplements(MissingImportListener)
+        class Listener:
+            @jpype.JOverride
+            def importMissing(self, event) -> None:  # noqa: N802 - firma de Java
+                recorded.append(str(event.getImportedOntologyURI()))
+
+        self._manager.addMissingImportListener(Listener())
 
     def load(self, graph: Graph):
-        """rdflib graph -> OWLOntology, without a temporary file."""
+        """rdflib graph -> OWLOntology, sin archivo temporal.
+
+        Deja `missing_imports` con las importaciones que no resolvieron en esta carga. Vacía es
+        lo normal; con contenido, todo lo que el razonador diga después vale sobre menos axiomas
+        de los que la ontología declara.
+        """
         from org.semanticweb.owlapi.formats import TurtleDocumentFormat
         from org.semanticweb.owlapi.io import StringDocumentSource
         from org.semanticweb.owlapi.model import IRI
 
+        self.missing_imports.clear()
         source = StringDocumentSource(
             graph.serialize(format="turtle"),
             IRI.create("urn:onto-pipeline:candidate"),
@@ -155,12 +209,7 @@ class Reasoners:
         total = int(ontology.getLogicalAxiomCount())
         if not total:
             return 0.0
-        offending = {
-            str(violation.getAxiom())
-            for violation in el_profile.checkOntology(ontology).getViolations()
-            if violation.getAxiom() is not None
-        }
-        return max(0.0, 1.0 - len(offending) / total)
+        return max(0.0, 1.0 - len(_offending_axioms(el_profile, ontology)) / total)
 
     def elk(self, ontology, *, coverage_threshold: float) -> ElkResult:
         """Filter, and only ever a filter. An inconsistency here is real; silence is not

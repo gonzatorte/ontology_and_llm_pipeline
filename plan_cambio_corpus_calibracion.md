@@ -381,7 +381,7 @@ están hechas; queda C5, C7 y C9.
 | C5 | **Pares adicionales.** MaterioMiner **hecho** (ver abajo); quedan HPO GSC+ y CafeteriaFCD/CafeteriaSA. Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
 | ~~C6~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de C4**: ambas resueltas, comentarios de `config/default.yaml` reescritos. C5 puede refinar los umbrales, no estas dos | 4 | C4 | — |
 | ~~C7~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
-| C8 | **Correr el pipeline entero sobre un par publicado**, no sólo el matcher. La **ingesta de texto plano ya está** (ver abajo); falta correr extracción, puenteo, inducción y axiomatización con las anotaciones gold como control en cada etapa. Es la primera vez que las etapas posteriores al tipado se medirían contra una respuesta conocida | 5 | C4 | corrida (LLM) |
+| ~~C8~~ | ~~Correr el pipeline entero sobre un par publicado~~ — **hecha** sobre MaterioMiner: de la semilla a `v2` con 45 clases inducidas. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.13 y 1.14 | 5 | C4 | — |
 | C9 | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | C4 | decisión |
 
 ### Segundo par: MaterioMiner — hecho (2026-09-09)

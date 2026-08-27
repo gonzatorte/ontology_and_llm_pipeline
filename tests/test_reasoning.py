@@ -168,3 +168,27 @@ def test_an_inconsistent_ontology_is_refused_rather_than_materialized(reasoners)
     """)
     with pytest.raises(InconsistentOntology, match="inconsistent"):
         reasoners.inferred_graph(inconsistent)
+
+
+def test_the_offending_axiom_scan_survives_a_violation_without_one():
+    """`getAxiom()` **lanza** —no devuelve None— cuando la violación no está atada a un axioma.
+    Una excepción de Java ahí se llevaba puesta toda la detección de perfil."""
+    from onto_pipeline.reasoning import _offending_axioms
+
+    class Explodes:
+        def getAxiom(self):  # noqa: N802 - firma de Java
+            raise RuntimeError("java.lang.UnsupportedOperationException")
+
+    class Quiet:
+        def getAxiom(self):  # noqa: N802
+            return None
+
+    class Real:
+        def getAxiom(self):  # noqa: N802
+            return "SubClassOf(<a> <b>)"
+
+    class Profile:
+        def checkOntology(self, ontology):  # noqa: N802
+            return type("R", (), {"getViolations": lambda self: [Explodes(), Quiet(), Real()]})()
+
+    assert _offending_axioms(Profile(), None) == {"SubClassOf(<a> <b>)"}

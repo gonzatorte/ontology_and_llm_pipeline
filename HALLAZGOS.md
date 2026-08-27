@@ -342,6 +342,43 @@ encabezados de sección y referencias cruzadas que B1 extrajo como si fueran con
 ontología hace bien en no tenerlas. Es un problema de precisión de la extracción, no del
 matcher, y ningún filtro de los que hay lo atrapa.
 
+### 1.14 El pipeline entero sobre un par anotado (C8), y qué se ve al final
+
+Primera corrida completa contra una respuesta conocida. MaterioMiner, 4 publicaciones:
+
+| Etapa | Resultado |
+|---|---|
+| normalize-seed | 447 entidades, 14 erratas · glosas sólo para las que no tenían |
+| ingest | 476 bloques, 23 chunks |
+| extract | 1.309 menciones, 13 sin ubicar |
+| match | 124 automáticas, 305 zona gris, **880 huérfanas (67%)** |
+| bridge | 210 puentes sobre 264 menciones; 426 sintagmas que el modelo no quiso conectar |
+| induce | 616 huérfanas → 48 clusters → **45 clases**, 4 de ellas duplicados (1.13) |
+| axiomatize | 45 juicios: **44 `unrelated`, 1 `subclass_of`** · 181 axiomas |
+| validate | ELK SKIPPED (38% de cobertura EL), HermiT consistente, estructural **RECHAZA** |
+| branch | ningún eje de decisión — el camino normal |
+
+**El hallazgo del final es que la debilidad de recuperación llega hasta el final.** 44 de 45
+clases inducidas quedaron sin padre, porque los candidatos que la axiomatización le ofrece al
+modelo salen del matcher, y con 21,5% de acierto en el primer puesto "ninguna de éstas" es la
+respuesta honesta. El resultado son 45 raíces nuevas sin subclases, que es exactamente lo que el
+filtro estructural rechaza: 63 hallazgos entre clases huérfanas y niveles de una sola subclase.
+
+O sea que el 25% de recall del matcher no se queda en el matcher: **produce una ontología plana**,
+y la cadena de validación lo detecta al final en vez de que se cuele. Que rechace es lo correcto;
+aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias sobre la forma.
+
+**Dos fallas del razonador que sólo aparecen con una ontología publicada:**
+
+- **`owl:imports` que no resuelve abortaba la carga.** La MMO importa
+  `w3id.org/pmd/co/2.0.4`, que no contesta, y eso dejaba al pipeline entero sin razonador. Ahora
+  se cargan igual y **se avisa cuáles faltaron**, porque un veredicto calculado sin los axiomas
+  de una importada vale sobre menos de lo que la ontología declara — degradar en silencio es el
+  modo de falla que este proyecto ya encontró tres veces.
+- **`getAxiom()` lanza**, no devuelve `None`, cuando una violación de perfil no está atada a un
+  axioma. Preguntar por `is not None` no alcanza, y la excepción se llevaba puesta toda la
+  detección de perfil.
+
 ---
 
 ## 2. Decisiones tomadas, y por qué

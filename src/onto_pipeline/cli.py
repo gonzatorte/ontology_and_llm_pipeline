@@ -773,6 +773,13 @@ def axiomatize_cmd(
         ) from exc
 
     ontology = reasoners.load(candidate_graph)
+    if reasoners.missing_imports:
+        console.print(
+            "[yellow]importaciones sin resolver[/]: "
+            + ", ".join(reasoners.missing_imports)
+            + ". Todo lo que el razonador diga vale sobre menos axiomas de los que la "
+            "ontología declara."
+        )
     elk = reasoners.elk(ontology, coverage_threshold=config.reasoner.elk_coverage_threshold)
     hermit = reasoners.hermit(ontology)
     metrics = structural.check(candidate_graph)
@@ -1962,6 +1969,13 @@ def _commit_axioms(
         ) from exc
 
     ontology = reasoners.load(candidate)
+    if reasoners.missing_imports:
+        console.print(
+            "[yellow]importaciones sin resolver[/]: "
+            + ", ".join(reasoners.missing_imports)
+            + ". Todo lo que el razonador diga vale sobre menos axiomas de los que la "
+            "ontología declara."
+        )
     elk = reasoners.elk(ontology, coverage_threshold=config.reasoner.elk_coverage_threshold)
     hermit = reasoners.hermit(ontology)
     metrics = structural.check(candidate)
@@ -2721,6 +2735,13 @@ def validate(
         raise typer.BadParameter(str(exc)) from exc
 
     ontology = reasoners.load(graph)
+    if reasoners.missing_imports:
+        console.print(
+            "[yellow]importaciones sin resolver[/]: "
+            + ", ".join(reasoners.missing_imports)
+            + ". Todo lo que el razonador diga vale sobre menos axiomas de los que la "
+            "ontología declara."
+        )
     profile = reasoners.profile(ontology)
     table = Table("check", "result", "detail")
     table.add_row(

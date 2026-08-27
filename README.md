@@ -84,7 +84,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
 | ~~3~~ | ~~Unificar el registro de decisiones~~ — **hecho**: una tabla, seis categorías fijas, `invalid` separado de `rejected`. Falta llevar los precedentes al prompt | Lo rechazado no está en ningún otro lado | [deuda 20](DEUDA_TECNICA.md) |
 | ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [deuda 8g](DEUDA_TECNICA.md) |
-| 5 | **Terminar C8**: correr el pipeline entero sobre un par publicado. La ingesta ya está | Primera vez que se mediría algo posterior al tipado contra una respuesta conocida | [plan](plan_cambio_corpus_calibracion.md) |
+| ~~5~~ | ~~Terminar C8~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [hallazgo 1.14](HALLAZGOS.md) |
 | ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
 
 | Etapa | Estado |
