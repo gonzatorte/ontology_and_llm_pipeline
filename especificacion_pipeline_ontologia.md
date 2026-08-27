@@ -6,24 +6,24 @@
 
 ---
 
-## 1. Objetivo y alcance
+## SCOPE — Objetivo y alcance
 
-### 1.1 Qué construye
+### SCOPE-WHAT — Qué construye
 
 Un **pipeline** que toma una ontología semilla y un corpus documental, y produce iterativamente una ontología extendida y reorganizada, con el ABox poblado desde los documentos.
 
-**No es un modelo entrenado.** No hay fase de entrenamiento previa al uso. El único componente ajustable es el matcher (§6.3), y su ajuste ocurre después de varias iteraciones, cuando existen etiquetas acumuladas.
+**No es un modelo entrenado.** No hay fase de entrenamiento previa al uso. El único componente ajustable es el matcher (`ITER-TUNE`), y su ajuste ocurre después de varias iteraciones, cuando existen etiquetas acumuladas.
 
-### 1.2 Entradas
+### SCOPE-INPUTS — Entradas
 
 | Entrada | Forma |
 |---|---|
 | Ontología semilla | Archivo OWL (RDF/XML, Turtle) |
 | Corpus | PDFs y texto plano, born-digital y/o escaneados |
-| Ontología superior | Opcional, seleccionada de un catálogo (§7) |
-| Competency questions | Generadas asistidamente (A3) + escritas por el usuario (A4) |
+| Ontología superior | Opcional, seleccionada de un catálogo (`CONFIG`) |
+| Competency questions | Generadas asistidamente (`PREP-CQ-GENERATED`) + escritas por el usuario (`PREP-CQ-USER`) |
 
-### 1.3 Salidas
+### SCOPE-OUTPUTS — Salidas
 
 | Salida | Forma |
 |---|---|
@@ -33,18 +33,18 @@ Un **pipeline** que toma una ontología semilla y un corpus documental, y produc
 | Reglas de mapeo | Mención → individuo/aserción, versionadas |
 | Telemetría | Costos, métricas de evaluación, decisiones |
 
-### 1.4 Propósito
+### SCOPE-PURPOSE — Propósito
 
 **Primario:** conceptualizar el contenido del corpus en una ontología. Sin tarea downstream comprometida.
 **Secundarios declarados:** integración de datos, inferencia, query answering.
 
 Consecuencia: el rigor de `domain`/`range` y disjointness es **deseable, no bloqueante**. Se mantiene OWL-DL y razonamiento porque inferencia y query answering los requieren.
 
-### 1.5 Expresividad objetivo
+### SCOPE-EXPRESSIVITY — Expresividad objetivo
 
-OWL-DL **sin restricciones de cardinalidad**. Se admiten propiedades funcionales (`owl:FunctionalProperty`), que se tratan con cuidado especial (§6.8).
+OWL-DL **sin restricciones de cardinalidad**. Se admiten propiedades funcionales (`owl:FunctionalProperty`), que se tratan con cuidado especial (`ITER-APPLY`).
 
-### 1.6 Escala de referencia
+### SCOPE-SCALE — Escala de referencia
 
 - Semilla: orden de 30–50 clases
 - Corpus: orden de 100 documentos; el tamaño por documento debe medirse, no asumirse
@@ -54,42 +54,42 @@ OWL-DL **sin restricciones de cardinalidad**. Se admiten propiedades funcionales
 
 ---
 
-## 2. Registro de decisiones
+## DECISIONS — Registro de decisiones
 
 Decisiones tomadas por el usuario durante el diseño. Vinculantes.
 
-| # | Decisión | Sección |
+| Decisión | Qué decide | Dónde |
 |---|---|---|
-| D1 | La semilla es **reorganizable** (puede dividirse, fusionarse, reubicarse) | §5 |
-| D2 | Expresividad: OWL-DL sin cardinalidad, con funcionales | §1.5 |
-| D3 | El corpus puede contener born-digital y escaneos; se clasifica por página | §4.1 |
-| D4 | Embeddings de grafos de conocimiento: **fuera de v1**; opcionales como re-ranker en v2 | §12.2 |
-| D5 | Sin revisión manual axioma por axioma; el usuario solo elige rama | §6.6 |
-| D6 | Salida multi-rama: conjuntos de cambios internamente coherentes, mutuamente alternativos | §6.6 |
-| D7 | Las ramas no elegidas **se conservan** (DAG de versiones, no lista lineal) | §6.8 |
-| D8 | El historial de decisiones es input de cada iteración | §6.7 |
-| D9 | Feedback graduado por opción, no binario aceptar/rechazar | §6.7 |
-| D10 | Resolución de entidades: **individuos separados hasta confirmación** | §6.2 |
-| D11 | IRIs opacos + anotaciones legibles | §4.2 |
-| D12 | Ontología superior: **configurable**, fija al inicio del proyecto | §7 |
-| D13 | Sin restricciones de confidencialidad: se admite LLM por API | §7 |
-| D14 | Modo global (re-corre B1–B3 sobre todo el corpus) vs incremental: **configurable**, default global | §7 |
-| D15 | Correferencia intra-documento: LLM con IDs de mención | §6.1 |
-| D16 | Razonamiento: JPype + OWL API. **owlready2 no se usa** | §9 |
-| D17 | Grafo: RDFLib en memoria; Fuseki como capa de persistencia separada, futura | §9 |
-| D18 | Capa de menciones: SQLite | §8.1 |
-| D19 | Conflictos fácticos: notarizar por defecto; refutar y forzar como opciones; contextualizar es decisión de TBox | §6.4 |
-| D20 | Rechazo total de una iteración → regenerar con instrucción textual del usuario | §6.6 |
-| D21 | Sin ejes de decisión distinguibles → aplicar automáticamente y continuar, con entrada de log | §6.6 |
-| D22 | Cold start: se acepta que las primeras 2–3 iteraciones sean más manuales | §11 |
-| D23 | Criterio de parada: CQ (primario) + saturación + curva de acumulación + presupuesto (duro) | §10 |
-| D24 | Temperatura configurable por etapa | §7 |
-| D25 | Conjunto de retención: JSONL propio, con exportador a BRAT/INCEpTION | §10.2 |
-| D26 | Idioma de operación del sistema: inglés | §1 |
+| `SEED-REORGANIZABLE` | La semilla es **reorganizable** (puede dividirse, fusionarse, reubicarse) | `REORG` |
+| `DL-WITH-FUNCTIONALS` | Expresividad: OWL-DL sin cardinalidad, con funcionales | `SCOPE-EXPRESSIVITY` |
+| `PAGE-LEVEL-CLASSIFICATION` | El corpus puede contener born-digital y escaneos; se clasifica por página | `PREP-CLASSIFY` |
+| `KG-EMBEDDINGS-OUT-OF-SCOPE` | Embeddings de grafos de conocimiento: **fuera de v1**; opcionales como re-ranker en v2 | `BUILD-OUT-OF-SCOPE` |
+| `BRANCH-ONLY-REVIEW` | Sin revisión manual axioma por axioma; el usuario solo elige rama | `ITER-BRANCH` |
+| `MULTI-BRANCH-OUTPUT` | Salida multi-rama: conjuntos de cambios internamente coherentes, mutuamente alternativos | `ITER-BRANCH` |
+| `BRANCHES-KEPT` | Las ramas no elegidas **se conservan** (DAG de versiones, no lista lineal) | `ITER-APPLY` |
+| `HISTORY-AS-INPUT` | El historial de decisiones es input de cada iteración | `ITER-FEEDBACK` |
+| `GRADED-FEEDBACK` | Feedback graduado por opción, no binario aceptar/rechazar | `ITER-FEEDBACK` |
+| `SEPARATE-UNTIL-CONFIRMED` | Resolución de entidades: **individuos separados hasta confirmación** | `ITER-MATCH` |
+| `OPAQUE-IRIS` | IRIs opacos + anotaciones legibles | `PREP-NORMALIZE-IRIS` |
+| `UPPER-ONTOLOGY-FIXED-AT-START` | Ontología superior: **configurable**, fija al inicio del proyecto | `CONFIG` |
+| `API-LLM-ALLOWED` | Sin restricciones de confidencialidad: se admite LLM por API | `CONFIG` |
+| `GLOBAL-BY-DEFAULT` | Modo global (re-corre de `ITER-EXTRACT` a `ITER-INDUCE` sobre todo el corpus) vs incremental: **configurable**, default global | `CONFIG` |
+| `COREF-INTRA-DOCUMENT` | Correferencia intra-documento: LLM con IDs de mención | `ITER-COREFER` |
+| `OWLAPI-VIA-JPYPE` | Razonamiento: JPype + OWL API. **owlready2 no se usa** | `REASONING` |
+| `RDFLIB-IN-MEMORY` | Grafo: RDFLib en memoria; Fuseki como capa de persistencia separada, futura | `REASONING` |
+| `MENTIONS-IN-SQLITE` | Capa de menciones: SQLite | `SCHEMAS-MENTIONS` |
+| `NOTARIZE-BY-DEFAULT` | Conflictos fácticos: notarizar por defecto; refutar y forzar como opciones; contextualizar es decisión de TBox | `ITER-CONFLICTS` |
+| `REGENERATE-ON-TOTAL-REJECTION` | Rechazo total de una iteración → regenerar con instrucción textual del usuario | `ITER-BRANCH` |
+| `AUTO-APPLY-WHEN-NO-AXES` | Sin ejes de decisión distinguibles → aplicar automáticamente y continuar, con entrada de log | `ITER-BRANCH` |
+| `COLD-START-ACCEPTED` | Cold start: se acepta que las primeras 2–3 iteraciones sean más manuales | `COLDSTART` |
+| `STOPPING-CRITERIA` | Criterio de parada: CQ (primario) + saturación + curva de acumulación + presupuesto (duro) | `EVAL` |
+| `TEMPERATURE-PER-STAGE` | Temperatura configurable por etapa | `CONFIG` |
+| `RETENTION-SET-JSONL` | Conjunto de retención: JSONL propio, con exportador a BRAT/INCEpTION | `EVAL-ANNOTATION-FORMAT` |
+| `ENGLISH-OPERATION` | Idioma de operación del sistema: inglés | `SCOPE` |
 
 ---
 
-## 3. Arquitectura de artefactos
+## LAYERS — Arquitectura de artefactos
 
 Cuatro capas con naturaleza y ciclo de vida distintos. **No mezclarlas es el invariante central del diseño.**
 
@@ -145,17 +145,17 @@ flowchart TB
 TBox pudiera reescribir menciones, la procedencia dejaría de ser verificable y la regeneración
 dejaría de ser idempotente.
 
-**Regla de regeneración (D10 + §1.4):** como el ABox se deriva de las menciones y no de fuentes externas, una reorganización de la TBox **nunca requiere script de migración**. Se cambian las reglas de mapeo y se recomputa. Esto sostiene la reorganizabilidad (D1) sin deuda acumulada.
+**Regla de regeneración (`SEPARATE-UNTIL-CONFIRMED` + `SCOPE-PURPOSE`):** como el ABox se deriva de las menciones y no de fuentes externas, una reorganización de la TBox **nunca requiere script de migración**. Se cambian las reglas de mapeo y se recomputa. Esto sostiene la reorganizabilidad (`SEED-REORGANIZABLE`) sin deuda acumulada.
 
-### 3.1 Distinción ontología / grafo
+### LAYERS-ONTOLOGY-NOT-GRAPH — Distinción ontología / grafo
 
 El pipeline **proyecta la ontología a grafo en puntos concretos y acotados**, nunca la reemplaza por su proyección:
 
 | Etapa | Opera sobre | Naturaleza |
 |---|---|---|
-| A0 (normalización) | Proyección plana de la semilla | Representación de trabajo, descartable |
-| B3 (inducción) | Grafo de menciones huérfanas | ABox crudo, no la TBox |
-| B5 (validación) | TBox completa | Lógica, semántica modélica |
+| `PREP-NORMALIZE` (normalización) | Proyección plana de la semilla | Representación de trabajo, descartable |
+| `ITER-INDUCE` (inducción) | Grafo de menciones huérfanas | ABox crudo, no la TBox |
+| `ITER-VALIDATE` (validación) | TBox completa | Lógica, semántica modélica |
 
 **Prohibición explícita:** ningún algoritmo de grafo (clustering, comunidades, similaridad estructural) se aplica a la serialización RDF de la TBox. La disjointness se invierte de signo bajo similaridad estructural: dos clases declaradas incompatibles aparecen conectadas.
 
@@ -163,45 +163,45 @@ El pipeline **proyecta la ontología a grafo en puntos concretos y acotados**, n
 
 ---
 
-## 4. Fase A — Preparación (una sola vez)
+## PREP — Fase de preparación (una sola vez)
 
-Dos rutas independientes que sólo se encuentran en A3: el corpus se convierte en chunks con
+Dos rutas independientes que sólo se encuentran en `PREP-CQ-GENERATED`: el corpus se convierte en chunks con
 procedencia, la semilla en una TBox normalizada y versionada.
 
 ```mermaid
 flowchart TB
   subgraph CORPUS["ruta del corpus · A1-A2"]
     direction TB
-    P[/"PDF"/] --> CL{"clase de página<br/>A1"}
+    P[/"PDF"/] --> CL{"clase de página<br/>PREP-CLASSIFY"}
     CL -->|"born_digital"| PY["parser born-digital"]
     CL -->|"scan · uncertain"| VLM["ruta VLM<br/>páginas registradas como unparsed"]
     PY --> BLK["bloques: bbox · tipo · idioma · span"]
     BLK --> BOIL["filtro de boilerplate<br/>frecuencia por página + bbox"]
     BOIL --> MD[/"un Markdown por documento"/]
-    MD --> CH["chunking estructura-consciente<br/>unidad de extracción de B1"]
+    MD --> CH["chunking estructura-consciente<br/>unidad de extracción de ITER-EXTRACT"]
   end
 
-  subgraph SEED["ruta de la semilla · A0"]
+  subgraph SEED["ruta de la semilla · PREP-NORMALIZE"]
     direction TB
-    S[/"ontología semilla"/] --> A00["A0.0 · detección de perfil OWL"]
-    A00 --> A01["A0.1 · IRIs opacos uuid5<br/>el original queda como procedencia"]
-    A01 --> A02["A0.2 · etiquetas derivadas es/en"]
-    A02 --> A03["A0.3 · cuatro detectores de erratas"]
-    A03 --> A04["A0.4 · glosas · LLM"]
-    A04 --> V0[/"v0 commiteada al DAG"/]
-    A03 -.-> REV[/"seed_review.json<br/>lo que espera revisión humana"/]
+    S[/"ontología semilla"/] --> PROFILE["PREP-NORMALIZE-PROFILE · detección de perfil OWL"]
+    PROFILE --> IRIS["PREP-NORMALIZE-IRIS · IRIs opacos uuid5<br/>el original queda como procedencia"]
+    IRIS --> LABELS["PREP-NORMALIZE-LABELS · etiquetas derivadas es/en"]
+    LABELS --> TYPOS["PREP-NORMALIZE-TYPOS · cuatro detectores de erratas"]
+    TYPOS --> GLOSSES["PREP-NORMALIZE-GLOSSES · glosas · LLM"]
+    GLOSSES --> V0[/"v0 commiteada al DAG"/]
+    TYPOS -.-> REV[/"seed_review.json<br/>lo que espera revisión humana"/]
   end
 
-  CH --> A3["A3 · CQ generadas<br/>cada una con cita al corpus"]
-  V0 --> A3
-  A3 --> A4["A4 · CQ del usuario"]
-  A4 --> CQ[/"40-60 CQ con su SPARQL"/]
+  CH --> CQGEN["PREP-CQ-GENERATED · CQ generadas<br/>cada una con cita al corpus"]
+  V0 --> CQGEN
+  CQGEN --> CQUSER["PREP-CQ-USER · CQ del usuario"]
+  CQUSER --> CQ[/"40-60 CQ con su SPARQL"/]
 
   classDef todo fill:#fbdcdc,stroke:#c53030,color:#4d1414
-  class VLM,A3 todo
+  class VLM,CQGEN todo
 ```
 
-### 4.1 A1 — Clasificación de documentos
+### PREP-CLASSIFY — Clasificación de documentos
 
 **Por página, no por documento.** Los documentos mixtos (informe born-digital con anexo escaneado) son comunes.
 
@@ -233,9 +233,9 @@ texto visible > 100 caracteres, texto oculto = 0, imágenes = 0 → born-digital
 
 **Ruteo:** `born_digital` → parser rápido. `scan` y `uncertain` → VLM. **El default de la incertidumbre es la ruta cara.**
 
-**Nota de implementación:** MinerU ya trae esta clasificación integrada (incluida la detección de texto corrupto). Si el modo de operación es "MinerU para todo", A1 se reduce a instrumentación y el ruteo propio es innecesario. El clasificador propio se justifica solo si se rutea entre herramientas distintas por velocidad.
+**Nota de implementación:** MinerU ya trae esta clasificación integrada (incluida la detección de texto corrupto). Si el modo de operación es "MinerU para todo", `PREP-CLASSIFY` se reduce a instrumentación y el ruteo propio es innecesario. El clasificador propio se justifica solo si se rutea entre herramientas distintas por velocidad.
 
-### 4.2 A2 — Parseo e ingesta
+### PREP-PARSE — Parseo e ingesta
 
 **Herramientas.** Por defecto MinerU (mejor en ecuaciones y tablas; requiere GPU) o Docling (CPU-only, licencia MIT, objeto tipado con provenance). Configurable por clase de página.
 
@@ -259,30 +259,30 @@ texto visible > 100 caracteres, texto oculto = 0, imágenes = 0 → born-digital
 
 **Idioma.** Detección por bloque, registrando `language` y `language_source` ∈ {`declared`, `inferred`}. Se permite inferir por contexto cuando no está declarado; se registra como inferido para poder revisar sin re-procesar.
 
-**Salida:** capa de menciones poblada (§8.1) + Markdown estructurado por documento.
+**Salida:** capa de menciones poblada (`SCHEMAS-MENTIONS`) + Markdown estructurado por documento.
 
-### 4.3 A0 — Normalización de la semilla
+### PREP-NORMALIZE — Normalización de la semilla
 
-Ocurre en paralelo a A1–A2. Cinco sub-etapas.
+Ocurre en paralelo a `PREP-CLASSIFY` y `PREP-PARSE`. Cinco sub-etapas.
 
-#### A0.0 — Detección de perfil OWL
+#### PREP-NORMALIZE-PROFILE — Detección de perfil OWL
 
 Determina el perfil de la semilla (EL++, QL, RL, DL completo). **Dos usos:**
 
-1. **Ruteo del razonador** (§9): si la semilla cae fuera de EL, ELK pierde utilidad como filtro.
-2. **Acotar B4**: propuestas que introduzcan construcciones fuera del perfil objetivo se descartan antes de llegar al razonador.
+1. **Ruteo del razonador** (`REASONING`): si la semilla cae fuera de EL, ELK pierde utilidad como filtro.
+2. **Acotar `ITER-AXIOMATIZE`**: propuestas que introduzcan construcciones fuera del perfil objetivo se descartan antes de llegar al razonador.
 
 El perfil se guarda en configuración con dos valores: **detectado** y **objetivo**.
 
-#### A0.1 — Acuñar IRIs opacos
+#### PREP-NORMALIZE-IRIS — Acuñar IRIs opacos
 
 Cada entidad de la semilla recibe un IRI opaco (UUID). El IRI original se registra como procedencia (`skos:historicalNote` o anotación equivalente).
 
-**Justificación (D11):** con una sola ontología, historial versionado y alias registrados, no hay referencia externa que romper. El IRI deja de cargar significado; la etiqueta lo carga.
+**Justificación (`OPAQUE-IRIS`):** con una sola ontología, historial versionado y alias registrados, no hay referencia externa que romper. El IRI deja de cargar significado; la etiqueta lo carga.
 
 **Nota de tooling:** Protégé permite configurar qué propiedad de anotación renderiza en lugar del IRI (*Render by annotation property*). No requiere desarrollo.
 
-#### A0.2 — Derivar etiquetas
+#### PREP-NORMALIZE-LABELS — Derivar etiquetas
 
 Determinista, temperatura 0 o sin LLM:
 
@@ -294,7 +294,7 @@ Determinista, temperatura 0 o sin LLM:
 
 **Regla:** derivar del IRI, comparar semánticamente con la etiqueta declarada, y si la similaridad cae bajo umbral, marcar el par como `divergent` en vez de asumir traducción. Los divergentes van a revisión del usuario; son pocos.
 
-#### A0.3 — Detección de erratas
+#### PREP-NORMALIZE-TYPOS — Detección de erratas
 
 Cuatro detectores deterministas, **sin LLM**, que comparan contra el vocabulario de la propia ontología:
 
@@ -305,9 +305,9 @@ Cuatro detectores deterministas, **sin LLM**, que comparan contra el vocabulario
 | Conformidad al patrón de nombrado | Contra el patrón mayoritario de propiedades (`is…Of`, `has…`) | `isdParticipantOf` |
 | Anomalía de capitalización | Mayúscula en posición inesperada frente al patrón del grupo | `TIene_respuesta` |
 
-**Las correcciones se aplican a las etiquetas, no a identificadores** — los IRIs ya son opacos (A0.1), así que la cuestión no se plantea. Las correcciones propuestas se presentan al usuario en bloque.
+**Las correcciones se aplican a las etiquetas, no a identificadores** — los IRIs ya son opacos (`PREP-NORMALIZE-IRIS`), así que la cuestión no se plantea. Las correcciones propuestas se presentan al usuario en bloque.
 
-#### A0.4 — Bootstrap de glosas
+#### PREP-NORMALIZE-GLOSSES — Bootstrap de glosas
 
 **Distinción necesaria:** una **etiqueta** es un nombre; una **glosa** es una definición en lenguaje natural. El matcher compara el texto de una mención contra la definición, no contra el nombre. Desnormalizar el IRI da la etiqueta, no la glosa.
 
@@ -315,28 +315,28 @@ Insumo del prompt (no el nombre de la clase): superclase, subclases, propiedades
 
 Salida: `skos:definition@es` / `@en`. Temperatura 0.3.
 
-**Ciclo de vida de la glosa.** La glosa no es un valor fijo de A0:
+**Ciclo de vida de la glosa.** La glosa no es un valor fijo de `PREP-NORMALIZE`:
 
 | Fase | Fuente | Momento |
 |---|---|---|
-| Bootstrap | Vecindario estructural | A0.4 |
-| Enriquecimiento | Pasajes definicionales del corpus; sinónimos como `skos:altLabel` | B4b, cada iteración |
+| Bootstrap | Vecindario estructural | `PREP-NORMALIZE-GLOSSES` |
+| Enriquecimiento | Pasajes definicionales del corpus; sinónimos como `skos:altLabel` | `ITER-AXIOMATIZE-ENRICH`, cada iteración |
 
 Esto cierra un bucle autocorrectivo: **glosa mejor → matching mejor → menos falsos huérfanos**. Una mención huérfana en la iteración 3 puede tiparse correctamente en la 8.
 
 Consecuencias:
 - La glosa es artefacto versionado; entra al DAG junto a la TBox.
-- **B2 se re-ejecuta sobre menciones huérfanas cuando las glosas cambian.**
+- **`ITER-MATCH` se re-ejecuta sobre menciones huérfanas cuando las glosas cambian.**
 - **Control de circularidad:** registrar qué documentos contribuyeron a cada glosa. Los matches contra documentos que no contribuyeron son la evidencia que cuenta; los otros inflan la cobertura.
 
-### 4.4 A3 — Generación asistida de competency questions
+### PREP-CQ-GENERATED — Generación asistida de competency questions
 
-**Advertencia de circularidad.** Las CQ derivadas del corpus miden completitud **respecto al corpus**, no respecto al dominio. Es la misma limitación que la saturación de novedad. Mitigación en A4.
+**Advertencia de circularidad.** Las CQ derivadas del corpus miden completitud **respecto al corpus**, no respecto al dominio. Es la misma limitación que la saturación de novedad. Mitigación en `PREP-CQ-USER`.
 
-**Paso 1 — Muestreo estratificado.** 10–15 pasajes por estrato, no el corpus completo:
+**`PREP-CQ-GENERATED-1-SAMPLING`.** Muestreo estratificado: 10–15 pasajes por estrato, no el corpus completo:
 definiciones; tablas; enumeraciones y clasificaciones; restricciones ("debe", "no puede", "solo si"); procedimientos.
 
-**Paso 2 — Generación por tipo con cuota.** Un prompt por categoría (temperatura 0.3). Los tipos derivan de la expresividad declarada (D2):
+**`PREP-CQ-GENERATED-2-DRAFT`.** Generación por tipo con cuota. Un prompt por categoría (temperatura 0.3). Los tipos derivan de la expresividad declarada (`DL-WITH-FUNCTIONALS`):
 
 | Tipo | Forma | Qué exige de la ontología |
 |---|---|---|
@@ -349,21 +349,21 @@ definiciones; tablas; enumeraciones y clasificaciones; restricciones ("debe", "n
 
 **Los tipos inferencial y negativo son los que más rinden y los que el LLM nunca genera espontáneamente.** Cuota obligatoria.
 
-**Paso 3 — Filtrado mecánico, previo a la revisión humana:**
+**`PREP-CQ-GENERATED-3-FILTER`.** Filtrado mecánico, previo a la revisión humana:
 - Deduplicar por embedding, un representante por cluster.
 - Descartar las que se responden con una tripleta trivial.
 - **Descartar las no formalizables como SPARQL.** Si no es consulta, no sirve de criterio de parada.
 - **Descartar las que carecen de cita y página.**
 
-**Paso 4 — Validación del usuario.** Interfaz de tres acciones: aceptar / descartar / reformular, sobre 40–60 candidatas. **Trabajo de una sola vez**, no por iteración.
+**`PREP-CQ-GENERATED-4-VALIDATE`.** Validación del usuario. Interfaz de tres acciones: aceptar / descartar / reformular, sobre 40–60 candidatas. **Trabajo de una sola vez**, no por iteración.
 
 **Requisito duro: cada CQ aceptada queda pareada con su consulta SPARQL.** Sin esto, evaluar el criterio de parada requiere juicio humano cada iteración y se pierde la automatización.
 
-**Estabilidad de las consultas bajo reorganización (D1):** las consultas se escriben contra IRIs que una iteración puede dividir o reubicar. **Política elegida: regenerar la consulta cuando las clases involucradas cambian** (una llamada al LLM por CQ afectada, despreciable al volumen previsto). La alternativa —consultas contra etiquetas canónicas con tabla de alias— es más barata pero exige disciplina de registro de renombres.
+**Estabilidad de las consultas bajo reorganización (`SEED-REORGANIZABLE`):** las consultas se escriben contra IRIs que una iteración puede dividir o reubicar. **Política elegida: regenerar la consulta cuando las clases involucradas cambian** (una llamada al LLM por CQ afectada, despreciable al volumen previsto). La alternativa —consultas contra etiquetas canónicas con tabla de alias— es más barata pero exige disciplina de registro de renombres.
 
 **Bilingüe:** la CQ en el idioma de su pasaje fuente; la SPARQL contra IRIs canónicos únicos. La misma pregunta en dos idiomas no cuenta doble.
 
-### 4.5 A4 — CQ independientes del usuario
+### PREP-CQ-USER — Competency questions independientes del usuario
 
 20–30% del total, escritas **sin mirar la generación automática**, antes de arrancar.
 
@@ -373,13 +373,13 @@ Son las únicas que pueden fallar por razones que el corpus no anticipó, y las 
 
 ---
 
-## 5. Reorganizabilidad y modo de procesamiento
+## REORG — Reorganizabilidad y modo de procesamiento
 
-### 5.1 Path-dependencia
+### REORG-PATH-DEPENDENCE — Path-dependencia
 
 El procesamiento documento a documento es path-dependiente: si el documento 3 induce una clase y el 40 habría inducido otra jerarquía, el resultado depende del orden. Con semilla reorganizable se agrava, porque cada merge puede reestructurar lo anterior.
 
-**Mitigación (modo global, default — D14):** tres pasadas por iteración.
+**Mitigación (modo global, default — `GLOBAL-BY-DEFAULT`):** tres pasadas por iteración.
 
 1. Extraer candidatos de **todos** los documentos, sin tocar la ontología.
 2. Matching e inducción **globales** sobre el pool completo.
@@ -389,13 +389,13 @@ Una sola reorganización informada por todo el corpus, en vez de N reorganizacio
 
 **Modo incremental (configurable):** procesa solo documentos nuevos contra la TBox actual. Más barato, path-dependiente.
 
-**Costo del modo global:** crece linealmente con el corpus **si se re-extrae**. Con caché de B1 por hash de documento (§8.3), la re-corrida global cuesta casi lo mismo que la incremental y conserva el determinismo. **Diseñar con caché desde el principio.**
+**Costo del modo global:** crece linealmente con el corpus **si se re-extrae**. Con caché de `ITER-EXTRACT` por hash de documento (`SCHEMAS-WORK-UNITS`), la re-corrida global cuesta casi lo mismo que la incremental y conserva el determinismo. **Diseñar con caché desde el principio.**
 
 ---
 
-## 6. Fase B — Iteración
+## ITER — Fase de iteración
 
-### 6.1 B1 — Extracción de candidatos
+### ITER-EXTRACT — Extracción de candidatos
 
 **Principio rector de todo el uso de LLM en el pipeline:**
 
@@ -408,22 +408,22 @@ Esto no elimina los sesgos del modelo; los intercepta. Sesgos conocidos y sus co
 | Sesgo | Contra-mecanismo | Dónde vive |
 |---|---|---|
 | Confunde `subClassOf` con `rdf:type` | Juicios atómicos + ensamblado en código | Descomposición de tarea |
-| Modela partonomía como taxonomía | OntoClean sobre metapropiedades | Validador (B5) |
-| Sobre-genera jerarquía | Rechazar niveles con una sola subclase o sin criterio de división declarado | Validador (B5) |
+| Modela partonomía como taxonomía | OntoClean sobre metapropiedades | Validador (`ITER-VALIDATE`) |
+| Sobre-genera jerarquía | Rechazar niveles con una sola subclase o sin criterio de división declarado | Validador (`ITER-VALIDATE`) |
 | Evita disjointness | Prompt separado y dedicado, con pares pre-seleccionados por código | Descomposición |
-| Inconsistencia global | Razonador | Validador (B5) |
+| Inconsistencia global | Razonador | Validador (`ITER-VALIDATE`) |
 
 **Intervenciones descartadas:** fine-tuning del generador (los sesgos no son de estilo) y entrenamiento desde cero. **Intervenciones adoptadas:** descomposición de tarea (≈70% de la ganancia), ejemplos en contexto desde catálogo ODP, decodificación restringida para garantizar sintaxis, rejection sampling con el razonador como filtro.
 
 **Unidad:** chunk. Temperatura 0. **Cacheable por hash de documento.**
 
-### 6.1b — Correferencia intra-documento
+### ITER-COREFER — Correferencia intra-documento
 
-Problema distinto del linking entre documentos; se resuelve antes y con otro método (D15).
+Problema distinto del linking entre documentos; se resuelve antes y con otro método (`COREF-INTRA-DOCUMENT`).
 
-**Método elegido: LLM sobre el documento completo.** Un documento de 10 páginas son ~10k tokens, entran en contexto. Sin restricción de confidencialidad (D13), es la ruta pragmática.
+**Método elegido: LLM sobre el documento completo.** Un documento de 10 páginas son ~10k tokens, entran en contexto. Sin restricción de confidencialidad (`API-LLM-ALLOWED`), es la ruta pragmática.
 
-**Detalle de implementación crítico: no pedir spans.** B1 ya extrajo menciones con offsets. Numerarlas, pasar el documento con las menciones marcadas (`[M17]`, `[M18]`…), y pedir que agrupe **identificadores**:
+**Detalle de implementación crítico: no pedir spans.** `ITER-EXTRACT` ya extrajo menciones con offsets. Numerarlas, pasar el documento con las menciones marcadas (`[M17]`, `[M18]`…), y pedir que agrupe **identificadores**:
 
 ```
 Salida: [[M3, M17, M42], [M8, M11]]
@@ -435,15 +435,15 @@ Verificable mecánicamente (¿todos los IDs existen? ¿alguno en dos grupos?), s
 
 Temperatura 0. Cacheable por hash de documento.
 
-### 6.2 B2 — Matching y resolución de entidades
+### ITER-MATCH — Matching y resolución de entidades
 
 **Es el cuello de botella de calidad del pipeline.** Si el matching tipa mal, entidades que pertenecían a la semilla caen en huérfanos e inducen clases espurias. Aquí va el grueso del esfuerzo de evaluación.
 
-#### Arquitectura
+#### ITER-MATCH-ARCHITECTURE — Arquitectura
 
-Bi-encoder multilingüe para recuperación + cross-encoder para re-ranking, operando sobre **glosas** (§4.3 A0.4). Punto de partida: modelos entrenados sobre benchmarks de OAEI (Ontology Alignment Evaluation Initiative), que es exactamente esta tarea.
+Bi-encoder multilingüe para recuperación + cross-encoder para re-ranking, operando sobre **glosas** (`PREP-NORMALIZE` `PREP-NORMALIZE-GLOSSES`). Punto de partida: modelos entrenados sobre benchmarks de OAEI (Ontology Alignment Evaluation Initiative), que es exactamente esta tarea.
 
-#### Política de resolución de entidades (D10)
+#### ITER-MATCH-ENTITY-RESOLUTION — Política de resolución de entidades
 
 "Separados hasta confirmación" define el default, no la política completa. Cuatro componentes:
 
@@ -464,20 +464,20 @@ Si se pregunta todo lo que no es obviamente idéntico, se vuelve a la revisión 
 | Tipo | Política |
 |---|---|
 | Nombre propio idéntico, misma clase inferida | Fusión automática |
-| Sintagma definido anafórico ("el sistema") | Resuelto en B1b, intra-documento; no cross-document |
+| Sintagma definido anafórico ("el sistema") | Resuelto en `ITER-COREFER`, intra-documento; no cross-document |
 | Sinónimo declarado en la semilla | Fusión automática |
 | Cross-idioma (es/en) | Zona gris siempre |
 | Sintagma genérico cross-document | Separados, sin preguntar |
 
-**d) Claves declaradas.** Si la semilla declara `owl:hasKey` para una clase, **esa clave manda sobre los umbrales de similaridad**. Toda clase nueva propuesta en B3 debería recibir la pregunta de si tiene clave.
+**d) Claves declaradas.** Si la semilla declara `owl:hasKey` para una clase, **esa clave manda sobre los umbrales de similaridad**. Toda clase nueva propuesta en `ITER-INDUCE` debería recibir la pregunta de si tiene clave.
 
 Las tres zonas y lo que las gobierna:
 
 ```mermaid
 flowchart TB
-  M["mención · B1"] --> BL["blocking<br/>agrupar por embedding o superficie"]
+  M["mención · ITER-EXTRACT"] --> BL["blocking<br/>agrupar por embedding o superficie"]
   BL --> BI["bi-encoder multilingüe<br/>recuperación de candidatos"]
-  BI --> CE["cross-encoder<br/>re-ranking · apagado hasta tunear, §6.3"]
+  BI --> CE["cross-encoder<br/>re-ranking · apagado hasta tunear, ITER-TUNE"]
   CE --> Z{"zona de similaridad"}
   Z -->|"≥ auto_merge_threshold · 0.92"| AUTO["fusión automática"]
   Z -->|"0.70 a 0.92<br/>o par cross-idioma, siempre"| GREY["zona gris<br/>pregunta al usuario"]
@@ -485,52 +485,52 @@ flowchart TB
   KEY["owl:hasKey declarada"] -.->|"manda sobre los umbrales"| Z
   AUTO --> ABOX["ABox"]
   GREY --> DEC["Decision registrada<br/>estado possible_duplicate_unresolved"]
-  DEC -.->|"excluido del conteo<br/>de soporte funcional, §6.8"| ABOX
-  ORPH --> NEXT["B2b · puenteo → B3 · inducción"]
+  DEC -.->|"excluido del conteo<br/>de soporte funcional, ITER-APPLY"| ABOX
+  ORPH --> NEXT["ITER-BRIDGE · puenteo → ITER-INDUCE · inducción"]
 
   classDef risk fill:#fbdcdc,stroke:#c53030,color:#4d1414
   class ORPH risk
 ```
 
 **El riesgo que el diagrama hace visible:** el nodo rojo. Una mención que *sí* pertenecía a la
-semilla y cae en `< 0.70` no genera ningún error — genera una clase nueva en B3. Por eso los
-umbrales no se fijan por decreto sino midiéndolos contra el conjunto de retención (§10.1).
+semilla y cae en `< 0.70` no genera ningún error — genera una clase nueva en `ITER-INDUCE`. Por eso los
+umbrales no se fijan por decreto sino midiéndolos contra el conjunto de retención (`EVAL-PIPELINE`).
 
-#### Consecuencia de la política conservadora
+#### ITER-MATCH-UNRESOLVED — Consecuencia de la política conservadora
 
 Habrá duplicados no resueltos. **Esto contamina el conteo de soporte de propiedades funcionales**: dos individuos duplicados, cada uno con un valor distinto, parecen confirmar funcionalidad cuando en realidad son la misma entidad con dos valores → conflicto oculto.
 
-**Regla:** estado `possible_duplicate_unresolved` en la capa de menciones, y **exclusión de esos individuos del conteo de soporte funcional** (§6.8).
+**Regla:** estado `possible_duplicate_unresolved` en la capa de menciones, y **exclusión de esos individuos del conteo de soporte funcional** (`ITER-APPLY`).
 
-**Punto a favor:** como el ABox se regenera (§3), revisar una decisión de fusión no requiere migración. Se cambia la regla de mapeo y se recomputa.
+**Punto a favor:** como el ABox se regenera (`LAYERS`), revisar una decisión de fusión no requiere migración. Se cambia la regla de mapeo y se recomputa.
 
-### 6.2b — Puenteo por conocimiento del mundo
+### ITER-BRIDGE — Puenteo por conocimiento del mundo
 
-**Etapa nueva, entre B2 y B3.** Antes de inducir clases sobre los huérfanos, preguntar por conocimiento preentrenado si un candidato se relaciona con alguna clase de la semilla **aunque ningún documento lo diga explícitamente**.
+**Etapa nueva, entre `ITER-MATCH` y `ITER-INDUCE`.** Antes de inducir clases sobre los huérfanos, preguntar por conocimiento preentrenado si un candidato se relaciona con alguna clase de la semilla **aunque ningún documento lo diga explícitamente**.
 
 Justificación: el conocimiento general del modelo es lo que debe tender el puente cuando el corpus no explicita la relación. Tratar la ausencia de puente como fallo del matcher es un error de diseño.
 
 **Consecuencia: dos clases de procedencia, con filtros distintos.**
 
-| Procedencia | Evidencia | Filtro de evidencia en B5 |
+| Procedencia | Evidencia | Filtro de evidencia en `ITER-VALIDATE` |
 |---|---|---|
 | `textual` | Cita, página, bbox | **Se aplica**: sin cita, se descarta |
 | `world_knowledge` | Ninguna cita posible | **No se aplica** |
 
 La regla "todo axioma sin cita se descarta" mataría exactamente los puentes que hacen útil a la semilla. Los axiomas de conocimiento del mundo pasan razonador y OntoClean igual, pero llegan al usuario marcados como tales. Son pocos, son los más discutibles, y son donde el criterio de dominio del usuario rinde más.
 
-#### Métrica de huérfanos, partida en dos
+#### ITER-BRIDGE-ORPHAN-METRIC — Métrica de huérfanos, partida en dos
 
 **El orphan rate agregado no dice nada.** Hay que separar:
 
 | Tipo | Significado | Tratamiento |
 |---|---|---|
-| **Falso huérfano** | La clase existía y el matcher falló | Error. Va al conjunto de evaluación (§10.1) |
-| **Huérfano genuino** | La semilla no cubre el concepto | Funcionamiento normal. Alimenta B3 |
+| **Falso huérfano** | La clase existía y el matcher falló | Error. Va al conjunto de evaluación (`EVAL-PIPELINE`) |
+| **Huérfano genuino** | La semilla no cubre el concepto | Funcionamiento normal. Alimenta `ITER-INDUCE` |
 
 Solo el primero es un problema. Mezclados, la métrica es inútil.
 
-### 6.3 Ajuste del matcher (LoRA)
+### ITER-TUNE — Ajuste del matcher
 
 **Único componente del pipeline que se ajusta.** Razón estructural: es clasificación de pares, no generación. Con cientos de ejemplos etiquetados, un cross-encoder mejora de forma medible; un generador no.
 
@@ -538,11 +538,11 @@ Solo el primero es un problema. Mezclados, la métrica es inútil.
 
 **Evaluación:** pareada sobre el mismo conjunto de retención, antes y después. Es lo único que aísla la variable.
 
-**No arranca antes de acumular volumen suficiente.** Ver cold start (§11).
+**No arranca antes de acumular volumen suficiente.** Ver cold start (`COLDSTART`).
 
-### 6.4 Conflictos fácticos
+### ITER-CONFLICTS — Conflictos fácticos
 
-Distintos de los compromisos de modelado (§6.6). Ocurren cuando el documento 12 afirma X y el 47 afirma ¬X.
+Distintos de los compromisos de modelado (`ITER-BRANCH`). Ocurren cuando el documento 12 afirma X y el 47 afirma ¬X.
 
 **Cuatro políticas, en dos niveles distintos:**
 
@@ -553,11 +553,11 @@ Distintos de los compromisos de modelado (§6.6). Ocurren cuando el documento 12
 | ABox / reglas de mapeo | **refutar** (marcar falsa) | Por caso | Barato, reversible |
 | **TBox** | **contextualizar** (reificar la aserción con su fuente) | Por propiedad | Caro, global |
 
-**La contextualización no es una decisión por caso.** Reificar una propiedad cambia la forma de todas las consultas sobre ella, incluidas las SPARQL de las CQ. Pertenece a B6 como eje de modelado.
+**La contextualización no es una decisión por caso.** Reificar una propiedad cambia la forma de todas las consultas sobre ella, incluidas las SPARQL de las CQ. Pertenece a `ITER-BRANCH` como eje de modelado.
 
 **Regla práctica:** el conflicto individual se resuelve en ABox; **el patrón de conflictos sobre una propiedad dispara la decisión de TBox.**
 
-#### Filtro de volumen (requisito de D5)
+#### ITER-CONFLICTS-VOLUME-FILTER — Filtro de volumen
 
 Decidir caso por caso es la revisión manual que se quiere evitar:
 
@@ -566,54 +566,54 @@ Decidir caso por caso es la revisión manual que se quiere evitar:
 
 **El default silencioso es notarizar: es el único que no destruye información.**
 
-#### Marcado de falsedad — dos casos que no deben mezclarse
+#### ITER-CONFLICTS-FALSEHOOD — Marcado de falsedad: dos casos que no deben mezclarse
 
 | Caso | Significado | Destino |
 |---|---|---|
 | `refuted` | El documento afirma X y X no es cierto | Excluida del ABox. Opcionalmente `owl:NegativePropertyAssertion` si se sabe activamente que es falso |
-| `misextracted` | El documento no dice X; el extractor leyó mal | **Bug de B1.** Va al conjunto de evaluación |
+| `misextracted` | El documento no dice X; el extractor leyó mal | **Bug de `ITER-EXTRACT`.** Va al conjunto de evaluación |
 
 Parecen lo mismo en la interfaz y son señales opuestas. Mezclarlos pierde la única fuente gratuita de etiquetas de error de extracción.
 
 **Nota semántica:** bajo mundo abierto, no asertar X y asertar ¬X son cosas distintas. La primera es silencio; la segunda es conocimiento. Usar `NegativePropertyAssertion` solo cuando se sabe que es falso, no cuando hay duda.
 
-### 6.5 B4 — Axiomatización
+### ITER-AXIOMATIZE — Axiomatización
 
 El LLM propone axiomas **con evidencia textual explícita** o marcados como `world_knowledge`. El código ensambla el OWL.
 
-**Sin componente de inducción estadística** (§1.6). Fuentes de axiomas: texto, conocimiento del mundo, OntoClean (metapropiedades), razonador (rechazo).
+**Sin componente de inducción estadística** (`SCOPE-SCALE`). Fuentes de axiomas: texto, conocimiento del mundo, OntoClean (metapropiedades), razonador (rechazo).
 
-**Acotado por el perfil objetivo** (A0.0): propuestas fuera del perfil se descartan antes del razonador.
+**Acotado por el perfil objetivo** (`PREP-NORMALIZE-PROFILE`): propuestas fuera del perfil se descartan antes del razonador.
 
 Temperatura 0.7.
 
-#### B4b — Enriquecimiento de glosas
+#### ITER-AXIOMATIZE-ENRICH — Enriquecimiento de glosas
 
-Sub-etapa de B4. Extrae de pasajes definicionales del corpus mejoras a las glosas existentes y sinónimos (`skos:altLabel`), registrando qué documentos contribuyeron (control de circularidad, §4.3).
+Sub-etapa de `ITER-AXIOMATIZE`. Extrae de pasajes definicionales del corpus mejoras a las glosas existentes y sinónimos (`skos:altLabel`), registrando qué documentos contribuyeron (control de circularidad, `PREP-NORMALIZE`).
 
-### 6.6 B5 y B6 — Validación y ramificación
+### ITER-VALIDATE — Cadena de filtros
 
-#### B5 — Cadena de filtros
+Apilados. **Solo lo que sobrevive los siete llega a formar ramas.** El usuario nunca ve un axioma individual (`BRANCH-ONLY-REVIEW`).
 
-Apilados. **Solo lo que sobrevive los seis llega a formar ramas.** El usuario nunca ve un axioma individual (D5).
+El número del id es la posición en la cadena: está apilada, y el orden importa.
 
-| # | Filtro | Tipo | Nota |
-|---|---|---|---|
-| 1 | **ELK** | Rechazo duro, incompleto | Ver §9.2 |
-| 2 | **HermiT**: consistencia y satisfacibilidad | Rechazo duro | Con justificaciones |
-| 3 | **SHACL** | Rechazo | Restricciones de forma sobre el ABox |
-| 4 | **OntoClean** | Rechazo duro | Subsunciones mal formadas |
-| 5 | **OOPS!** | Advertencia | Pitfalls de modelado, no rechazo |
-| 6 | **Evidencia textual** | Rechazo | **Solo para procedencia `textual`** (§6.2b) |
-| 7 | **Métricas estructurales** | Rechazo | Profundidad, ramificación, clases huérfanas, niveles con una sola subclase |
+| Filtro | Tipo | Nota |
+|---|---|---|
+| `ITER-VALIDATE-1-ELK` | Rechazo duro, incompleto | Ver `REASONING-ELK-ASYMMETRY` |
+| `ITER-VALIDATE-2-HERMIT` | Rechazo duro | Consistencia y satisfacibilidad, con justificaciones |
+| `ITER-VALIDATE-3-SHACL` | Rechazo | Restricciones de forma sobre el ABox |
+| `ITER-VALIDATE-4-ONTOCLEAN` | Rechazo duro | Subsunciones mal formadas |
+| `ITER-VALIDATE-5-PITFALLS` | Advertencia | Pitfalls de modelado (OOPS!), no rechazo |
+| `ITER-VALIDATE-6-EVIDENCE` | Rechazo | **Solo para procedencia `textual`** (`ITER-BRIDGE`) |
+| `ITER-VALIDATE-7-STRUCTURE` | Rechazo | Profundidad, ramificación, clases huérfanas, niveles con una sola subclase |
 
-**OntoClean requiere metapropiedades etiquetadas** (rigidez, identidad, unidad, dependencia). Si se seleccionó ontología superior (§7), se heredan. Si no, las etiqueta el LLM — factible, menos confiable, y es trabajo adicional que contradice parcialmente D5.
+**OntoClean requiere metapropiedades etiquetadas** (rigidez, identidad, unidad, dependencia). Si se seleccionó ontología superior (`CONFIG`), se heredan. Si no, las etiqueta el LLM — factible, menos confiable, y es trabajo adicional que contradice parcialmente `BRANCH-ONLY-REVIEW`.
 
 Cuerpos de conocimiento a incorporar: **ODPs** (Ontology Design Patterns) como plantillas de prompt y enumerador de ramas; **OntoClean** como validador; **OOPS!** como scanner de anti-patrones.
 
 ```mermaid
 flowchart TB
-  POOL["pool sobre-generado de axiomas candidatos · B4"] --> F1
+  POOL["pool sobre-generado de axiomas candidatos · ITER-AXIOMATIZE"] --> F1
   F1["1 · ELK<br/>rechazo duro, incompleto"] --> F2["2 · HermiT<br/>consistencia + satisfacibilidad, con justificaciones"]
   F2 --> F3["3 · SHACL<br/>restricciones de forma sobre el ABox"]
   F3 --> F4["4 · OntoClean<br/>rigidez · identidad · unidad · dependencia"]
@@ -628,10 +628,10 @@ flowchart TB
   class F3,F4,F5,F6 todo
 ```
 
-Verde: implementado. Rojo: pendiente. **El usuario no ve ninguno de estos rechazos** (D5): ve
+Verde: implementado. Rojo: pendiente. **El usuario no ve ninguno de estos rechazos** (`BRANCH-ONLY-REVIEW`): ve
 ramas, y la cadena decide qué entra en ellas.
 
-#### B6 — Construcción de ramas
+### ITER-BRANCH — Construcción de ramas
 
 Lo que el usuario describió corresponde a **revisión de creencias con extensiones múltiples**. Cuando un conjunto de axiomas candidatos es inconsistente, los subconjuntos consistentes maximales son los "conjuntos coherentes". Herramientas teóricas: MUPS, diagnóstico por hitting sets de Reiter, QuickXplain.
 
@@ -657,7 +657,7 @@ Lo que el usuario describió corresponde a **revisión de creencias con extensio
 
 ```mermaid
 flowchart TB
-  SURV["sobrevivientes de B5"] --> CONF["razonador: detectar conflictos<br/>→ grafo de incompatibilidad"]
+  SURV["sobrevivientes de ITER-VALIDATE"] --> CONF["razonador: detectar conflictos<br/>→ grafo de incompatibilidad"]
   CONF --> AX{"¿hay ejes de decisión?"}
   AX -->|"no · el camino habitual"| APPLY["aplicar todo automáticamente<br/>con entrada de log"]
   AX -->|"sí"| GROUP["agrupar por EJE, no por axioma"]
@@ -671,9 +671,9 @@ flowchart TB
   IND -->|"no · acoplados"| FULL["presentar ramas completas"]
   SEP --> PICK
   FULL --> PICK["el usuario elige una rama, nunca un axioma"]
-  PICK --> B78["B7-B8"]
-  APPLY --> B78
-  PICK -.->|"ninguna convence"| REGEN["regenerar con instrucción textual del usuario · D20"]
+  PICK --> APPLY["B7-B8"]
+  APPLY --> APPLY
+  PICK -.->|"ninguna convence"| REGEN["regenerar con instrucción textual del usuario · REGENERATE-ON-TOTAL-REJECTION"]
 
   classDef key fill:#fdf0ce,stroke:#b7791f,color:#4a3208
   class MOD key
@@ -683,7 +683,7 @@ flowchart TB
 jerarquizar por función vs. por estructura, son perfectamente consistentes en lógica: ningún
 razonador los va a separar, y cada elección condiciona el resto de la ontología.
 
-#### Scoring de ramas
+#### ITER-BRANCH-SCORING — Scoring de ramas
 
 Puntuar ramas ≠ puntuar axiomas. Una rama puede tener axiomas sólidos y ser un mal compromiso global.
 
@@ -695,21 +695,21 @@ Puntuar ramas ≠ puntuar axiomas. Una rama puede tener axiomas sólidos y ser u
 | Afinidad histórica: similaridad con decisiones previas | No (requiere historial) |
 | Parsimonia: axiomas nuevos por entidad cubierta | No (requiere historial) |
 
-Los últimos dos son pobres en las primeras iteraciones. Ver cold start (§11).
+Los últimos dos son pobres en las primeras iteraciones. Ver cold start (`COLDSTART`).
 
-#### Casos límite
+#### ITER-BRANCH-EDGE-CASES — Casos límite
 
 | Caso | Comportamiento |
 |---|---|
-| **No hay ejes distinguibles** (todos los candidatos compatibles) | **Aplicar todo automáticamente y continuar**, con entrada de log. **El multi-rama es el camino excepcional, no el default.** Si pregunta en cada iteración sin conflicto real, se convierte en el trabajo manual que se quiere evitar (D21) |
-| **Rechazo total**: ninguna rama convence | **Regenerar con instrucción textual del usuario** (D20) |
-| **La rama resultante repite un estado ya visitado** | Ver §6.8 |
+| **No hay ejes distinguibles** (todos los candidatos compatibles) | **Aplicar todo automáticamente y continuar**, con entrada de log. **El multi-rama es el camino excepcional, no el default.** Si pregunta en cada iteración sin conflicto real, se convierte en el trabajo manual que se quiere evitar (`AUTO-APPLY-WHEN-NO-AXES`) |
+| **Rechazo total**: ninguna rama convence | **Regenerar con instrucción textual del usuario** (`REGENERATE-ON-TOTAL-REJECTION`) |
+| **La rama resultante repite un estado ya visitado** | Ver `ITER-APPLY` |
 
-### 6.7 Historial y feedback
+### ITER-FEEDBACK — Historial y feedback
 
 **Lo rechazado vale más que lo aceptado.** El historial de aceptaciones ya está en la ontología actual; el de rechazos no está en ningún otro lado.
 
-#### Esquema de feedback por opción (D9)
+#### ITER-FEEDBACK-SCHEMA — Esquema de feedback por opción
 
 Tres campos, no más:
 
@@ -721,7 +721,7 @@ Tres campos, no más:
 
 `invalid` separado de `not_chosen` recupera la señal fuerte sin colapsar todo a rechazo.
 
-#### Destino del feedback: recuperación, no fine-tuning
+#### ITER-FEEDBACK-RETRIEVAL — Destino del feedback: recuperación, no fine-tuning
 
 **Volumen:** decenas o pocos cientos de decisiones. Insuficiente para ajustar un modelo de preferencias. **Suficiente para recuperación de ejemplos en contexto.**
 
@@ -729,11 +729,11 @@ Mecanismo: ante una propuesta nueva, recuperar las 3–5 decisiones históricas 
 
 Mejor que fine-tuning acá y no solo por volumen: **es inspeccionable**. Ante una propuesta rara, se puede ver qué precedentes usó.
 
-#### Comparación por forma normal
+#### ITER-FEEDBACK-NORMAL-FORM — Comparación por forma normal
 
 Para detectar re-proposición hay que **normalizar el axioma antes de comparar**. Sin esto, el mismo compromiso reaparece con IRIs distintos y no se detecta.
 
-#### Expiración de rechazos — problema abierto
+#### ITER-FEEDBACK-EXPIRY — Expiración de rechazos: problema abierto
 
 Con semilla reorganizable, **un rechazo no es permanente**. Un axioma rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura cambió.
 
@@ -742,11 +742,11 @@ Con semilla reorganizable, **un rechazo no es permanente**. Un axioma rechazado 
 
 **Política:** registrar el rechazo **relativo al estado de la ontología**, y expirarlo cuando las clases involucradas hayan sido reorganizadas.
 
-**No es una regla limpia. Requiere ajuste empírico.** Marcado como riesgo conocido (§13).
+**No es una regla limpia. Requiere ajuste empírico.** Marcado como riesgo conocido (`RISKS`).
 
-### 6.8 B7–B8 — Aplicación, versionado y detección de loops
+### ITER-APPLY — Aplicación, versionado y detección de loops
 
-#### DAG de versiones (D7)
+#### ITER-APPLY-VERSION-DAG — DAG de versiones
 
 Las ramas no elegidas se conservan. El almacén de versiones es un **grafo dirigido**, no una lista lineal: se puede volver a la iteración 4 y tomar la rama C.
 
@@ -754,7 +754,7 @@ Las ramas no elegidas se conservan. El almacén de versiones es un **grafo dirig
 
 **Requisito: versionado con diff semántico.** Sin poder revertir a un estado anterior y re-derivar, el proceso no es auditable.
 
-#### Detección de loops
+#### ITER-APPLY-LOOPS — Detección de loops
 
 Como el almacén ya es un DAG, la oscilación A→B→A **es exactamente un ciclo** y se detecta de forma exacta y barata:
 
@@ -788,11 +788,11 @@ literalmente un ciclo en este grafo.
 
 **Nota:** el hash se computa sobre **IRIs, no sobre etiquetas**. Si no, un renombre puro cuenta como estado nuevo.
 
-#### Regeneración del ABox
+#### ITER-APPLY-REGENERATE — Regeneración del ABox
 
-Tras aplicar la rama: recomputar el ABox completo desde la capa de menciones con las reglas de mapeo actualizadas. **No hay script de migración** (§3).
+Tras aplicar la rama: recomputar el ABox completo desde la capa de menciones con las reglas de mapeo actualizadas. **No hay script de migración** (`LAYERS`).
 
-#### Propiedades funcionales — riesgo silencioso (D2)
+#### ITER-APPLY-FUNCTIONAL — Propiedades funcionales: riesgo silencioso
 
 `FunctionalProperty` es cardinalidad máxima 1 con otro nombre.
 
@@ -809,18 +809,18 @@ Tras aplicar la rama: recomputar el ABox completo desde la capa de menciones con
 
 "1 valor en 3 individuos" y "1 valor en 400 individuos" son la misma señal cualitativa y decisiones opuestas.
 
-**Excluir del conteo los individuos marcados `possible_duplicate_unresolved`** (§6.2).
+**Excluir del conteo los individuos marcados `possible_duplicate_unresolved`** (`ITER-MATCH`).
 
 ---
 
-## 7. Superficie de configuración
+## CONFIG — Superficie de configuración
 
 **Un solo archivo central.** Sin esto, los umbrales terminan hardcodeados en cinco lugares.
 
 ```yaml
 # ─── Perfil y razonamiento ───────────────────────────────
 owl_profile:
-  detected: auto          # calculado en A0.0
+  detected: auto          # calculado en PREP-NORMALIZE-PROFILE
   target: OWL_DL_no_cardinality
 reasoner:
   elk_filter_enabled: true
@@ -871,16 +871,16 @@ branching:
 
 # ─── Modelos y temperatura (por etapa) ───────────────────
 llm:
-  A0_2_labels:        {tier: small,  temperature: 0.0}
-  A0_4_glosses:       {tier: medium, temperature: 0.3}
-  A3_cq_generation:   {tier: large,  temperature: 0.3}
-  B1_extraction:      {tier: medium, temperature: 0.0}
-  B1b_coreference:    {tier: medium, temperature: 0.0}
-  B2_matching:        {tier: small,  temperature: 0.0}
-  B2b_bridging:       {tier: large,  temperature: 0.3}
-  B3_naming:          {tier: large,  temperature: 0.3}
-  B4_axiomatization:  {tier: large,  temperature: 0.7}
-  B6_branching:       {tier: large,  temperature: 0.3}
+  prep_normalize_labels:        {tier: small,  temperature: 0.0}
+  prep_normalize_glosses:       {tier: medium, temperature: 0.3}
+  prep_cq_generated:   {tier: large,  temperature: 0.3}
+  iter_extract:      {tier: medium, temperature: 0.0}
+  iter_corefer:    {tier: medium, temperature: 0.0}
+  iter_match:        {tier: small,  temperature: 0.0}
+  iter_bridge:       {tier: large,  temperature: 0.3}
+  iter_induce:          {tier: large,  temperature: 0.3}
+  iter_axiomatize:  {tier: large,  temperature: 0.7}
+  iter_branch:       {tier: large,  temperature: 0.3}
   regeneration_retry: {tier: large,  temperature: 0.7}
 
 # ─── Ejecución ───────────────────────────────────────────
@@ -892,7 +892,7 @@ execution:
 
 ---
 
-## 8. Esquemas de datos
+## SCHEMAS — Esquemas de datos
 
 Cómo se relacionan los almacenes. `documents` es la raíz de toda procedencia; `work_units` y
 `decisions` son transversales —no cuelgan de ningún documento— y las relaciones se sostienen
@@ -901,9 +901,9 @@ que sí lo es y es lo que hace del almacén de versiones un DAG.
 
 ```mermaid
 erDiagram
-  documents ||--o{ page_classification : "A1 clasifica"
-  documents ||--o{ blocks : "A2 produce"
-  documents ||--o{ mentions : "B1 extrae"
+  documents ||--o{ page_classification : "PREP-CLASSIFY clasifica"
+  documents ||--o{ blocks : "PREP-PARSE produce"
+  documents ||--o{ mentions : "ITER-EXTRACT extrae"
   blocks ||--o{ mentions : "ancla spans"
   versions ||--o{ versions : "parent_id · DAG"
   versions ||--o{ decisions : "rama aplicada"
@@ -983,12 +983,12 @@ erDiagram
 
 `work_units` no aparece conectada porque es deliberadamente transversal: su clave incluye
 etapa, versión del prompt, temperatura y hash del input, y eso la vuelve simultáneamente caché,
-checkpoint y telemetría (§8.3).
+checkpoint y telemetría (`SCHEMAS-WORK-UNITS`).
 
 
-### 8.1 Capa de menciones (SQLite)
+### SCHEMAS-MENTIONS — Capa de menciones
 
-**Artefacto persistente central.** Todo lo demás se regenera desde aquí. Definir antes de escribir B1: cambiarlo después obliga a re-parsear todo.
+**Artefacto persistente central.** Todo lo demás se regenera desde aquí. Definir antes de escribir `ITER-EXTRACT`: cambiarlo después obliga a re-parsear todo.
 
 ```sql
 CREATE TABLE mentions (
@@ -1002,7 +1002,7 @@ CREATE TABLE mentions (
   block_type        TEXT,              -- paragraph|table|table_cell|formula|caption|figure
   language          TEXT,              -- es|en
   language_source   TEXT,              -- declared|inferred
-  coref_group       TEXT,              -- intra-documento (B1b)
+  coref_group       TEXT,              -- intra-documento (ITER-COREFER)
   candidate_entity  TEXT,              -- entidad tras linking cross-document
   status            TEXT NOT NULL      -- active|refuted|misextracted|possible_duplicate_unresolved
 );
@@ -1022,7 +1022,7 @@ CREATE TABLE page_classification (
 );
 ```
 
-### 8.2 Rama
+### SCHEMAS-BRANCH — Rama
 
 **Objeto central del sistema.** Sin los dos últimos campos no se puede justificar la elección ni detectar loops.
 
@@ -1046,7 +1046,7 @@ CREATE TABLE page_classification (
 }
 ```
 
-### 8.3 Unidades de trabajo (checkpointing)
+### SCHEMAS-WORK-UNITS — Unidades de trabajo
 
 **Caché y checkpoint son el mismo mecanismo, no dos.**
 
@@ -1074,12 +1074,12 @@ CREATE INDEX idx_wu_stage ON work_units(stage, iteration, status);
 3. **Granularidad: la llamada individual.** Una etapa con 600 chunks interrumpida en el 400 reanuda en el 401.
 4. Fallos: reintentos con backoff hasta `max_retries`; agotado, `failed` con error registrado y la etapa continúa. La etapa aborta solo si la tasa de fallo supera `stage_failure_rate_abort`.
 5. **Barrera entre etapas:** una etapa no arranca hasta que la anterior no tenga unidades `pending` ni `running`. Las `failed` no bloquean pero se propagan al reporte.
-6. **Etapas no-LLM (B5 razonador, B6 agrupación, B8 regeneración del ABox) se recomputan enteras.** Son determinísticas dado el mismo input. Solo se persiste lo que cuesta dinero o tiempo real.
-7. **Interacción con el DAG:** un checkpoint a mitad de iteración **no es un estado de la ontología**. La versión se escribe solo al completar B8. Si se interrumpe antes, la ontología queda en la versión anterior y la reanudación reconstruye el resto desde las unidades completas.
+6. **Etapas no-LLM (`ITER-VALIDATE` razonador, `ITER-BRANCH` agrupación, `ITER-APPLY-REGENERATE` regeneración del ABox) se recomputan enteras.** Son determinísticas dado el mismo input. Solo se persiste lo que cuesta dinero o tiempo real.
+7. **Interacción con el DAG:** un checkpoint a mitad de iteración **no es un estado de la ontología**. La versión se escribe solo al completar `ITER-APPLY-REGENERATE`. Si se interrumpe antes, la ontología queda en la versión anterior y la reanudación reconstruye el resto desde las unidades completas.
 
 **Determinismo:** la clave de caché incluye `prompt_version` y `temperature`. Cambiar un prompt invalida el caché de esa etapa, y eso debe ser visible en el log.
 
-### 8.4 Historial de decisiones
+### SCHEMAS-DECISIONS — Historial de decisiones
 
 ```sql
 CREATE TABLE decisions (
@@ -1097,9 +1097,9 @@ CREATE TABLE decisions (
 
 ---
 
-## 9. Razonamiento
+## REASONING — Razonamiento
 
-### 9.1 Stack (D16, D17)
+### REASONING-STACK — Stack
 
 | Componente | Herramienta |
 |---|---|
@@ -1112,11 +1112,11 @@ CREATE TABLE decisions (
 
 **Por qué JVM persistente y no ROBOT por subproceso:** **HermiT no genera justificaciones.** Es un razonador; las justificaciones las computa la OWL API con su algoritmo de black-box explanation, usando el razonador como oráculo — le pregunta repetidamente "¿sigue siendo inconsistente sin este axioma?". **Una justificación cuesta decenas o cientos de invocaciones al razonador, no una.** Con JVM persistente es viable; por subproceso, no.
 
-**Las justificaciones son requisito, no lujo:** B6 necesita saber qué subconjuntos de axiomas están en conflicto para agrupar por eje de decisión. "Es inconsistente" no alcanza.
+**Las justificaciones son requisito, no lujo:** `ITER-BRANCH` necesita saber qué subconjuntos de axiomas están en conflicto para agrupar por eje de decisión. "Es inconsistente" no alcanza.
 
 ELK y HermiT son dos `OWLReasonerFactory` sobre la misma ontología cargada en la misma JVM. Sin serialización intermedia ni segundo arranque.
 
-### 9.2 ELK como filtro — asimetría obligatoria
+### REASONING-ELK-ASYMMETRY — ELK como filtro: asimetría obligatoria
 
 **ELK no falla ante axiomas fuera de OWL 2 EL: los ignora** y razona sobre el fragmento EL restante, registrando advertencias.
 
@@ -1137,11 +1137,11 @@ La lógica es monótona: razonar sobre un subconjunto solo puede debilitar las c
 
 ---
 
-## 10. Evaluación
+## EVAL — Evaluación
 
-Dos cosas distintas: evaluar **la ontología** (§10.3, criterio de parada) y evaluar **el pipeline** (§10.1).
+Dos cosas distintas: evaluar **la ontología** (`EVAL-STOPPING`, criterio de parada) y evaluar **el pipeline** (`EVAL-PIPELINE`).
 
-### 10.1 Evaluación del pipeline
+### EVAL-PIPELINE — Evaluación del pipeline
 
 **Gráficas de F1 vs. iteración no sirven solas:** la iteración cambia dos cosas a la vez (más corpus procesado y ontología distinta). No aísla nada.
 
@@ -1149,11 +1149,11 @@ Dos cosas distintas: evaluar **la ontología** (§10.3, criterio de parada) y ev
 
 | Componente | Métrica |
 |---|---|
-| Parser (A1–A2) | Edit distance sobre texto; TEDS sobre tablas |
-| Extracción (B1) | Precisión / recall de menciones |
-| **Matcher (B2)** | **F1 de tipado, y por separado la tasa de falsos huérfanos** |
-| Inducción (B3) | Pureza de clusters vs. clases anotadas |
-| Axiomatización (B4) | % que sobrevive B5; % que el usuario acepta en B7 |
+| Parser (de `PREP-CLASSIFY` a `PREP-PARSE`) | Edit distance sobre texto; TEDS sobre tablas |
+| Extracción (`ITER-EXTRACT`) | Precisión / recall de menciones |
+| **Matcher (`ITER-MATCH`)** | **F1 de tipado, y por separado la tasa de falsos huérfanos** |
+| Inducción (`ITER-INDUCE`) | Pureza de clusters vs. clases anotadas |
+| Axiomatización (`ITER-AXIOMATIZE`) | % que sobrevive `ITER-VALIDATE`; % que el usuario acepta en `ITER-APPLY` |
 | Global | % de CQ respondidas |
 
 **El falso huérfano es la métrica que más importa y la que ninguna suite estándar reporta.** Medirla aparte de la F1 agregada, que la diluye.
@@ -1163,10 +1163,10 @@ Dos cosas distintas: evaluar **la ontología** (§10.3, criterio de parada) y ev
 | Curva | Qué dice |
 |---|---|
 | F1 del matcher vs. etiquetas acumuladas | Cuándo el LoRA empieza a rendir |
-| Acumulación de conceptos vs. documentos | Si el corpus alcanza (§10.3) |
-| % de propuestas que sobreviven B5 vs. iteración | Si sube, la ontología se estabiliza; si cae, algo se degradó |
+| Acumulación de conceptos vs. documentos | Si el corpus alcanza (`EVAL-STOPPING`) |
+| % de propuestas que sobreviven `ITER-VALIDATE` vs. iteración | Si sube, la ontología se estabiliza; si cae, algo se degradó |
 
-### 10.2 Formato de anotación (D25)
+### EVAL-ANNOTATION-FORMAT — Formato de anotación
 
 **JSONL propio.** Razón: la anotación tiene un campo que ningún estándar contempla — `in_seed` — y es justamente el que define la métrica de falsos huérfanos.
 
@@ -1203,7 +1203,7 @@ Dos cosas distintas: evaluar **la ontología** (§10.3, criterio de parada) y ev
 
 **Importador: solo cuando se necesite, y con validación.** Los formatos estándar anclan offsets sobre texto plano; los offsets del sistema son sobre el Markdown del parser. **Si el parser cambia de versión, los offsets se corren.** Por eso `markdown_hash` se exporta junto al `.txt` y se valida al reimportar. Si no coincide, el conjunto hay que re-anclarlo, no reimportarlo a ciegas.
 
-### 10.3 Criterios de parada (D23)
+### EVAL-STOPPING — Criterios de parada
 
 Dos terminaciones distintas: de iteración (¿esta ronda se agotó?) y de proceso (¿la ontología está lista?). Siendo incremental, la segunda es "suficiente hasta que lleguen documentos nuevos".
 
@@ -1227,44 +1227,46 @@ Dos terminaciones distintas: de iteración (¿esta ronda se agotó?) y de proces
 
 **Es la única métrica que distingue si el problema está en el pipeline o en los datos**, y la única que rompe la circularidad de las otras tres (que todas miran el corpus).
 
-**Límite estructural, explícito:** los tres primeros criterios pueden estar de acuerdo y equivocados en la misma dirección, porque todos miran el corpus. Es consecuencia de no tener tarea downstream y no hay forma de eliminarlo desde adentro del sistema. Las CQ de A4 lo mitigan parcialmente.
+**Límite estructural, explícito:** los tres primeros criterios pueden estar de acuerdo y equivocados en la misma dirección, porque todos miran el corpus. Es consecuencia de no tener tarea downstream y no hay forma de eliminarlo desde adentro del sistema. Las CQ de `PREP-CQ-USER` lo mitigan parcialmente.
 
 ---
 
-## 11. Cold start (D22)
+## COLDSTART — Cold start
 
 Las primeras 2–3 iteraciones no tienen historial, el matcher no tiene etiquetas y el score de ramas está sin calibrar. **El sistema funciona peor justo cuando se define la estructura que condiciona todo lo demás.**
 
 Mitigaciones:
 
-1. **Procesar primero los documentos densos en definiciones** (los del muestreo estratificado de A3).
+1. **Procesar primero los documentos densos en definiciones** (los del muestreo estratificado de `PREP-CQ-GENERATED`).
 2. **Aceptar que las primeras iteraciones son más manuales.** Es el momento donde el conocimiento de dominio del usuario rinde más.
 3. Los componentes `historical_affinity` y `parsimony` del score se omiten hasta tener historial suficiente, en vez de computarse con datos insuficientes.
 
 ---
 
-## 12. Secuencia de construcción
+## BUILD — Secuencia de construcción
 
 **No construir el pipeline completo antes de ver datos.**
 
+El número del id es el orden: cada paso habilita el siguiente.
+
 | Paso | Qué | Criterio de avance |
 |---|---|---|
-| **1** | A1–A2 sobre 5 documentos + **script de evaluación manual del parser** | Inspección visual: el parseo es aceptable |
-| **2** | A0 + A3–A4: normalización, CQ generadas y validadas | Existen 40–60 CQ con su SPARQL |
-| **3** | B1–B2 + evaluación contra el conjunto de retención | **Punto de decisión no-go**, ver §12.1 |
-| **4** | B4–B5 **sin ramas**: axiomatización con aplicación directa | Ontología de juguete funcional |
-| **5** | B6–B8: ramas, scoring, DAG completo | — |
+| `BUILD-STEP-1` | De `PREP-CLASSIFY` a `PREP-PARSE` sobre 5 documentos, más `DELIVERABLES-PENDING-PARSER-EVAL` | Inspección visual: el parseo es aceptable |
+| `BUILD-STEP-2` | `PREP-NORMALIZE`, `PREP-CQ-GENERATED` y `PREP-CQ-USER` | Existen 40–60 CQ con su SPARQL |
+| `BUILD-STEP-3` | De `ITER-EXTRACT` a `ITER-MATCH`, más el conjunto de retención | `BUILD-NO-GO-GATE` |
+| `BUILD-STEP-4` | De `ITER-AXIOMATIZE` a `ITER-VALIDATE` **sin ramas**: aplicación directa | Ontología de juguete funcional |
+| `BUILD-STEP-5` | De `ITER-BRANCH` a `ITER-APPLY-REGENERATE`: ramas, scoring, DAG completo | — |
 
 ```mermaid
 flowchart LR
-  P1["paso 1<br/>A1-A2 + T1"] -->|"el parseo es aceptable<br/>a inspección visual"| P2["paso 2<br/>A0 + A3-A4"]
-  P2 -->|"40-60 CQ con SPARQL"| P3["paso 3<br/>B1-B2 + conjunto de retención"]
+  P1["BUILD-STEP-1<br/>de PREP-CLASSIFY a PREP-PARSE<br/>+ evaluación manual del parser"] -->|"el parseo es aceptable<br/>a inspección visual"| P2["BUILD-STEP-2<br/>PREP-NORMALIZE + competency questions"]
+  P2 -->|"40-60 CQ con SPARQL"| P3["BUILD-STEP-3<br/>de ITER-EXTRACT a ITER-MATCH<br/>+ conjunto de retención"]
   P3 --> GATE{"tasa de<br/>falsos huérfanos"}
   GATE -->|"alta"| FIX["arreglar el matcher:<br/>mejor encoder · mejores glosas · LoRA"]
   FIX --> P3
-  GATE -->|"aceptable"| P4["paso 4<br/>B4-B5 sin ramas, aplicación directa"]
-  P4 -->|"ontología de juguete funcional"| P5["paso 5<br/>B6-B8: ramas, scoring, DAG completo"]
-  VER["versionado, historial y hash de estado<br/>desde el paso 4, sin excepción"] -.-> P4
+  GATE -->|"aceptable"| P4["BUILD-STEP-4<br/>de ITER-AXIOMATIZE a ITER-VALIDATE<br/>sin ramas, aplicación directa"]
+  P4 -->|"ontología de juguete funcional"| P5["BUILD-STEP-5<br/>de ITER-BRANCH a ITER-APPLY-REGENERATE<br/>ramas, scoring, DAG completo"]
+  VER["versionado, historial y hash de estado<br/>desde BUILD-STEP-4, sin excepción"] -.-> P4
 
   classDef gate fill:#fbdcdc,stroke:#c53030,color:#4d1414
   classDef done fill:#d7f2dc,stroke:#2f855a,color:#1a3c26
@@ -1274,17 +1276,17 @@ flowchart LR
 
 Verde: pasos completados. **La compuerta roja es de decisión no-go, no un checkpoint de
 progreso:** si se cruza con la tasa alta, cada falso huérfano se convierte en una clase espuria
-en B3 y con multi-rama se estaría eligiendo entre variantes de ruido.
+en `ITER-INDUCE` y con multi-rama se estaría eligiendo entre variantes de ruido.
 
-**Requisito que no se pospone:** aunque el paso 4 no tenga multi-rama, **el versionado, el historial y el hash de estado se implementan desde ahí**. Retrofittear el DAG sobre 15 iteraciones ya aplicadas sin registro significa perder ese historial. Lo que se pospone es la ramificación, no el registro.
+**Requisito que no se pospone:** aunque `BUILD-STEP-4` no tenga multi-rama, **el versionado, el historial y el hash de estado se implementan desde ahí**. Retrofittear el DAG sobre 15 iteraciones ya aplicadas sin registro significa perder ese historial. Lo que se pospone es la ramificación, no el registro.
 
-### 12.1 Punto de decisión no-go (paso 3)
+### BUILD-NO-GO-GATE — Punto de decisión no-go
 
-Si la **tasa de falsos huérfanos** es alta, **no seguir construyendo**. Cada falso huérfano se convierte en una clase espuria en B3, y con multi-rama se estaría eligiendo entre variantes de ruido.
+Si la **tasa de falsos huérfanos** es alta, **no seguir construyendo**. Cada falso huérfano se convierte en una clase espuria en `ITER-INDUCE`, y con multi-rama se estaría eligiendo entre variantes de ruido.
 
 Arreglar el matcher primero: mejor modelo, mejores glosas en la semilla, LoRA con las primeras etiquetas.
 
-### 12.2 Fuera de v1
+### BUILD-OUT-OF-SCOPE — Fuera de la primera versión
 
 | Componente | Razón | Reconsiderar cuando |
 |---|---|---|
@@ -1298,45 +1300,45 @@ Arreglar el matcher primero: mejor modelo, mejores glosas en la semilla, LoRA co
 
 ---
 
-## 13. Riesgos conocidos
+## RISKS — Riesgos conocidos
 
-| # | Riesgo | Mitigación | Estado |
+| Riesgo | Qué es | Mitigación | Estado |
 |---|---|---|---|
-| R1 | **Falsos huérfanos** contaminan la ontología con clases espurias | Métrica separada; punto no-go §12.1; bucle de glosas §4.3 | Mitigado, requiere medición |
-| R2 | **Expiración de rechazos** con semilla reorganizable | Rechazo relativo al estado, expirado tras reorganización | **Regla no limpia. Requiere ajuste empírico** |
-| R3 | **Circularidad de las CQ**: derivadas del corpus, miden el corpus | 20–30% de CQ independientes (A4) + curva de acumulación | Mitigado parcialmente. **Límite estructural** |
-| R4 | **Propiedad funcional declarada por error** → `sameAs` espurio, silencioso | Pregunta explícita con conteo de soporte; exclusión de duplicados no resueltos | Mitigado |
-| R5 | **Explosión combinatoria de ramas** (2^k) | Ejes independientes por separado; techo de 3–5 ramas | Mitigado |
-| R6 | **Costo del modo global** crece linealmente con el corpus | Caché de B1 por hash de documento, desde el diseño | Mitigado |
-| R7 | **OntoClean sin ontología superior** requiere etiquetado de metapropiedades por LLM | Menos confiable; contradice parcialmente D5 | **Aceptado**, configurable |
-| R8 | **Duplicados no resueltos** por la política conservadora (D10) | Estado explícito; exclusión de conteos sensibles | Mitigado |
-| R9 | **Offsets del conjunto de retención** se corren si cambia el parser | `markdown_hash` validado al reimportar | Mitigado |
-| R10 | **Cambio de ontología superior a mitad del proceso** | BFO y DOLCE hacen compromisos filosóficos incompatibles. **Fija al inicio; cambiarla equivale a empezar de nuevo** | Aceptado |
+| `RISKS-FALSE-ORPHANS` | **Falsos huérfanos** contaminan la ontología con clases espurias | Métrica separada; punto no-go `BUILD-NO-GO-GATE`; bucle de glosas `PREP-NORMALIZE` | Mitigado, requiere medición |
+| `RISKS-REJECTION-EXPIRY` | **Expiración de rechazos** con semilla reorganizable | Rechazo relativo al estado, expirado tras reorganización | **Regla no limpia. Requiere ajuste empírico** |
+| `RISKS-CQ-CIRCULARITY` | **Circularidad de las CQ**: derivadas del corpus, miden el corpus | 20–30% de CQ independientes (`PREP-CQ-USER`) + curva de acumulación | Mitigado parcialmente. **Límite estructural** |
+| `RISKS-WRONG-FUNCTIONAL` | **Propiedad funcional declarada por error** → `sameAs` espurio, silencioso | Pregunta explícita con conteo de soporte; exclusión de duplicados no resueltos | Mitigado |
+| `RISKS-BRANCH-EXPLOSION` | **Explosión combinatoria de ramas** (2^k) | Ejes independientes por separado; techo de 3–5 ramas | Mitigado |
+| `RISKS-GLOBAL-MODE-COST` | **Costo del modo global** crece linealmente con el corpus | Caché de `ITER-EXTRACT` por hash de documento, desde el diseño | Mitigado |
+| `RISKS-ONTOCLEAN-WITHOUT-UPPER` | **OntoClean sin ontología superior** requiere etiquetado de metapropiedades por LLM | Menos confiable; contradice parcialmente `BRANCH-ONLY-REVIEW` | **Aceptado**, configurable |
+| `RISKS-UNRESOLVED-DUPLICATES` | **Duplicados no resueltos** por la política conservadora (`SEPARATE-UNTIL-CONFIRMED`) | Estado explícito; exclusión de conteos sensibles | Mitigado |
+| `RISKS-RETENTION-OFFSETS` | **Offsets del conjunto de retención** se corren si cambia el parser | `markdown_hash` validado al reimportar | Mitigado |
+| `RISKS-UPPER-ONTOLOGY-SWAP` | **Cambio de ontología superior a mitad del proceso** | BFO y DOLCE hacen compromisos filosóficos incompatibles. **Fija al inicio; cambiarla equivale a empezar de nuevo** | Aceptado |
 
 ---
 
-## 14. Artefactos y tareas
+## DELIVERABLES — Artefactos y tareas
 
-### 14.1 Entregado
+### DELIVERABLES-DONE — Entregado
 
 | Artefacto | Estado |
 |---|---|
 | `estimador_costos.py` | **Entregado.** Modela llamadas, tokens y costo por etapa; modos `--sweep`, `--tornado`, `--calibrate`. Hallazgo principal: el costo lo domina `frac_orphan`, no el tamaño del corpus |
 
-### 14.2 Pendiente de implementación
+### DELIVERABLES-PENDING — Pendiente de implementación
 
-| # | Tarea | Paso |
+| Tarea | Qué es | Paso |
 |---|---|---|
-| T1 | Script de evaluación manual del parser (HTML autocontenido por documento: render de página + Markdown lado a lado, tablas en HTML, fórmulas en LaTeX renderizado, figuras con recorte, clasificación por página con sus señales) | 1 |
-| T2 | Caso de prueba mínimo con script de evaluación para B1–B2 | 3 |
-| T3 | Exportador JSONL → BRAT/INCEpTION | 3 |
-| T4 | Instrumentación de telemetría (contadores de llamadas y tokens por etapa, persistidos en `work_units`) desde la primera línea de código | 1 |
+| `DELIVERABLES-PENDING-PARSER-EVAL` | Script de evaluación manual del parser (HTML autocontenido por documento: render de página + Markdown lado a lado, tablas en HTML, fórmulas en LaTeX renderizado, figuras con recorte, clasificación por página con sus señales) | `BUILD-STEP-1` |
+| `DELIVERABLES-PENDING-EXTRACTION-TESTCASE` | Caso de prueba mínimo con script de evaluación para `ITER-EXTRACT` y `ITER-MATCH` | `BUILD-STEP-3` |
+| `DELIVERABLES-PENDING-BRAT-EXPORTER` | Exportador JSONL → BRAT/INCEpTION | `BUILD-STEP-3` |
+| `DELIVERABLES-PENDING-TELEMETRY` | Instrumentación de telemetría (contadores de llamadas y tokens por etapa, persistidos en `work_units`) desde la primera línea de código | `BUILD-STEP-1` |
 
 ---
 
-## 15. Notas para el implementador
+## NOTES — Notas para el implementador
 
-1. **El invariante central es la separación de capas** (§3). Menciones inmutables, ABox derivado, TBox versionada. Violarlo reintroduce el problema de migración que el diseño elimina.
+1. **El invariante central es la separación de capas** (`LAYERS`). Menciones inmutables, ABox derivado, TBox versionada. Violarlo reintroduce el problema de migración que el diseño elimina.
 
 2. **El LLM nunca escribe OWL.** Juicios atómicos, ensamblado en código. Si un prompt pide un axioma completo, es un error de diseño.
 
