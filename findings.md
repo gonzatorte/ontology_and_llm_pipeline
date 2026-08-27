@@ -32,7 +32,7 @@ se lee del historial:
 | Sesión | De qué se ocupó | Dónde quedó |
 |---|---|---|
 | `f0449040` (la que escribe) | Fase B completa, cadena `ITER-VALIDATE`, criterios de parada, calibración con holdout | 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 y todo `DECISIONS` |
-| `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`calibration/craft-cl/NOTA_FASE0.md`](calibration/craft-cl/NOTA_FASE0.md) y `pair_selection.md` |
+| `e167c718` | Elegir e importar el caso de uso; CRAFT/CL como primario | [`use_cases/craft-cl/PROCEDENCIA.md`](use_cases/craft-cl/PROCEDENCIA.md) y `use_case_selection.md` |
 | `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `mapping_rules_plan.md`, `DEBT-CONTEXT-DISAMBIGUATION`, y 1.3 |
 
 Hay dos transcripts más y ninguno aporta decisiones: `b8c7e99c` es **la misma conversación que
@@ -54,7 +54,7 @@ sesión movió el contexto— está en la sección de coordinación de
 en `SCOPE-PURPOSE` —"sin tarea downstream comprometida"— y conviene tenerlo a la vista porque durante un
 tiempo la documentación de este repositorio afirmó lo contrario: que había un "caso de
 aplicación" (la semilla de metodología cualitativa) al que el proyecto debía volver después de
-calibrar. **No lo hay.** Todos los pares (corpus, ontología) son instrumentos, y lo que califica
+calibrar. **No lo hay.** Todos los casos de uso —cada uno un par (corpus, ontología)— son instrumentos, y lo que califica
 al sistema es cómo se comporta a través de ellos, no cómo le va en uno.
 
 Corregido el 2026-09-09, en 15 lugares de 7 archivos. Venía de la tarea «volver al par de aplicación» del plan de
@@ -67,7 +67,7 @@ la tarea «corrida completa», correr el pipeline entero sobre un par publicado.
 
 ### FINDINGS-MEASURED-MATCHER-CRAFT — El matcher, contra CRAFT/CL — n = 8.723 menciones gold
 
-Medido sobre un par publicado —corpus anotado contra su propia ontología—, donde la respuesta
+Medido sobre un caso de uso publicado —corpus anotado contra su propia ontología—, donde la respuesta
 correcta se conoce para cada mención. `onto-pipeline calibrate craft-cl`.
 
 **`match_against: label`, contra la premisa del spec.** Con 3.418 clases candidatas, 96% de
@@ -135,7 +135,7 @@ Es además el argumento más fuerte a favor de medir sobre un inventario grande:
 —dos clases con etiqueta idéntica, una correcta y otra no— es **invisible en un inventario de 34
 clases** y aparece solo cuando hay miles.
 
-### FINDINGS-MEASURED-SIZE-CURVE — El punto de operación cambia con cada par, y un inventario chico no es más fácil
+### FINDINGS-MEASURED-SIZE-CURVE — El punto de operación cambia con cada caso de uso, y un inventario chico no es más fácil
 
 Dos puntos de la curva de tamaño de inventario. MaterioMiner: 428 clases, 4 publicaciones, 2.229
 menciones gold, no biomédico.
@@ -162,7 +162,7 @@ FoodOn) para poder decir cómo se mueve el punto de operación con el tamaño, e
 
 > **Un número sin conciliar.** `FINDINGS-MEASURED-RETRIEVAL-CEILING` reporta **25,3%** de recall@1
 > para MaterioMiner sobre las mismas n=2.229, contra el 21,5% de acá. La diferencia son 3,8
-> puntos y no se explica con lo que quedó guardado: `data/calibration/materiominer.json` conserva
+> puntos y no se explica con lo que quedó guardado: `data/use_cases/materiominer.json` conserva
 > sólo la última corrida, que fue la de `--context sentence`. Se resuelve corriendo
 > `calibrate materiominer` de nuevo, y hasta entonces el número que hay que citar es el que venga
 > con su n al lado.
@@ -187,7 +187,7 @@ Verificado sobre los 97 artículos de CRAFT, 4.091.461 caracteres:
 
 Un corpus anotado contra su propia ontología **no tiene huérfanas genuinas por construcción**:
 toda clase gold está en la ontología, así que toda huérfana es falsa y la tasa no dice nada sobre
-un par donde sí falten conceptos. Reteniendo 683 de las 3.418 clases, las **546 menciones** de
+un caso de uso donde sí falten conceptos. Reteniendo 683 de las 3.418 clases, las **546 menciones** de
 esas clases pasan a ser huérfanas genuinas con respuesta conocida.
 
 Dónde cae una mención de un concepto que la ontología **no** tiene:
@@ -218,8 +218,8 @@ Confirmado por segunda vía al construir `enrich`: sobre 1.000 bloques utilizabl
 señales definitorias encuentra 5 pasajes en 3 documentos para "open science" y **cero** para las
 34 clases de la semilla. No es una falla de la etapa; es la etapa reportando el desajuste.
 
-Consecuencia: una tasa de falsos huérfanos medida sobre este par no sería mala, **sería sin
-significado**. Por eso el instrumento de calibración es un par publicado y separado.
+Consecuencia: una tasa de falsos huérfanos medida sobre este caso de uso no sería mala, **sería sin
+significado**. Por eso el instrumento de calibración es un caso de uso publicado y separado.
 
 ### FINDINGS-MEASURED-SUBSUMPTION-CONFLICT — Subsunción contada como desacuerdo — 4 conflictos aparentes, 1 real
 
@@ -278,7 +278,7 @@ Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del p
 ### FINDINGS-MEASURED-QUALITATIVE-PAIR — Estado del par cualitativo — retirado el 2026-09-09
 
 Estos números son de la dupla semilla cualitativa + corpus de ciencia abierta, que **ya no se
-usa**: el proyecto no tiene dominio comprometido y todos los pares son instrumentos (ver
+usa**: el proyecto no tiene dominio comprometido y todos los casos de uso son instrumentos (ver
 [`technical_debt.md`](technical_debt.md), `DEBT-QUALITATIVE-PAIR`). Quedan acá porque son la única corrida de
 punta a punta que hubo hasta ahora, y porque el eco léxico que muestran es sobre el método.
 
@@ -354,7 +354,7 @@ sobre glosas.
 ### FINDINGS-MEASURED-TUNED-RERANKER — Ajustar el re-ranker: la mejora más grande medida, y sirve sólo en su dominio
 
 El cross-encoder de fábrica arruinaba el orden —separación −0,50—. Ajustado con las anotaciones
-del propio par, es la mejora más grande que este pipeline midió. Partición **por documento**, y
+del propio caso de uso, es la mejora más grande que este pipeline midió. Partición **por documento**, y
 evaluado sobre documentos que el entrenamiento nunca vio:
 
 | Par | bi-encoder solo | + ajustado | techo (@10) | ganancia | del margen |
@@ -446,7 +446,7 @@ sintagmas nominales legítimos, con soporte suficiente, y el razonador no tiene 
 Las tres vías para atacarlo —lista de bloqueo, instrucción en el prompt de extracción, filtro por
 distribución entre documentos— están en la [`DEBT-ACADEMIC-METALANGUAGE` de deuda técnica](technical_debt.md).
 
-### FINDINGS-MEASURED-FULL-RUN — El pipeline entero sobre un par anotado (tarea «corrida completa»), y qué se ve al final
+### FINDINGS-MEASURED-FULL-RUN — El pipeline entero sobre un caso de uso anotado (tarea «corrida completa»), y qué se ve al final
 
 Primera corrida completa contra una respuesta conocida. MaterioMiner, 4 publicaciones:
 

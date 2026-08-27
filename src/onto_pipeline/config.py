@@ -13,10 +13,10 @@ class Paths(BaseModel):
     seed_ontology: Path
     work_dir: Path = Path("data")
     reasoner_lib: Path = Path("lib")
-    # Where the calibration pairs live: one directory per (corpus, ontología), each with its
-    # own `pair.yml`. Separate from `corpus_root` because they answer different questions —
-    # that pair is the case of application, these are the instrument.
-    calibration_root: Path = Path("../calibration")
+    # Dónde viven los casos de uso: un directorio por (corpus, ontología), cada uno con su
+    # `use_case.yml`. Aparte de `corpus_root` porque no es lo mismo el corpus sobre el que se
+    # corre el pipeline que los pares publicados contra los que se lo mide.
+    use_cases_root: Path = Path("../use_cases")
 
 
 class OwlProfile(BaseModel):
@@ -313,5 +313,5 @@ class Config(BaseModel):
         config.paths.seed_ontology = (base / config.paths.seed_ontology).resolve()
         config.paths.work_dir = (base / config.paths.work_dir).resolve()
         config.paths.reasoner_lib = (base / config.paths.reasoner_lib).resolve()
-        config.paths.calibration_root = (base / config.paths.calibration_root).resolve()
+        config.paths.use_cases_root = (base / config.paths.use_cases_root).resolve()
         return config

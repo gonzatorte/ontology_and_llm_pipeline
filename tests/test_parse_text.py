@@ -112,12 +112,12 @@ def test_block_ids_stay_unique_without_pages(document):
 
 # ─────────  contra el corpus anotado de verdad, si está bajado  ─────────
 
-CRAFT = Path(__file__).resolve().parents[1] / "calibration"
+CRAFT = Path(__file__).resolve().parents[1] / "use_cases"
 
 
 @pytest.mark.skipif(
     not (CRAFT / "_craft" / "articles" / "txt").is_dir(),
-    reason="el clone de CRAFT no está; se regenera con el comando de NOTA_FASE0.md",
+    reason="el clone de CRAFT no está; se regenera con el comando de PROCEDENCIA.md",
 )
 def test_the_gold_annotations_land_where_the_markdown_says(config):
     """La razón de ser de esta ruta, medida y no supuesta.
@@ -126,13 +126,13 @@ def test_the_gold_annotations_land_where_the_markdown_says(config):
     corriera un solo carácter, cada medición posterior compararía contra el lugar equivocado —
     y no fallaría: daría peor sin decir por qué.
     """
-    from onto_pipeline.calibration import load_pair
+    from onto_pipeline.use_cases import load_use_case
 
-    pair = load_pair(CRAFT / "craft-cl", match_against="label")
+    case = load_use_case(CRAFT / "craft-cl", match_against="label")
     texts = CRAFT / "_craft" / "articles" / "txt"
 
     checked = 0
-    for gold in pair.documents:
+    for gold in case.documents:
         document = parse_text(texts / f"{gold.doc_id}.txt", config, doc_id=gold.doc_id)
         spans = [(b.span_start, b.span_end) for b in document.blocks]
         for mention in gold.mentions:

@@ -12,7 +12,18 @@ from pathlib import Path
 
 from rdflib import Graph
 
-from .. import annotate, annotation, calibration, cq, matching, review, stopping, tuning, versioning
+from .. import (
+    annotate,
+    annotation,
+    calibration,
+    cq,
+    matching,
+    review,
+    stopping,
+    tuning,
+    use_cases,
+    versioning,
+)
 from ..ingest import (
     held_out_documents,
     load_blocks,
@@ -270,8 +281,8 @@ def resolve_review(
 
 @dataclass
 class Sweep:
-    pair_name: str
-    pairs: list
+    name: str
+    described: list
     reports: list
     distributions: list[tuple[str, object]]
     path: Path
@@ -279,7 +290,7 @@ class Sweep:
 
 def calibrate(
     session: Session,
-    pair_name: str,
+    name: str,
     *,
     match_against: list[str] | None = None,
     cross_encoder: bool = False,
@@ -291,15 +302,18 @@ def calibrate(
 ) -> Sweep:
     """Barrer los umbrales del matcher contra un corpus anotado publicado.
 
-    Esto es el instrumento, no el caso de aplicación. Lo que mide transfiere porque es una
-    propiedad del método y del encoder; el punto de operación transfiere sólo en parte.
+    Un caso de uso es un instrumento, no un destino. Lo que mide transfiere porque es una
+    propiedad del método y del encoder; el punto de operación transfiere sólo en parte, y
+    cuánto está medido en `FINDINGS-MEASURED-SIZE-CURVE`.
     """
     from ..embeddings import CrossEncoderReranker, EncoderUnavailable, SentenceTransformerEncoder
 
     config = session.config
-    directory = config.paths.calibration_root / pair_name
+    directory = config.paths.use_cases_root / name
     if not directory.is_dir():
-        raise StageError(f"no pair at {directory}; see calibration/README.md")
+        raise StageError(
+            f"no hay caso de uso en {directory}; ver use_cases/README.md"
+        )
 
     variants = list(match_against or []) or [config.matching.match_against]
     encoders = [False, True] if cross_encoder else [config.matching.use_cross_encoder]
@@ -308,14 +322,14 @@ def calibrate(
     described: list = []
     distributions: list[tuple[str, object]] = []
     for variant in variants:
-        pair = calibration.load_pair(
+        use_case = use_cases.load_use_case(
             directory, match_against=variant, holdout=holdout,
             drop_excluded=not keep_excluded,
         )
         if limit:
-            pair.documents = pair.documents[:limit]
+            use_case.documents = use_case.documents[:limit]
         if not described:
-            described.append(pair)
+            described.append(use_case)
         for use_cross in encoders:
             try:
                 encoder = SentenceTransformerEncoder(
@@ -342,16 +356,16 @@ def calibrate(
             label = f"{variant} · {'cross' if use_cross else 'bi'}"
             if context != matching.NO_CONTEXT:
                 label += f" · +{context}"
-            progress(f"{label}: {len(pair.mentions())} mentions")
-            ranking = calibration.rank(pair, matcher)
+            progress(f"{label}: {len(use_case.mentions())} mentions")
+            ranking = calibration.rank(use_case, matcher)
             runs = calibration.sweep(
-                pair, ranking, calibration.thresholds(),
+                use_case, ranking, calibration.thresholds(),
                 match_against=variant, use_cross_encoder=use_cross,
             )
             reports.extend(runs)
             distributions.append((label, runs[0].distribution))
 
-    path = config.paths.work_dir / "calibration" / f"{pair_name}.json"
+    path = config.paths.work_dir / "calibration" / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -376,7 +390,7 @@ def calibrate(
         encoding="utf-8",
     )
     return Sweep(
-        pair_name=pair_name, pairs=described, reports=reports,
+        name=name, described=described, reports=reports,
         distributions=distributions, path=path,
     )
 
@@ -386,7 +400,7 @@ def calibrate(
 
 @dataclass
 class Tuning:
-    pair_name: str
+    name: str
     train_documents: int
     eval_documents: int
     targets: int
@@ -401,7 +415,7 @@ class Tuning:
 
 def tune(
     session: Session,
-    pair_name: str,
+    name: str,
     *,
     train_fraction: float | None = None,
     negatives: int | None = None,
@@ -421,9 +435,9 @@ def tune(
     config = session.config
     matcher = matching.Matcher(session.encoder())
 
-    def retrieve(pair, documents, top_k: int):
+    def retrieve(use_case, documents, top_k: int):
         mentions = [
-            matching.Mention(id=m.id, text=m.text, document_id=d.doc_id, language=pair.language)
+            matching.Mention(id=m.id, text=m.text, document_id=d.doc_id, language=use_case.language)
             for d in documents for m in d.mentions if m.in_seed and m.gold_class
         ]
         gold = {m.id: m.gold_class for d in documents for m in d.mentions}
@@ -432,16 +446,16 @@ def tune(
         if not mentions:
             return [], []
         vectors = matcher.vectors_for([m.text for m in mentions])
-        targets = matcher.vectors_for([t.text for t in pair.targets])
-        ranked = matcher._rank(vectors, targets, pair.targets, top_k)
+        targets = matcher.vectors_for([t.text for t in use_case.targets])
+        ranked = matcher._rank(vectors, targets, use_case.targets, top_k)
         return mentions, [[target.iri for _, target in row] for row in ranked]
 
     settings = config.tuning
     top_k = settings.top_k
     train_fraction = train_fraction if train_fraction is not None else settings.train_fraction
     negatives = negatives if negatives is not None else settings.negatives
-    source = calibration.load_pair(
-        config.paths.calibration_root / pair_name, match_against=config.matching.match_against
+    source = use_cases.load_use_case(
+        config.paths.use_cases_root / name, match_against=config.matching.match_against
     )
     train_docs, eval_docs = tuning.split_by_document(source.documents, train_fraction)
     texts = {target.iri: target.text for target in source.targets}
@@ -466,21 +480,21 @@ def tune(
     except (ValueError, tuning.TrainerUnavailable) as exc:
         raise StageError(str(exc)) from exc
 
-    target_pair, target_docs, target_texts = source, eval_docs, texts
+    target_use_case, target_docs, target_texts = source, eval_docs, texts
     if eval_on:
-        target_pair = calibration.load_pair(
-            config.paths.calibration_root / eval_on,
+        target_use_case = use_cases.load_use_case(
+            config.paths.use_cases_root / eval_on,
             match_against=config.matching.match_against,
         )
-        target_docs = target_pair.documents
-        target_texts = {t.iri: t.text for t in target_pair.targets}
+        target_docs = target_use_case.documents
+        target_texts = {t.iri: t.text for t in target_use_case.targets}
 
     progress("evaluando")
-    mentions, candidates = retrieve(target_pair, target_docs, top_k)
+    mentions, candidates = retrieve(target_use_case, target_docs, top_k)
     result = tuning.compare(trained.model, mentions, candidates, target_texts)
 
     return Tuning(
-        pair_name=pair_name, train_documents=len(train_docs), eval_documents=len(eval_docs),
+        name=name, train_documents=len(train_docs), eval_documents=len(eval_docs),
         targets=len(source.targets), examples=len(examples),
         train_mentions=len(train_mentions), trained=trained, result=result, top_k=top_k,
         eval_on=eval_on or "", saved=tuning.save(trained, out) if out is not None else None,

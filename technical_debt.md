@@ -185,7 +185,7 @@ entrenado sobre los accept/reject acumulados de la zona gris (`ITER-TUNE`), que 
 distinto de un re-ranker de IR genérico. Ver la entrada de LoRA más abajo.
 
 
-### DEBT-THRESHOLDS — Los umbrales — MEDIDOS, y el punto de operación cambia con cada par
+### DEBT-THRESHOLDS — Los umbrales — MEDIDOS, y el punto de operación cambia con cada caso de uso
 
 Ya no son los defaults del spec. Sobre `craft-cl`, el 0,70 que traía aceptaba mal 3 de cada 10
 menciones (precisión 72,3%); ahora `auto_merge` está en 0,95 (precisión 97,9%) y
@@ -236,7 +236,7 @@ una decisión y no una clase; se eligió por argumento, no por medición. Y
 en sí se elige por padre, precisamente para no tener un umbral de similitud más— pero ese 0,10
 sale de seis criterios escritos a mano, donde el par que sí era un corte quedó en 0,38 y el
 ruido cruzado en 0,25. Es la misma clase de evidencia insuficiente que esta sección existe para
-marcar, y se mide igual que los umbrales del matcher: contra un par de calibración, viendo
+marcar, y se mide igual que los umbrales del matcher: contra un caso de uso, viendo
 cuántos ejes espurios aparecen.
 
 Falta también lo que el spec pide después de elegir: **la regeneración del ABox no se dispara
@@ -246,7 +246,7 @@ Ninguna de las dos es difícil; las dos hacen que el puntaje de la rama sea meno
 lo que el spec pretende.
 
 
-### DEBT-GLOSS-SIGNALS — El enriquecimiento de glosas depende de un catálogo de señales, y del par
+### DEBT-GLOSS-SIGNALS — El enriquecimiento de glosas depende de un catálogo de señales, y del caso de uso
 
 `enrich` encuentra los pasajes definitorios por patrón —doce señales enumeradas, en inglés y
 español— y ese catálogo es el techo de lo que la etapa puede ver. Una definición escrita como
@@ -280,7 +280,7 @@ Dos cosas que hoy quedan a mano:
   `branch`, pero el catálogo de `branch` no tiene todavía un eje `contextualize:<propiedad>` —
   ver `DEBT-PATTERN-CATALOGUE`. Es el enganche natural entre las dos etapas y está sin hacer.
 - **`conflict_pattern_threshold: 3` no está calibrado.** Sale de un argumento, no de una medición,
-  y como todos los demás umbrales del proyecto habría que verlo contra un par de calibración.
+  y como todos los demás umbrales del proyecto habría que verlo contra un caso de uso.
 
 Y una limitación del instrumento: cuando el razonador no está disponible, la incompatibilidad se
 calcula sólo con la disjointness asertada más su herencia, que es una **cota inferior**. Dos
@@ -433,7 +433,8 @@ Dos huecos concretos en la etapa:
 
 ### DEBT-MATCHER-TUNING — Ajuste del matcher (`ITER-TUNE`) — HECHO, con un resultado que cambia el default
 
-> **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
+> **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio
+> caso de uso
 > da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
 > más grande que se midió acá— y **sólo sirve en su propio dominio**: el de CRAFT aplicado a MaterioMiner
 > resta 2,1 puntos. Ver [`FINDINGS-MEASURED-TUNED-RERANKER`](findings.md).
@@ -443,8 +444,8 @@ Dos huecos concretos en la etapa:
 > segundos. Agregar `peft` para evitar un costo que no existe sería complejidad sin
 > contrapartida; la sustancia es la misma.
 >
-> Lo que queda abierto es el circuito que el spec describe: hoy las etiquetas salen de un par
-> anotado, y la idea era que salieran solas de las decisiones de zona gris del usuario.
+> Lo que queda abierto es el circuito que el spec describe: hoy las etiquetas salen de un caso
+> de uso anotado, y la idea era que salieran solas de las decisiones de zona gris del usuario.
 > `grey labels --export` ya escribe ese formato y hay **cero** respuestas acumuladas, así que esa
 > mitad sigue esperando a que alguien conteste.
 
@@ -476,11 +477,12 @@ entrenado con ciento y pico de ejemplos es una apuesta, no una medición.
 
 </details>
 
-**La fuente de etiquetas que no requiere trabajo humano, que resultó ser la buena:** el par de
-calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
+**La fuente de etiquetas que no requiere trabajo humano, que resultó ser la buena:** el caso de
+uso primario trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
 medible hoy mismo, sin que nadie conteste nada. Lo que no dice es cuánto **transfiere** a otro
 dominio, y con el entregable siendo la caracterización del sistema esa pregunta deja de ser una
-salvedad y pasa a ser parte del resultado: entrenar en un par y evaluar en otro es justamente lo
+salvedad y pasa a ser parte del resultado: entrenar en un caso de uso y evaluar en otro es
+justamente lo
 que hay que medir. Los pares de la tarea «más pares» son el banco para eso.
 
 
@@ -557,18 +559,17 @@ por accidente:
   aplicarla a la zona gris es trabajo conocido, y es lo que además destraba `ITER-TUNE`, que
   está bloqueado por falta de pares contestados y no por falta de código.
 
-### DEBT-RUN-PARAMETERS — El par (corpus, semilla) es un parámetro, y vive en la configuración
+### DEBT-RUN-PARAMETERS — Sobre qué corre el pipeline es un parámetro, y vive en la configuración
 
 `paths.corpus_root` y `paths.seed_ontology` están en `config/default.yaml`, junto a los
 umbrales. No son la misma clase de cosa: un umbral es una decisión sobre **cómo** se comporta
-el pipeline y el par es **sobre qué** corre, y todos los pares son instrumentos
-(`SCOPE-PURPOSE`). Correr el mismo pipeline sobre dos pares hoy pide dos archivos de
-configuración que difieren en dos líneas.
+el pipeline y el par (corpus, semilla) es **sobre qué** corre. Correr el mismo pipeline sobre
+dos casos de uso hoy pide dos archivos de configuración que difieren en dos líneas.
 
 Como paliativo, `wizard` pregunta el par siempre —aunque el archivo lo tenga— y
 `Session.open()` acepta sobreescrituras. Eso resuelve el síntoma, no la forma: la superficie
-correcta probablemente sea un `--pair`, con los pares descritos como los de calibración (un
-directorio con su `pair.yml`, ver `calibration/README.md`). Queda para discutir antes de
+correcta probablemente sea un `--use-case`, con el corpus de trabajo descrito igual que los
+publicados (un directorio con su `use_case.yml`, ver `use_cases/README.md`). Queda para discutir antes de
 tocarlo, porque cambia `CONFIG` del spec.
 
 ### DEBT-OPEN-WORLD — Mundo abierto: lo que falta
@@ -667,7 +668,7 @@ también puntúan, penalizar una cuyos hermanos puntúan idéntico— es el meca
 el eco léxico, que es el modo de falla que ningún umbral filtra (punto 7).
 
 No se puede medir sobre la semilla actual: 34 clases, profundidad 3, seis raíces. Sí sobre un
-par de calibración con jerarquía profunda, donde entra como una variable más del barrido de
+caso de uso con jerarquía profunda, donde entra como una variable más del barrido de
 umbrales.
 
 ### DEBT-CROSS-LANGUAGE-GREY — `cross_language_always_grey` nunca se midió
@@ -678,7 +679,7 @@ monolingüe empujaría todo par es/en a la zona gris por idioma solo— es plaus
 verificó, y la regla que lo acompaña es fuerte: manda a revisión humana *todo* par en idiomas
 distintos, sin importar el score.
 
-**Ningún par de calibración disponible la toca**, porque todos son en inglés. La única vía
+**Ningún caso de uso disponible la toca**, porque todos son en inglés. La única vía
 encontrada son los corpus clínicos del BSC —**SympTEMIST**, **DisTEMIST**, **MedProcNER**: 1.000
 casos clínicos en español cada uno, anotados y normalizados a SNOMED CT, en standoff BRAT, que
 `calibration.read_brat` ya lee—. SNOMED CT es lo más axiomatizado disponible (EL++, definiciones
@@ -912,7 +913,7 @@ recta imaginaria entre dos observaciones.
 
 El tercero es un inventario grande: **CafeteriaFCD/CafeteriaSA contra FoodOn**, ~40k clases, que
 la tarea «más pares» ya identifica. El lector `brat` está escrito, así que el trabajo es bajar el
-corpus, escribir un `pair.yml` y correr el barrido. Es la tarea de mejor relación entre lo que
+corpus, escribir un `use_case.yml` y correr el barrido. Es la tarea de mejor relación entre lo que
 cuesta y lo que responde, porque **caracterizar el sistema a través de pares es el entregable**.
 
 Ojo con una cosa antes de correrlo: con ~40k clases el hash de estado y la carga de la ontología

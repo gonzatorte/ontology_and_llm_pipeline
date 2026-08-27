@@ -1,11 +1,11 @@
-# Segundo par de calibración (plan, tarea C5). Ver NOTA_FASE0.md al lado de este archivo.
+# Segundo caso de uso. Ver PROCEDENCIA.md al lado de este archivo.
 name: materiominer
 language: en
 description: >-
   MaterioMiner v1.0.1: 4 publicaciones open-access de mecánica de materiales y fatiga,
   anotadas por tres expertos contra la Materials Mechanics Ontology. Es el único par no
   biomédico del conjunto y el de inventario más chico — 428 clases contra las 3.418 de
-  CRAFT/CL — así que es el punto bajo de la curva de tamaño que mide C5.
+  CRAFT/CL — así que es el punto bajo de la curva de tamaño de inventario.
 
 documents:
   dir: documents

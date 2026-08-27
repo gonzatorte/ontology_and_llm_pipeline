@@ -12,19 +12,19 @@ lib/
 *.env
 !example.env
 
-# Los pares (corpus anotado + su ontología). El directorio vive adentro del repo desde el
+# Los casos de uso (corpus anotado + su ontología). El directorio vive adentro del repo desde el
 # 2026-09-10 —antes estaba en la raíz del workspace, fuera de todo control de versiones— pero
-# **los datos no se versionan**: 40 MB de artefactos publicados de terceros, y cada NOTA_FASE0.md
-# dice exactamente cómo regenerarlos. Lo que sí se versiona es lo único que no se puede
-# regenerar: el `pair.yml` de cada par y su nota. Eran justamente los dos archivos que antes no
-# tenían historial.
+# **los datos no se versionan**: 40 MB de artefactos publicados de terceros, y cada
+# PROCEDENCIA.md dice exactamente cómo regenerarlos. Lo que sí se versiona es lo único que no se
+# puede regenerar: el `use_case.yml` de cada uno y su nota. Eran justamente los dos archivos que
+# antes no tenían historial.
 #
-# Las últimas dos reglas ganan por orden: `_nombre/` es la descarga cruda —`_craft/` trae su
-# propio `.git`— y queda afuera entera.
-calibration/**
-!calibration/
-!calibration/README.md
-!calibration/*/
-!calibration/*/pair.yml
-!calibration/*/NOTA_FASE0.md
-calibration/_*/
+# La última regla gana por orden: `_nombre/` es la descarga cruda —`_craft/` trae su propio
+# `.git`— y queda afuera entera.
+use_cases/**
+!use_cases/
+!use_cases/README.md
+!use_cases/*/
+!use_cases/*/use_case.yml
+!use_cases/*/PROCEDENCIA.md
+use_cases/_*/

@@ -12,7 +12,7 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología semilla, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~17.800 líneas en 53 módulos, 563 tests. **Dos interfaces sobre el mismo pipeline**:
+con `uv`, ~17.900 líneas en 54 módulos, 564 tests. **Dos interfaces sobre el mismo pipeline**:
 un CLI de ~40 comandos y `wizard`, que recorre el mismo plan preguntando en cada punto de
 decisión. Las dos llaman a `services/`.
 
@@ -20,11 +20,12 @@ El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentac
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
 
 ⚠️ **El entregable es el sistema y su caracterización, sin dominio objetivo.** El spec lo dice en
-`SCOPE-PURPOSE` ("sin tarea downstream comprometida"). **Todos los pares (corpus, ontología) son
-instrumentos**: se usan para medir cómo se comporta el pipeline, y lo que lo califica es su
-comportamiento *a través* de pares, no cómo le va en uno. No hay un "caso de aplicación" al que
-volver — la documentación afirmó lo contrario hasta el 2026-09-09 y se corrigió en 15 lugares.
-El par de metodología cualitativa fue el andamio inicial y **está retirado**.
+`SCOPE-PURPOSE` ("sin tarea downstream comprometida"). **Todos los casos de uso —cada uno un par
+(corpus, ontología)— son instrumentos**: se usan para medir cómo se comporta el pipeline, y lo
+que lo califica es su comportamiento *a través* de ellos, no cómo le va en uno. No hay un "caso
+de aplicación" al que volver — la documentación afirmó lo contrario hasta el 2026-09-09 y se
+corrigió en 15 lugares.
+El caso de uso de metodología cualitativa fue el andamio inicial y **está retirado**.
 
 ## Los documentos, y cuál leer
 
@@ -35,18 +36,18 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 | [`findings.md`](findings.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
 | [`technical_debt.md`](technical_debt.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
 | [`mapping_rules_plan.md`](mapping_rules_plan.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
-| [`pair_selection.md`](pair_selection.md) | Por qué **estos** pares y no otros: los criterios, lo que se midió de cada candidato y por qué se descartó cada descarte | Antes de agregar un par, y antes de proponer uno que ya se descartó |
+| [`use_case_selection.md`](use_case_selection.md) | Por qué **estos** casos de uso y no otros: los criterios, lo que se midió de cada candidato y por qué se descartó cada descarte | Antes de agregar uno, y antes de proponer uno que ya se descartó |
 
 Los cuatro últimos son enmiendas o complementos del spec, no lo reemplazan.
 
-**Dos documentos viven al lado de los pares**, en `calibration/`, porque describen datos que
+**Dos documentos viven al lado de los casos de uso**, en `use_cases/`, porque describen datos que
 están adentro del repo pero **no se versionan** — 40 MB de artefactos publicados de terceros,
-gitignoreados salvo estos dos y los `pair.yml`:
+gitignoreados salvo estos dos y los `use_case.yml`:
 
 | Documento | Qué contesta |
 |---|---|
-| [`calibration/README.md`](calibration/README.md) | Qué pares hay, cuál es el primario, y cómo se agrega uno |
-| [`calibration/craft-cl/NOTA_FASE0.md`](calibration/craft-cl/NOTA_FASE0.md) | De dónde salió el par primario, su licencia, y qué se decidió al importarlo |
+| [`use_cases/README.md`](use_cases/README.md) | Qué casos de uso hay, cuál es el primario, y cómo se agrega uno |
+| [`use_cases/craft-cl/PROCEDENCIA.md`](use_cases/craft-cl/PROCEDENCIA.md) | De dónde salió el caso de uso primario, su licencia, y qué se decidió al importarlo |
 
 ⚠️ **Los valores de configuración que aparecen en el spec (`CONFIG`) son históricos.**
 `auto_merge_threshold: 0.92` y `grey_zone_lower: 0.70` son los defaults con los que se escribió
@@ -133,9 +134,9 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 
   Alcances — **son las partes de este repo, no categorías abstractas**, y por eso la lista es
   cerrada y se amplía a mano: `services`, `cli`, `wizard`, `render`, `core` (los módulos de
-  dominio), `config`, `matching`, `reasoning`, `tuning`, `calibration`, `eval`, `spec` (el spec
-  y los planes que lo enmiendan), `deps`. Uno solo por commit; si un cambio toca tres, el
-  alcance es el que explica el porqué, y si no hay uno así se omite.
+  dominio), `config`, `matching`, `reasoning`, `tuning`, `use-cases`, `calibration`, `eval`,
+  `spec` (el spec y los planes que lo enmiendan), `deps`. Uno solo por commit; si un cambio
+  toca tres, el alcance es el que explica el porqué, y si no hay uno así se omite.
 
   El asunto va en castellano como el resto de la documentación, sin punto final, y entra en 72
   caracteres. Un cambio que rompe algo lleva `!` antes de los dos puntos y un `BREAKING CHANGE:`
@@ -144,8 +145,8 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
   Cada entrada lleva un id `DEBT-…`, así que dos sesiones en paralelo no colisionan como
   colisionaban los números.
 - **No leer fuera de `pipeline/` sin preguntar.** El corpus y la ontología semilla viven afuera
-  y el config los apunta; leer otra cosa del workspace es pedir permiso primero. Los pares de
-  calibración **ya no**: desde el 2026-09-10 están en `calibration/`, adentro.
+  y el config los apunta; leer otra cosa del workspace es pedir permiso primero. Los casos de
+  uso **ya no**: desde el 2026-09-10 están en `use_cases/`, adentro.
 - **Los tests describen el porqué.** Los nombres son frases (`test_a_forced_parent_is_worse...`)
   y el docstring dice qué decisión de diseño fija. Un test nuevo que sólo verifica mecánica no
   está a tono con el resto.
@@ -186,7 +187,8 @@ src/onto_pipeline/
   orchestration.py                                               qué corresponde correr
   review.py                                                      hallazgos esperando decisión
   annotate.py annotation.py                                      conjunto de retención (`EVAL-PIPELINE`)
-  calibration.py                                                 barrido contra corpus publicado
+  use_cases.py                                                   cargar un caso de uso
+  calibration.py                                                 el banco: barrer umbrales sobre uno
   llm.py providers.py telemetry.py                               proveedor, caché y costos
   db.py language.py terms.py report.py                           almacén y utilidades
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
@@ -271,8 +273,9 @@ README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes
 
 - **`ITER-TUNE`, el ajuste del matcher** — el entrenamiento está hecho (`tune`) y lo que sigue
   bloqueado es el circuito que el spec describe: que las etiquetas salgan solas de las
-  decisiones de zona gris en vez de un par anotado. Bloqueado por datos, no por código — hace
-  falta que alguien conteste unos cientos de pares. Ver `DEBT-MATCHER-TUNING`.
+  decisiones de zona gris en vez de un caso de uso anotado. Bloqueado por datos, no por código
+  — hace falta que alguien conteste unos cientos de pares de zona gris. Ver
+  `DEBT-MATCHER-TUNING`.
 - **`ITER-FEEDBACK`, el historial de feedback** — **cerrado el 2026-09-10**: esquema `GRADED-FEEDBACK`, forma normal y
   precedentes en el prompt de `axiomatize`. Lo que falta no es código sino una segunda iteración
   con feedback humano real, para ver si algún precedente mueve un juicio. Ver

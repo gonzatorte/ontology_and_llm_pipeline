@@ -96,8 +96,9 @@ el pipeline completo antes de ver datos. **Los cinco pasos están dados**, con u
 alta, no seguir construyendo, porque cada falso huérfano se vuelve una clase espuria en la
 inducción y con multi-rama se estaría eligiendo entre variantes de ruido. Eso está escrito
 suponiendo un dominio objetivo, y **este proyecto no tiene uno**: el entregable es el sistema y su
-caracterización a través de pares. Así que una tasa alta sobre un par es un resultado *sobre ese
-par*, no una razón para frenar — sobre el par publicado da 18% en el corte configurado. Lo que sí
+caracterización a través de casos de uso. Así que una tasa alta sobre uno es un resultado
+*sobre ése*, no una razón para frenar — sobre el caso de uso publicado da 18% en el corte
+configurado. Lo que sí
 sigue abierto es la mejora que el spec propone para bajarla: de sus tres vías —mejor encoder,
 mejores glosas, **ajuste del matcher**— las dos primeras se midieron y la tercera está bloqueada
 por falta de etiquetas.
@@ -113,7 +114,7 @@ existe para que no se pierdan entre las entradas.
 | # | Qué | Por qué | Detalle |
 |---|---|---|---|
 | 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](findings.md), [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
-| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](technical_debt.md), [`FINDINGS-MEASURED-SIZE-CURVE`](findings.md), [`pair_selection.md`](pair_selection.md) |
+| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](technical_debt.md), [`FINDINGS-MEASURED-SIZE-CURVE`](findings.md), [`use_case_selection.md`](use_case_selection.md) |
 | 3 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Bajo esfuerzo, alta prioridad: los tres son comparar un hash contra el registrado, y `next` es el lugar. El último cierra el bucle de `PREP-NORMALIZE` | [`DEBT-AUTOMATIC-TRIGGERS`](technical_debt.md) |
 | 4 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — el metalenguaje de escribir un paper, no el dominio del que habla. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [`DEBT-ACADEMIC-METALANGUAGE`](technical_debt.md), [`FINDINGS-MEASURED-SPURIOUS-CLASS`](findings.md) |
 | 5 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [`DEBT-ONTOLOGY-IMPORTS`](technical_debt.md) |
@@ -130,7 +131,7 @@ existe para que no se pierdan entre las entradas.
 | ~~3~~ | ~~El registro de decisiones~~ — **cerrado entero**: una tabla, seis categorías fijas, `invalid` separado de `not_chosen`, la forma normal guardada, y los precedentes inyectados en el prompt de axiomatización | Lo rechazado no está en ningún otro lado, y guardarlo sólo rinde si vuelve al prompt | [`DEBT-FEEDBACK-HISTORY`](technical_debt.md) |
 | ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [`DEBT-NEXT-RUNS`](technical_debt.md) |
 | ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
-| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [`DEBT-QUALITATIVE-PAIR`](technical_debt.md) |
+| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el caso de uso roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un corpus desalineado con su ontología era invisible en la tasa de huérfanas | [`DEBT-QUALITATIVE-PAIR`](technical_debt.md) |
 | ~~7~~ | ~~Comparación por forma normal~~ — **hecha**: `normal_form` nombra por etiquetas, saltea la glosa, y `already_rejected` la consulta antes de juzgar | Sin ella el mismo compromiso vuelve con otros IRIs y no se detecta como re-proposición | [`DEBT-FEEDBACK-HISTORY`](technical_debt.md) |
 
 </details>
@@ -272,7 +273,7 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
-  calibration_root: ../calibration      # los pares; ver Calibración, en Uso
+  use_cases_root: ../use_cases        # los casos de uso; ver Calibración, en Uso
 ```
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
@@ -388,7 +389,7 @@ y, en vez de frenar, la hace.
 Qué hace, en orden:
 
 1. **Confirma la configuración** y dice que toda clave que el archivo no defina toma su default.
-2. **Pregunta el par (corpus, semilla) siempre**, aunque el archivo lo tenga: qué par se usa es
+2. **Pregunta el par (corpus, semilla) siempre**, aunque el archivo lo tenga: cuál se usa es
    un parámetro de la corrida, no una decisión de configuración. Que hoy viva en `CONFIG` es
    deuda — [`DEBT-RUN-PARAMETERS`](technical_debt.md).
 3. **Normaliza la semilla** si todavía no hay ninguna versión, y ofrece escribir las glosas que
@@ -1067,10 +1068,10 @@ BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
 ### 16. Calibración contra un corpus publicado
 
-El conjunto de retención mide un par anotado a mano, documento por documento. Para fijar los
+El conjunto de retención mide un corpus anotado a mano, documento por documento. Para fijar los
 umbrales hace falta otra cosa: un corpus **ya** anotado contra una ontología, donde `in_seed` es
 decidible por construcción —la clase gold está en la ontología o no está— y por lo tanto la
-métrica no necesita campaña de anotación. Todos los pares, propios y publicados, son
+métrica no necesita campaña de anotación. Todos los casos de uso, propios y publicados, son
 instrumentos: el proyecto no tiene un dominio objetivo al que "volver".
 
 ```bash
@@ -1079,14 +1080,15 @@ uv run onto-pipeline calibrate craft-cl -m label --cross-encoder
 uv run onto-pipeline calibrate craft-cl -m label --holdout 0.2
 ```
 
-Los pares viven en [`calibration/`](calibration/README.md) y `paths.calibration_root` apunta
+Los casos de uso viven en [`use_cases/`](use_cases/README.md) y `paths.use_cases_root` apunta
 ahí. **El directorio está adentro del repo y sus datos no se versionan**: son 40 MB de
 artefactos publicados de terceros y cada nota de fase 0 dice cómo regenerarlos, así que lo único
-versionado de cada par es lo que no se puede regenerar — su `pair.yml` y esa nota. El primario es
+versionado de cada uno es lo que no se puede regenerar — su `use_case.yml` y esa nota. El
+primario es
 **CRAFT · CL+extensions**: 97 artículos, 8.723 menciones, 3.418 clases.
 
 Por qué se eligieron éstos y no otros —los criterios, lo medido de cada candidato y el porqué de
-cada descarte— está en [`pair_selection.md`](pair_selection.md).
+cada descarte— está en [`use_case_selection.md`](use_case_selection.md).
 
 Lo que reporta, además del barrido de umbrales:
 
@@ -1100,8 +1102,8 @@ Lo que reporta, además del barrido de umbrales:
   que sus anotadores decidieron no usar. Salen del inventario por defecto; `--keep-excluded`
   mide cuánto error causaban.
 
-Los resultados están en [`findings.md`](findings.md), y por qué se eligieron estos pares y no
-otros, en [`pair_selection.md`](pair_selection.md).
+Los resultados están en [`findings.md`](findings.md), y por qué se eligieron estos casos de uso y no
+otros, en [`use_case_selection.md`](use_case_selection.md).
 
 ## Dónde queda todo
 
@@ -1114,12 +1116,12 @@ data/                 gitignoreado; todo es derivado y regenerable
   ontology/           la semilla normalizada, el diff y el ABox de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
-  calibration/        resultados del barrido, un JSON por par
+  calibration/        resultados del barrido, un JSON por caso de uso
 lib/                  jars del razonador (gitignoreado)
 
-calibration/          los pares. Sólo README.md, pair.yml y NOTA_FASE0.md se versionan
-  README.md           índice de pares
-  craft-cl/           pair.yml y NOTA_FASE0.md versionados; ontology/ no
+use_cases/            los casos de uso. Sólo README.md, use_case.yml y PROCEDENCIA.md se versionan
+  README.md           índice de casos de uso
+  craft-cl/           use_case.yml y PROCEDENCIA.md versionados; ontology/ no
   _craft/             el clone esparso de CRAFT; gitignoreado entero, ver la nota
 ```
 
@@ -1154,13 +1156,13 @@ conversaciones que trabajan sobre este repo.
   `thematic analysis`, `content analysis`, `grounded theory` y `theoretical framework` aparecen
   **cero veces**. La semilla es de metodología cualitativa; el corpus son papers de política de
   ciencia abierta, que hablan *sobre* investigación en vez de reportar estudios cualitativos.
-  Una tasa de falsos huérfanos medida sobre este par no sería mala: sería sin significado,
+  Una tasa de falsos huérfanos medida sobre este caso de uso no sería mala: sería sin significado,
   porque mediría el desajuste temático y no la calidad del matcher.
 
 - **Corrido sobre datos reales, `ITER-MATCH` tipa mal.** De 1.725 menciones: 32 automáticas, 219 en zona
   gris, 1.474 huérfanas (85%). Y las 32 automáticas son **todas** eco léxico — `question` 0.998,
   `information` 0.998, `support` 0.993, `subject` 0.992 — el nombre de la clase apareciendo como
-  palabra corriente, ninguna una instanciación real. Con el par corpus/semilla desalineado ese
+  palabra corriente, ninguna una instanciación real. Con el corpus y la semilla desalineados ese
   85% no es un veredicto sobre el matcher.
 - **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice `ITER-MATCH`.**
   Ya no es provisional. Medido sobre CRAFT/CL —8.723 menciones gold contra 3.418 clases, 96% con

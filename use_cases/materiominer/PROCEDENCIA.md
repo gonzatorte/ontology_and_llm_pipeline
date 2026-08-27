@@ -1,8 +1,8 @@
 # MaterioMiner — nota de salida de Fase 0
 
-Segundo par. Es el punto bajo de la curva de tamaño de inventario y el único dominio no
+Segundo caso de uso. Es el punto bajo de la curva de tamaño de inventario y el único dominio no
 biomédico del conjunto; por qué entró está en
-[`pair_selection.md`](../../pair_selection.md).
+[`use_case_selection.md`](../../use_case_selection.md).
 
 ## Procedencia
 
@@ -33,7 +33,7 @@ se cuentan todos los spans del conjunto *fine-grained* sin filtrar.
 
 Las anotaciones vienen en **WebAnno TSV 3.3**, una fila por token con offsets absolutos y la
 clase como IRI en la columna `identifier`. Un span de varios tokens se marca con `*[n]` repetido.
-El lector es `calibration.read_webanno`.
+El lector es `use_cases.read_webanno`.
 
 **El corpus no incluye los documentos como texto.** Sólo están los tokens con sus posiciones, así
 que el texto se reconstruye: cada token se coloca en su offset y los huecos se rellenan. Eso
@@ -60,7 +60,7 @@ a 13.
 | **recall@1** | **21,5%** | 68,5% |
 | Mejor F1 | 0,277 (umbral 0,75) | 0,774 (umbral 0,90) |
 
-**Lo que dice, y es lo que C5 existía para averiguar:** el punto de operación no transfiere, y
+**Lo que dice, y es la pregunta que este caso de uso vino a contestar:** el punto de operación no transfiere, y
 no se mueve en la dirección que uno supondría. Un inventario ocho veces más chico no es más
 fácil.
 
@@ -72,5 +72,5 @@ recuperación**, que es un modo de falla distinto del que muestra CRAFT.
 La lectura probable, sin confirmar: en CRAFT la mención es casi literalmente la etiqueta de la
 clase —un nombre de célula—, mientras que acá una palabra corriente como `lifetime` tiene que
 llegar a `FatigueLifetime`. Es el mismo argumento que sostienen la deuda 19 (meter el contexto en
-la comparación) y la 17 (tipado consciente de la jerarquía), ahora con un segundo par que lo
+la comparación) y la 17 (tipado consciente de la jerarquía), ahora con un segundo caso de uso que lo
 respalda.

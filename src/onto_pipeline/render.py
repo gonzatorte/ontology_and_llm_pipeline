@@ -856,27 +856,30 @@ def review_list(console: Console, items: list[dict], counts: dict) -> None:
 
 
 def sweep(console: Console, result: evaluate.Sweep) -> None:
-    for pair in result.pairs:
-        _describe_pair(console, pair)
+    for use_case in result.described:
+        _describe_use_case(console, use_case)
     for label, distribution in result.distributions:
         _distribution(console, label, distribution)
     _sweep_tables(console, result.reports)
     console.print(f"[dim]{result.path}[/]")
 
 
-def _describe_pair(console: Console, pair) -> None:
-    mentions = sum(len(document.mentions) for document in pair.documents)
-    skipped = sum(document.skipped for document in pair.documents)
-    glossed = sum(1 for target in pair.targets if target.gloss)
-    table = Table("pair", pair.name)
-    table.add_row("documents", str(len(pair.documents)))
+def _describe_use_case(console: Console, use_case) -> None:
+    mentions = sum(len(document.mentions) for document in use_case.documents)
+    skipped = sum(document.skipped for document in use_case.documents)
+    glossed = sum(1 for target in use_case.targets if target.gloss)
+    table = Table("use_case", use_case.name)
+    table.add_row("documents", str(len(use_case.documents)))
     table.add_row("gold mentions", f"{mentions} ({skipped} discontinuous, skipped)")
-    table.add_row("inventory", f"{len(pair.targets)} classes, {glossed} with a definition")
-    if pair.withheld:
-        table.add_row("withheld", f"{len(pair.withheld)} classes — their mentions are orphans")
-    if pair.excluded_classes:
-        fate = "dropped from the inventory" if pair.dropped_excluded else "kept, --keep-excluded"
-        table.add_row("never correct", f"{', '.join(pair.excluded_classes[:5])} — {fate}")
+    table.add_row("inventory", f"{len(use_case.targets)} classes, {glossed} with a definition")
+    if use_case.withheld:
+        table.add_row(
+            "withheld", f"{len(use_case.withheld)} classes — their mentions are orphans"
+        )
+    if use_case.excluded_classes:
+        fate = ("dropped from the inventory" if use_case.dropped_excluded
+                else "kept, --keep-excluded")
+        table.add_row("never correct", f"{', '.join(use_case.excluded_classes[:5])} — {fate}")
     console.print(table)
 
 
@@ -922,7 +925,7 @@ def _sweep_tables(console: Console, reports: list) -> None:
 
 def tuning(console: Console, result: evaluate.Tuning) -> None:
     console.print(
-        f"[bold]{result.pair_name}[/]: {result.train_documents} documentos para entrenar, "
+        f"[bold]{result.name}[/]: {result.train_documents} documentos para entrenar, "
         f"{result.eval_documents} para evaluar · {result.targets} clases"
     )
     console.print(f"ejemplos: {result.examples} · {result.train_mentions} menciones")

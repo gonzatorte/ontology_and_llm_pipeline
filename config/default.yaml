@@ -6,10 +6,10 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data              # SQLite stores, markdown, crops, reports
   reasoner_lib: ../lib           # OWL API, ELK, HermiT (scripts/fetch-jars.sh)
-  # Pares de calibración: corpus publicado + su ontología, uno por subdirectorio con su
-  # pair.yml. Todos los pares son instrumentos: el proyecto no tiene dominio comprometido, así
-  # que un par se usa para medir el sistema y no al revés — ver calibration/README.md.
-  calibration_root: ../calibration
+  # Casos de uso: corpus publicado anotado + su ontología, uno por subdirectorio con su
+  # use_case.yml. Todos son instrumentos — el proyecto no tiene dominio comprometido, así que
+  # un caso de uso se usa para medir el sistema y no al revés. Ver use_cases/README.md.
+  use_cases_root: ../use_cases
 
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:

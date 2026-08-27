@@ -1,4 +1,4 @@
-# Par de calibración primario (plan, tarea C4). Ver NOTA_FASE0.md al lado de este archivo.
+# Caso de uso primario. Ver PROCEDENCIA.md al lado de este archivo.
 name: craft-cl
 language: en
 description: >-
@@ -29,6 +29,6 @@ excluded_classes: >-
 
 # Retención de clases: apagada por defecto. Prendida con `calibrate --holdout 0.2`, convierte
 # una fracción determinista del inventario en huérfanos genuinos de respuesta conocida, que es
-# el único modo de medir esa mitad de la compuerta del §12.1 sobre un corpus donde `in_seed`
+# el único modo de medir esa mitad de la compuerta del `BUILD-NO-GO-GATE` sobre un corpus donde `in_seed`
 # es verdadero por construcción.
 holdout_classes: null

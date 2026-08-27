@@ -1,23 +1,24 @@
-# Por qué estos pares y no otros
+# Por qué estos casos de uso y no otros
 
-**Qué es este documento.** El registro de la elección de los pares (corpus anotado, ontología)
+**Qué es este documento.** El registro de la elección de los casos de uso —cada uno un par
+(corpus anotado, ontología)—
 contra los que se mide este pipeline: qué criterios se aplicaron, qué se midió de cada candidato,
 y por qué se descartó cada uno de los que no entraron. Nada más que eso.
 
 **Qué no es.** No es un plan —el que hubo se ejecutó y se borró— ni el lugar donde viven los
-resultados. Lo que cada par arrojó al medirse está en [`findings.md`](findings.md), con el n de
+resultados. Lo que cada uno arrojó al medirse está en [`findings.md`](findings.md), con el n de
 cada número; tener dos copias de una medición es cómo empiezan a divergir. Lo operativo de cada
-par —dónde están los archivos, cómo se regeneran, con qué licencia— está en
-[`calibration/README.md`](calibration/README.md) y en la `NOTA_FASE0.md` de cada par.
+caso de uso —dónde están los archivos, cómo se regeneran, con qué licencia— está en
+[`use_cases/README.md`](use_cases/README.md) y en la `PROCEDENCIA.md` de cada uno.
 
-**Por qué se conserva.** Los datos de los pares no se versionan (pesan, son artefactos publicados
+**Por qué se conserva.** Los datos de los casos de uso no se versionan (pesan, son artefactos publicados
 de terceros y se regeneran). Este documento es la parte que **no** se puede regenerar: el
 razonamiento. Sin él, dentro de seis meses «¿por qué CRAFT y no MedMentions?» sólo se puede
 contestar volviendo a hacer el trabajo.
 
-**Todos los pares son instrumentos.** El proyecto no tiene dominio comprometido: el entregable es
-el sistema y su caracterización *a través* de pares (`SCOPE-PURPOSE`). Un par se usa para medir
-cómo se comporta el pipeline, y no al revés. El par de metodología cualitativa fue el andamio
+**Todos los casos de uso son instrumentos.** El proyecto no tiene dominio comprometido: el entregable es
+el sistema y su caracterización *a través* de ellos (`SCOPE-PURPOSE`). Un caso de uso se usa
+para medir cómo se comporta el pipeline, y no al revés. El de metodología cualitativa fue el andamio
 inicial, para tener con qué probar mientras no existía esto, y está retirado.
 
 ## Los criterios
@@ -39,7 +40,7 @@ cuatro juntos.
 4. **Inglés**, o agregar marcadores a `language.py`.
 5. **Licencia que permita el uso.**
 
-### Qué transfiere de un par a otro
+### Qué transfiere de un caso de uso a otro
 
 Es la pregunta que hace que medir afuera sirva para algo, y la respuesta no es «todo»:
 
@@ -50,14 +51,14 @@ Es la pregunta que hace que medir afuera sirva para algo, y la respuesta no es �
   candidatos haya, pero el *punto de operación* sí: con 40k clases hay más chances de que algo
   espurio supere un corte que con 34. Un umbral externo es punto de partida defendible, no final.
   Y está medido que se mueve —ver `FINDINGS-MEASURED-SIZE-CURVE`.
-- **No transfiere:** nada más. Lo que no transfiere pide un chequeo chico por par, no una campaña
+- **No transfiere:** nada más. Lo que no transfiere pide un chequeo chico por caso de uso, no una campaña
   de anotación.
 
 El efecto secundario es el que más importa para el entregable: calibrar afuera convierte fijar
-umbrales de tarea manual única en **procedimiento repetible** sobre cualquier par. Si lo que se
+umbrales de tarea manual única en **procedimiento repetible** sobre cualquier caso de uso. Si lo que se
 valida es el sistema y no el dominio, esa capacidad es parte de lo que hay que validar.
 
-## Los pares elegidos
+## Los casos de uso elegidos
 
 ### Primario: CRAFT `CL+extensions` (verificado el 2026-09-08)
 
@@ -102,9 +103,9 @@ Dos artefactos de CRAFT que el banco aprovecha:
 Existe además el **CRAFT Shared Task 2019**, con evaluador oficial y baselines publicados: los
 números tienen contra qué compararse.
 
-**Una trampa operativa, para cuando se corra el pipeline entero sobre este par:**
+**Una trampa operativa, para cuando se corra el pipeline entero sobre éste:**
 `seed_ontology` tiene que apuntar a `ontology/cl-base.owl` y **no** al `.obo` — rdflib no parsea
-OBO; el `.owl` trae 123.864 tripletas y 7.159 clases. El `.obo` lo lee `calibration.py` con su
+OBO; el `.owl` trae 123.864 tripletas y 7.159 clases. El `.obo` lo lee `use_cases.py` con su
 propio reader, que es otra cosa. Consecuencia: `CL+extensions.obo` **no tiene equivalente en
 OWL**, así que la semilla del pipeline no incluye las extension classes que el banco sí usa. Hay
 que decidir si eso importa antes de leer los números.
@@ -121,20 +122,20 @@ Trajo dos cosas al banco: el lector `webanno`, y que `load_targets` lea inventar
 de OBO — MaterioMiner publica en Turtle, y hasta entonces el banco sólo sabía leer OBO, con lo
 que el inventario daba **cero clases sin decir por qué**.
 
-Detalle en [`calibration/materiominer/NOTA_FASE0.md`](calibration/materiominer/NOTA_FASE0.md).
+Detalle en [`use_cases/materiominer/PROCEDENCIA.md`](use_cases/materiominer/PROCEDENCIA.md).
 
-## Los pares que faltan, y para qué
+## Los casos de uso que faltan, y para qué
 
-Un solo par no dice si los umbrales transfieren; tres inventarios de tamaño muy distinto sí. Ésa
+Un solo caso de uso no dice si los umbrales transfieren; tres inventarios de tamaño muy distinto sí. Ésa
 es la única pregunta que los pendientes contestan, y no es cuál es el mejor corpus.
 
-| Par | Inventario | Anotaciones | Por qué |
+| Caso de uso | Inventario | Anotaciones | Por qué |
 |---|---|---|---|
 | **HPO GSC+** | HPO, ~19k clases, definiciones lógicas vía PATO/UBERON | 228 abstracts, ~1.933 anotaciones, ~490 conceptos | Segundo punto limpio, y muy usado como benchmark |
 | **CafeteriaFCD / CafeteriaSA** | FoodOn (axiomatizada, ~40k) + SNOMED-CT | ~7.400 y ~4.300 anotaciones FoodOn | El extremo de inventario grande, y dominio no clínico |
 
 Cada uno trae su formato de anotación —standoff propio o brat, no Knowtator—, y por eso el
-importador tiene el parser de formato desacoplado del mapeo a `Mention`: agregar un par es
+importador tiene el parser de formato desacoplado del mapeo a `Mention`: agregar uno es
 escribir un reader y registrarlo en `READERS`.
 
 ## Los descartados, y por qué
@@ -150,10 +151,10 @@ escribir un reader y registrarlo en `READERS`.
 EuroVoc) o corpus diminuto. MaterioMiner es el mejor caso no biomédico que se encontró, y por eso
 entra aunque sea más pobre que CL.
 
-## Lo que ningún par de acá puede medir
+## Lo que ningún caso de uso de acá puede medir
 
 `cross_language_always_grey: true` y la elección de un encoder multilingüe son decisiones sin
-evidencia detrás, y **los cuatro pares son en inglés**, así que ninguno las toca. La vía existe
+evidencia detrás, y **los cuatro son en inglés**, así que ninguno las toca. La vía existe
 —los corpus clínicos en español del BSC contra SNOMED CT— pero pide tramitar una licencia y
 subsetear 360k conceptos. Queda registrado en `DEBT-CROSS-LANGUAGE-GREY` de
 [`technical_debt.md`](technical_debt.md).

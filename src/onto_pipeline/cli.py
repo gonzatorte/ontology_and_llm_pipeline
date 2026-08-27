@@ -110,7 +110,9 @@ InvalidOption = typer.Option(
     help="Repetible: hermanas que además de no elegidas están MAL. Señal más fuerte que "
          "rechazarlas, y ITER-FEEDBACK las separa a propósito.",
 )
-PairOption = typer.Argument(..., help="Calibration pair: a directory under calibration_root.")
+UseCaseOption = typer.Argument(
+    ..., help="Caso de uso: un directorio bajo use_cases_root."
+)
 MatchAgainstOption = typer.Option(
     [], "--match-against", "-m", help="Repeatable: label | gloss | label_and_gloss."
 )
@@ -582,7 +584,7 @@ def stop_cmd(
 
 @app.command("tune")
 def tune_cmd(
-    pair_name: str = PairOption,
+    name: str = UseCaseOption,
     config_path: Path = ConfigOption,
     train_fraction: float | None = TrainFractionOption,
     negatives: int | None = NegativesOption,
@@ -593,7 +595,7 @@ def tune_cmd(
     """Ajusta el cross-encoder con las anotaciones de un par (ITER-TUNE)."""
     with console.status("ITER-TUNE") as status:
         result = evaluate.tune(
-            _session(config_path), pair_name, train_fraction=train_fraction,
+            _session(config_path), name, train_fraction=train_fraction,
             negatives=negatives, method=method, eval_on=eval_on, out=out,
             progress=status.update,
         )
@@ -602,7 +604,7 @@ def tune_cmd(
 
 @app.command("calibrate")
 def calibrate_cmd(
-    pair_name: str = PairOption,
+    name: str = UseCaseOption,
     config_path: Path = ConfigOption,
     match_against: list[str] = MatchAgainstOption,
     cross_encoder: bool = CrossEncoderSweepOption,
@@ -611,13 +613,14 @@ def calibrate_cmd(
     context: str = ContextOption,
     limit: int | None = LimitOption,
 ) -> None:
-    """Sweep the matcher's thresholds against a published annotated corpus.
+    """Barre los umbrales del matcher sobre un caso de uso publicado.
 
-    This is the instrument, not the case of application.
+    Un caso de uso es un instrumento, no un destino: lo que califica al sistema es cómo se
+    comporta a través de varios, no cómo le va en uno.
     """
     with console.status("calibrating") as status:
         result = evaluate.calibrate(
-            _session(config_path), pair_name, match_against=list(match_against),
+            _session(config_path), name, match_against=list(match_against),
             cross_encoder=cross_encoder, holdout=holdout, keep_excluded=keep_excluded,
             context=context, limit=limit, progress=status.update,
         )
