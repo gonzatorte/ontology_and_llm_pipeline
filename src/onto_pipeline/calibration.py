@@ -53,6 +53,7 @@ from .matching import Matcher, Mention, Target
 
 KNOWTATOR = "knowtator"
 BRAT = "brat"
+WEBANNO = "webanno"
 
 # An OBO id (CL:0000540) and the IRI a released OWL file uses for it
 # (http://purl.obolibrary.org/obo/CL_0000540) are the same class. The gold annotations use the
@@ -211,7 +212,96 @@ def read_brat(path: Path, text: str) -> tuple[list[GoldMention], int]:
     return mentions, skipped
 
 
-READERS = {KNOWTATOR: read_knowtator, BRAT: read_brat}
+_WEBANNO_SPAN = re.compile(r"\[(\d+)\]")
+
+
+def webanno_rows(path: Path) -> list[tuple[int, int, str, str, str, str]]:
+    """Filas de token de un TSV de WebAnno 3.x:
+    (inicio, fin, token, identificador, marca, oración).
+
+    El formato es una fila por token con offsets absolutos sobre el documento original, y las
+    columnas de la capa declarada en la cabecera `#T_SP=`. Las líneas que empiezan con `#` son
+    cabecera o el texto de la oración; las vacías separan oraciones.
+    """
+    rows = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 5 or "-" not in parts[1]:
+            continue
+        begin, _, end = parts[1].partition("-")
+        if not (begin.isdigit() and end.isdigit()):
+            continue
+        sentence = parts[0].partition("-")[0]
+        rows.append((int(begin), int(end), parts[2], parts[3], parts[4], sentence))
+    return rows
+
+
+def webanno_text(path: Path) -> str:
+    """El documento reconstruido desde los offsets de sus tokens.
+
+    Cada token se coloca en su posición y los huecos se rellenan con espacios, así que
+    `texto[inicio:fin] == token` vale para todos por construcción. No reproduce los espacios
+    del original —el TSV no los guarda— y no hace falta: lo que tiene que quedar exacto son las
+    posiciones, que es contra lo que se mide.
+    """
+    rows = webanno_rows(path)
+    if not rows:
+        return ""
+    buffer = [" "] * max(end for _, end, *_ in rows)
+
+    previous = None
+    for begin, end, token, _, _, sentence in rows:
+        buffer[begin:end] = token.ljust(end - begin)[: end - begin]
+        if previous is not None and sentence != previous[0]:
+            # Corte de oración: se escribe en el hueco anterior al token, no encima de él, así
+            # que los offsets no se mueven. Sin esto el documento sale como un único bloque
+            # gigante —el TSV no guarda los saltos de línea— y el chunker no tiene por dónde
+            # partirlo: medido, 30 mil caracteres en un solo bloque.
+            gap = begin - previous[1]
+            if gap >= 2:
+                buffer[begin - 2:begin] = "\n\n"
+            elif gap == 1:
+                buffer[begin - 1:begin] = "\n"
+        previous = (sentence, end)
+    return "".join(buffer)
+
+
+def read_webanno(path: Path, text: str) -> tuple[list[GoldMention], int]:
+    """WebAnno TSV 3.x. Una anotación puede abarcar varios tokens, unidos por su marca `*[n]`.
+
+    Un token sin marca de grupo (`*` a secas) es una anotación de un token. Los que comparten
+    `[n]` dentro del mismo archivo son el mismo span, y se unen por sus extremos: WebAnno no
+    escribe spans discontinuos en esta capa, así que unir por extremos no puede tragarse texto
+    que el anotador dejó afuera —que es la razón por la que los otros dos lectores los saltean—.
+    """
+    grouped: dict[str, list[tuple[int, int]]] = {}
+    classes: dict[str, str] = {}
+    mentions, skipped = [], 0
+
+    for index, (begin, end, _, identifier, marker, _sentence) in enumerate(webanno_rows(path)):
+        if identifier == "_" or not identifier.strip():
+            continue
+        if identifier.count("|") or marker.count("|"):
+            # Un token con varias anotaciones superpuestas: WebAnno las separa con `|`. No es
+            # representable como una mención con una clase, y contarlo callado sería inventar.
+            skipped += 1
+            continue
+        group = match.group(1) if (match := _WEBANNO_SPAN.search(marker)) else f"t{index}"
+        grouped.setdefault(group, []).append((begin, end))
+        classes[group] = identifier
+
+    for group, spans in grouped.items():
+        start, finish = min(s for s, _ in spans), max(e for _, e in spans)
+        mentions.append(GoldMention(
+            id=f"{path.stem}:{group}", span=(start, finish), text=text[start:finish],
+            gold_class=classes[group],
+        ))
+    return sorted(mentions, key=lambda item: item.span), skipped
+
+
+READERS = {KNOWTATOR: read_knowtator, BRAT: read_brat, WEBANNO: read_webanno}
 
 
 # ─────────────────────────────  ontology  ─────────────────────────────
@@ -262,6 +352,44 @@ def _first(body: str, tag: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+# Formatos que rdflib lee. OBO tiene su propio lector acá porque el banco no necesita la
+# semántica completa —etiqueta, definición y sinónimos alcanzan— y arrancar la JVM para leer
+# un inventario sería pagar el arranque en cada barrido.
+_RDF_SUFFIXES = frozenset({".ttl", ".owl", ".rdf", ".nt", ".xml", ".jsonld"})
+
+
+def read_rdf(path: Path) -> list[dict]:
+    """Clases de una ontología en cualquier serialización RDF, con la misma forma que
+    `read_obo` devuelve. Sin etiqueta no hay contra qué comparar, así que esas se saltean."""
+    from rdflib import Graph, URIRef
+    from rdflib.namespace import OWL, RDF, RDFS, SKOS
+
+    graph = Graph()
+    graph.parse(str(path))
+    entries = []
+    for subject in graph.subjects(RDF.type, OWL.Class):
+        if not isinstance(subject, URIRef):
+            continue
+        label = graph.value(subject, SKOS.prefLabel) or graph.value(subject, RDFS.label)
+        if label is None:
+            continue
+        gloss = graph.value(subject, SKOS.definition) or graph.value(subject, RDFS.comment)
+        entries.append({
+            "id": str(subject),
+            "label": str(label),
+            "gloss": str(gloss) if gloss is not None else "",
+            "synonyms": [str(value) for value in graph.objects(subject, SKOS.altLabel)],
+        })
+    return entries
+
+
+def read_ontology(path: Path) -> list[dict]:
+    """El inventario de un par, venga en OBO o en RDF."""
+    if Path(path).suffix.lower() in _RDF_SUFFIXES:
+        return read_rdf(Path(path))
+    return read_obo(Path(path))
+
+
 def load_targets(paths: Sequence[Path], match_against: str) -> list[Target]:
     """Union of the given ontology files, first definition of a class winning.
 
@@ -271,7 +399,7 @@ def load_targets(paths: Sequence[Path], match_against: str) -> list[Target]:
     """
     by_id: dict[str, Target] = {}
     for path in paths:
-        for entry in read_obo(path):
+        for entry in read_ontology(path):
             identifier = curie(entry["id"])
             if identifier in by_id:
                 continue

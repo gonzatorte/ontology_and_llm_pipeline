@@ -191,3 +191,26 @@ def test_typo_detection_survives_a_real_sized_vocabulary():
     started = time.perf_counter()
     detect_typos(entities)
     assert time.perf_counter() - started < 10, "volvió a ser cuadrático sobre el léxico"
+
+
+def test_a_class_that_already_has_a_definition_is_not_re_glossed():
+    """A0.4 escribe la glosa que falta, no reemplaza la que hay. Sobre una ontología publicada
+    lo segundo tira las definiciones de los curadores y encima paga por hacerlo."""
+    from rdflib import Graph, Literal, URIRef
+    from rdflib.namespace import OWL, RDF, SKOS
+
+    from onto_pipeline.seed import CLASS, Entity, Label, NormalizedSeed, gloss_contexts
+
+    graph = Graph()
+    entities = []
+    for name, defined in (("Con", True), ("Sin", False)):
+        iri = URIRef(f"c:{name}")
+        graph.add((iri, RDF.type, OWL.Class))
+        graph.add((iri, SKOS.prefLabel, Literal(name, lang="en")))
+        if defined:
+            graph.add((iri, SKOS.definition, Literal("ya escrita por un curador", lang="en")))
+        entities.append(Entity(iri=str(iri), original_iri=str(iri), kind=CLASS, preferred=name,
+                               labels=[Label(text=name, language="en", source="derived")]))
+
+    contexts = gloss_contexts(NormalizedSeed(graph=graph, entities=entities, typos=[]))
+    assert [c.label for c in contexts] == ["Sin"]

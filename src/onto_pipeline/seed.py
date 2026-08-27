@@ -411,6 +411,14 @@ def _naming_pattern(entities: list[Entity]) -> list[TypoFinding]:
 
 
 def gloss_contexts(seed: NormalizedSeed) -> list[GlossContext]:
+    """El vecindario estructural de cada clase **que todavía no tiene definición**.
+
+    A0.4 es un *bootstrap*: escribe la glosa que falta, no reemplaza la que hay. La distinción
+    no era ociosa — sobre una ontología publicada, devolver todas las clases hacía que la etapa
+    reescribiera 428 definiciones de curadores con texto del modelo, y encima pagando por
+    hacerlo. Mejorar una glosa existente con lo que dice el corpus es otra etapa (`enrich`), y
+    esa sí parte de la que ya está.
+    """
     graph = seed.graph
     labels = {URIRef(entity.iri): entity.preferred for entity in seed.entities}
 
@@ -422,6 +430,8 @@ def gloss_contexts(seed: NormalizedSeed) -> list[GlossContext]:
         if entity.kind != CLASS:
             continue
         iri = URIRef(entity.iri)
+        if graph.value(iri, SKOS.definition) is not None:
+            continue
         contexts.append(
             GlossContext(
                 iri=entity.iri,

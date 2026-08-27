@@ -378,11 +378,33 @@ están hechas; queda C5, C7 y C9.
 | ~~C2~~ | ~~Importador de corpus anotado~~ — **hecha**: `calibration.py`, readers `knowtator` y `brat` tras un registro, `pair.yml` por par, offsets validados contra el texto fuente en los 97 documentos | 2 | — | — |
 | ~~C3~~ | ~~Banco de calibración~~ — **hecha**: comando `calibrate`, una pasada de encoding por variante y los umbrales aplicados encima, distribución de scores y separación reportadas aparte del agregado | 3 | C2 | — |
 | ~~C4~~ | ~~Par primario CRAFT `CL+extensions`~~ — **hecha**, cuatro corridas. Ver [Resultados de C4](#resultados-de-c4-2026-09-09) | 3 | C3 | — |
-| C5 | **Pares adicionales: HPO GSC+, MaterioMiner, CafeteriaFCD/CafeteriaSA.** Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
+| C5 | **Pares adicionales.** MaterioMiner **hecho** (ver abajo); quedan HPO GSC+ y CafeteriaFCD/CafeteriaSA. Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
 | ~~C6~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de C4**: ambas resueltas, comentarios de `config/default.yaml` reescritos. C5 puede refinar los umbrales, no estas dos | 4 | C4 | — |
 | ~~C7~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
 | C8 | **Correr el pipeline entero sobre un par publicado**, no sólo el matcher. La **ingesta de texto plano ya está** (ver abajo); falta correr extracción, puenteo, inducción y axiomatización con las anotaciones gold como control en cada etapa. Es la primera vez que las etapas posteriores al tipado se medirían contra una respuesta conocida | 5 | C4 | corrida (LLM) |
 | C9 | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | C4 | decisión |
+
+### Segundo par: MaterioMiner — hecho (2026-09-09)
+
+428 clases, 4 publicaciones, 2.229 menciones gold, no biomédico. Lector `webanno` nuevo, y
+`load_targets` ahora lee inventarios en RDF además de OBO — MaterioMiner publica su ontología en
+Turtle, y hasta ahora el banco sólo sabía leer OBO, con lo que el inventario daba **cero clases**
+sin decir por qué. Detalle completo en [`../calibration/materiominer/NOTA_FASE0.md`](../calibration/materiominer/NOTA_FASE0.md).
+
+| | MaterioMiner | CRAFT/CL |
+|---|---|---|
+| Inventario | 428 clases | 3.418 |
+| Separación | **1,50** | 1,69 |
+| recall@1 | **21,5%** | 68,5% |
+| Mejor F1 | 0,277 (0,75) | 0,774 (0,90) |
+
+**El punto de operación no transfiere, y no en la dirección esperable**: un inventario ocho veces
+más chico no es más fácil. Y las dos cifras se separan — la separación aguanta, el recall se cae—
+lo que dice que acá el cuello no es el umbral sino la **recuperación**: el encoder distingue
+acierto de error, pero la clase correcta casi nunca está primera. Es un modo de falla distinto
+del de CRAFT y refuerza las deudas 17 y 19.
+
+Falta el tercer punto de la curva (~40k clases) para tener la forma.
 
 ### Ingesta de texto plano — hecha (2026-09-09)
 
