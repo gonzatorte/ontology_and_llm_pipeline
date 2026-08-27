@@ -119,7 +119,26 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
   (`FINDINGS-MEASURED-RETRIEVAL-CEILING`). **El índice está en el [README](README.md)**, y todo
   nombre nuevo se da de alta ahí. Los comandos del CLI son la hoja de su id: `ITER-EXTRACT` se
   corre con `extract`.
-- **Commitear después de cada hito**, no al final. El mensaje explica *por qué*, no *qué*.
+- **Commitear después de cada hito**, no al final, y con [conventional
+  commits](https://www.conventionalcommits.org) en el asunto: `tipo(alcance): descripción`.
+
+  **El asunto dice qué se tocó; el cuerpo sigue diciendo *por qué*.** El prefijo no reemplaza al
+  cuerpo, se le suma: existe para que el log se pueda filtrar y agrupar, que es lo único que un
+  asunto en prosa no permite. Un commit sin cuerpo sigue siendo un commit sin explicación.
+
+  Tipos: `feat` (capacidad nueva), `fix` (algo que estaba roto), `refactor` (misma conducta,
+  otra forma), `perf`, `test`, `docs`, `chore` (dependencias, scripts, config del repo),
+  `build`.
+
+  Alcances — **son las partes de este repo, no categorías abstractas**, y por eso la lista es
+  cerrada y se amplía a mano: `services`, `cli`, `wizard`, `render`, `core` (los módulos de
+  dominio), `config`, `matching`, `reasoning`, `tuning`, `calibration`, `eval`, `spec` (el spec
+  y los planes que lo enmiendan), `deps`. Uno solo por commit; si un cambio toca tres, el
+  alcance es el que explica el porqué, y si no hay uno así se omite.
+
+  El asunto va en castellano como el resto de la documentación, sin punto final, y entra en 72
+  caracteres. Un cambio que rompe algo lleva `!` antes de los dos puntos y un `BREAKING CHANGE:`
+  al pie.
 - **`DEUDA_TECNICA.md` es para mejoras a futuro, no para bugs.** Lo que está roto se arregla.
   Cada entrada lleva un id `DEBT-…`, así que dos sesiones en paralelo no colisionan como
   colisionaban los números.
@@ -184,7 +203,7 @@ ignoraron.
   no la respuesta y además el cambio ya hecho. Empezar a implementar sin que lo pida es la
   corrección que más veces tuvo que hacer.
 - **Commitear después de cada hito**, con el log de los cambios en el mensaje. No una tanda al
-  final.
+  final. El formato del asunto está en Convenciones de trabajo, arriba: conventional commits.
 - **Nombres mnemotécnicos, no códigos — pero nombres, no ausencia de nombre.** Lo pidió cuatro
   veces. La tercera fue con fastidio; la cuarta fue para corregir que, al sacar los códigos, se
   habían quedado frases sin identificador, y eso empobrece el texto en vez de mejorarlo.
