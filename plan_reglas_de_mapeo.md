@@ -1,6 +1,6 @@
 # Plan: el contrato de las reglas de mapeo
 
-Enmienda a `especificacion_pipeline_ontologia.md`. Define lo que el spec nombra cinco veces y
+Enmienda a `main_plan.md`. Define lo que el spec nombra cinco veces y
 no especifica nunca.
 
 ## Problema

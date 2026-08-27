@@ -12,8 +12,8 @@ afirmado (`PREP`).
 Tres documentos vecinos y qué contesta cada uno, para no duplicarlos acá:
 
 - [`README.md`](README.md) — cómo se usa lo construido y en qué estado está cada etapa.
-- [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) — qué falta y qué convendría rehacer con más evidencia.
-- [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) — el diseño.
+- [`technical_debt.md`](technical_debt.md) — qué falta y qué convendría rehacer con más evidencia.
+- [`main_plan.md`](main_plan.md) — el diseño.
 
 **Regla de lectura.** Cada hallazgo dice sobre qué se midió y con qué n. Un número sin su
 población es una anécdota, y este proyecto ya se equivocó dos veces por sacar conclusiones de
@@ -44,7 +44,7 @@ el README.
 
 El modo de falla de trabajar así —una edición anclada a texto que falla abierta cuando otra
 sesión movió el contexto— está en la sección de coordinación de
-[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), con lo que hay que hacer para evitarlo.
+[`technical_debt.md`](technical_debt.md), con lo que hay que hacer para evitarlo.
 
 ---
 
@@ -194,7 +194,7 @@ Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del p
 
 Estos números son de la dupla semilla cualitativa + corpus de ciencia abierta, que **ya no se
 usa**: el proyecto no tiene dominio comprometido y todos los pares son instrumentos (ver
-[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), `DEBT-QUALITATIVE-PAIR`). Quedan acá porque son la única corrida de
+[`technical_debt.md`](technical_debt.md), `DEBT-QUALITATIVE-PAIR`). Quedan acá porque son la única corrida de
 punta a punta que hubo hasta ahora, y porque el eco léxico que muestran es sobre el método.
 
 Contra `v5`, que era la versión vigente: 10 documentos (5 en el conjunto de retención), **848
@@ -359,7 +359,7 @@ Confunde el metalenguaje de la escritura académica con el dominio del que se es
 Es precisión de la extracción, no del matcher, y ningún filtro de los siete lo atrapa: son
 sintagmas nominales legítimos, con soporte suficiente, y el razonador no tiene nada que objetar.
 Las tres vías para atacarlo —lista de bloqueo, instrucción en el prompt de extracción, filtro por
-distribución entre documentos— están en la [`DEBT-ACADEMIC-METALANGUAGE` de deuda técnica](DEUDA_TECNICA.md).
+distribución entre documentos— están en la [`DEBT-ACADEMIC-METALANGUAGE` de deuda técnica](technical_debt.md).
 
 ### FINDINGS-MEASURED-FULL-RUN — El pipeline entero sobre un par anotado (tarea «corrida completa»), y qué se ve al final
 

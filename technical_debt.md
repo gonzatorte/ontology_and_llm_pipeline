@@ -9,7 +9,7 @@ No es una lista de bugs: lo que está roto se arregla, no se documenta.
 > entrada, mejor por título que por número, porque los números se corren.
 
 El estado de implementación por etapa está en el [README](README.md) y los números que
-sostienen cada decisión en [HALLAZGOS.md](HALLAZGOS.md); acá va lo que no se ve mirando ninguno
+sostienen cada decisión en [findings.md](findings.md); acá va lo que no se ve mirando ninguno
 de los dos.
 
 ---
@@ -77,7 +77,7 @@ uno por sesión. Dos advertencias al auditarlos:
   independientes lleva a buscar conflictos donde no hay más que una rama abandonada.
 - **La atribución no se lee del historial de git.** Los 44 commits tienen un solo autor y un solo
   trailer de sesión, aunque el trabajo salió de tres. Quién decidió qué está en la tabla de
-  procedencia de [`HALLAZGOS.md`](HALLAZGOS.md), no en `git log`.
+  procedencia de [`findings.md`](findings.md), no en `git log`.
 
 ---
 
@@ -436,7 +436,7 @@ Dos huecos concretos en la etapa:
 > **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
 > da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
 > más grande que se midió acá— y **sólo sirve en su propio dominio**: el de CRAFT aplicado a MaterioMiner
-> resta 2,1 puntos. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.12.
+> resta 2,1 puntos. Ver [`FINDINGS-MEASURED-TUNED-RERANKER`](findings.md).
 >
 > **Ajuste completo en vez de LoRA**, apartándose de la letra del spec: LoRA existe para no tocar
 > todos los pesos de un modelo grande, y éste tiene 33 millones de parámetros y entrena en 79
@@ -514,7 +514,7 @@ Lo que dejó, y que sigue valiendo porque es sobre el método y no sobre el par:
   la `DEBT-CONTEXT-DISAMBIGUATION`.
 
 Los datos derivados (`data/`, versiones `v0`–`v5`) quedan como están: son historia, y los
-números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md).
+números que se citaron de ahí están fechados en [`findings.md`](findings.md).
 
 ---
 
@@ -722,7 +722,8 @@ Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
    +0,4 puntos en @1 y pierde uno en @5. Reproducible con `calibrate --context sentence`.
    Es el mismo hallazgo que el de las glosas: un encoder simétrico compara por forma, y
    agregarle una oración a un sintagma lo convierte en una oración. **La solución no está en la
-   representación de la mención, está en el encoder** — ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.11.
+   representación de la mención, está en el encoder** — ver
+   [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](findings.md).
 2. **Usar la jerarquía**, que es la `DEBT-HIERARCHY-AWARE-TYPING`: preferir la clase cuyos ancestros también
    puntúan. Un `cell` biológico debería activar también `Anatomical Structure`; uno clandestino,
    nada del subárbol.

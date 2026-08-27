@@ -1,11 +1,11 @@
 # onto-pipeline
 
 Enriquecimiento ontológico asistido por LLM. La especificación de diseño es
-[`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md); este README
+[`main_plan.md`](main_plan.md); este README
 sólo explica cómo se usa lo que está construido y qué falta.
 
-Los otros tres documentos, por si buscás otra cosa: [`HALLAZGOS.md`](HALLAZGOS.md) —qué se midió
-y qué se decidió, con el n de cada número—, [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) —qué falta y
+Los otros tres documentos, por si buscás otra cosa: [`findings.md`](findings.md) —qué se midió
+y qué se decidió, con el n de cada número—, [`technical_debt.md`](technical_debt.md) —qué falta y
 qué conviene rehacer— y [`CLAUDE.md`](CLAUDE.md), el índice y los invariantes del proyecto.
 
 El sistema opera en inglés (prompts, esquemas, logs). El corpus y las glosas son bilingües
@@ -112,25 +112,25 @@ existe para que no se pierdan entre las entradas.
 
 | # | Qué | Por qué | Detalle |
 |---|---|---|---|
-| 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](HALLAZGOS.md), [`FINDINGS-MEASURED-FULL-RUN`](HALLAZGOS.md) |
-| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](DEUDA_TECNICA.md) |
-| 3 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Bajo esfuerzo, alta prioridad: los tres son comparar un hash contra el registrado, y `next` es el lugar. El último cierra el bucle de `PREP-NORMALIZE` | [`DEBT-AUTOMATIC-TRIGGERS`](DEUDA_TECNICA.md) |
-| 4 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — el metalenguaje de escribir un paper, no el dominio del que habla. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [`DEBT-ACADEMIC-METALANGUAGE`](DEUDA_TECNICA.md), [`FINDINGS-MEASURED-SPURIOUS-CLASS`](HALLAZGOS.md) |
-| 5 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [`DEBT-ONTOLOGY-IMPORTS`](DEUDA_TECNICA.md) |
-| 6 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita. Sólo sobre lo que el pipeline mismo escribió: shapes sobre verdades del dominio chocan con el mundo abierto | [`DEBT-VALIDATION-CHAIN`](DEUDA_TECNICA.md) |
+| 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](findings.md), [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
+| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](technical_debt.md) |
+| 3 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Bajo esfuerzo, alta prioridad: los tres son comparar un hash contra el registrado, y `next` es el lugar. El último cierra el bucle de `PREP-NORMALIZE` | [`DEBT-AUTOMATIC-TRIGGERS`](technical_debt.md) |
+| 4 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — el metalenguaje de escribir un paper, no el dominio del que habla. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [`DEBT-ACADEMIC-METALANGUAGE`](technical_debt.md), [`FINDINGS-MEASURED-SPURIOUS-CLASS`](findings.md) |
+| 5 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [`DEBT-ONTOLOGY-IMPORTS`](technical_debt.md) |
+| 6 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita. Sólo sobre lo que el pipeline mismo escribió: shapes sobre verdades del dominio chocan con el mundo abierto | [`DEBT-VALIDATION-CHAIN`](technical_debt.md) |
 
 <details>
 <summary>Lo que estaba en cola y se cerró</summary>
 
 | # | Qué | Por qué ahora | Detalle |
 |---|---|---|---|
-| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [`FINDINGS-MEASURED-TUNED-RERANKER`](HALLAZGOS.md) |
-| ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](HALLAZGOS.md) |
-| ~~3~~ | ~~El registro de decisiones~~ — **cerrado entero**: una tabla, seis categorías fijas, `invalid` separado de `not_chosen`, la forma normal guardada, y los precedentes inyectados en el prompt de axiomatización | Lo rechazado no está en ningún otro lado, y guardarlo sólo rinde si vuelve al prompt | [`DEBT-FEEDBACK-HISTORY`](DEUDA_TECNICA.md) |
-| ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [`DEBT-NEXT-RUNS`](DEUDA_TECNICA.md) |
-| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [`FINDINGS-MEASURED-FULL-RUN`](HALLAZGOS.md) |
-| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [`DEBT-QUALITATIVE-PAIR`](DEUDA_TECNICA.md) |
-| ~~7~~ | ~~Comparación por forma normal~~ — **hecha**: `normal_form` nombra por etiquetas, saltea la glosa, y `already_rejected` la consulta antes de juzgar | Sin ella el mismo compromiso vuelve con otros IRIs y no se detecta como re-proposición | [`DEBT-FEEDBACK-HISTORY`](DEUDA_TECNICA.md) |
+| ~~1~~ | ~~Entrenar el re-ranker~~ — **hecho** (`tune`): +9,9 puntos en CRAFT, +11,6 en MaterioMiner, y sólo sirve en su propio dominio | La mejora más grande medida en este pipeline | [`FINDINGS-MEASURED-TUNED-RERANKER`](findings.md) |
+| ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](findings.md) |
+| ~~3~~ | ~~El registro de decisiones~~ — **cerrado entero**: una tabla, seis categorías fijas, `invalid` separado de `not_chosen`, la forma normal guardada, y los precedentes inyectados en el prompt de axiomatización | Lo rechazado no está en ningún otro lado, y guardarlo sólo rinde si vuelve al prompt | [`DEBT-FEEDBACK-HISTORY`](technical_debt.md) |
+| ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [`DEBT-NEXT-RUNS`](technical_debt.md) |
+| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
+| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [`DEBT-QUALITATIVE-PAIR`](technical_debt.md) |
+| ~~7~~ | ~~Comparación por forma normal~~ — **hecha**: `normal_form` nombra por etiquetas, saltea la glosa, y `already_rejected` la consulta antes de juzgar | Sin ella el mismo compromiso vuelve con otros IRIs y no se detecta como re-proposición | [`DEBT-FEEDBACK-HISTORY`](technical_debt.md) |
 
 </details>
 
@@ -241,7 +241,7 @@ es lo que documenta la sección Uso— y `wizard`, que recorre el plan preguntan
 decisión en vez de frenar ante él. Las dos llaman a las mismas funciones: los cuerpos de las
 etapas viven en `services/`, no en ninguna de las dos interfaces, y hay un test que fija que
 ningún servicio importe `typer` ni `rich`. Qué cubre el wizard y qué le falta está en
-[`DEBT-WIZARD-COVERAGE`](DEUDA_TECNICA.md).
+[`DEBT-WIZARD-COVERAGE`](technical_debt.md).
 
 ## Instalación
 
@@ -389,7 +389,7 @@ Qué hace, en orden:
 1. **Confirma la configuración** y dice que toda clave que el archivo no defina toma su default.
 2. **Pregunta el par (corpus, semilla) siempre**, aunque el archivo lo tenga: qué par se usa es
    un parámetro de la corrida, no una decisión de configuración. Que hoy viva en `CONFIG` es
-   deuda — [`DEBT-RUN-PARAMETERS`](DEUDA_TECNICA.md).
+   deuda — [`DEBT-RUN-PARAMETERS`](technical_debt.md).
 3. **Normaliza la semilla** si todavía no hay ninguna versión, y ofrece escribir las glosas que
    falten.
 4. **Recorre el plan** de `next` etapa por etapa: corre lo que se corre solo, pregunta en los
@@ -1139,7 +1139,7 @@ uv run ruff check .
 Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
 
 Las mejoras a futuro y las decisiones tomadas con evidencia insuficiente están en
-[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md), que además lleva la nota de coordinación entre las
+[`technical_debt.md`](technical_debt.md), que además lleva la nota de coordinación entre las
 conversaciones que trabajan sobre este repo.
 
 ## Limitaciones conocidas

@@ -72,7 +72,7 @@ class Bridging(BaseModel):
 class Induction(BaseModel):
     # Single-link over the orphan mentions: a concept's phrasings form a chain, so two ends
     # need only be close to something between them. Uncalibrated, like every other threshold
-    # here — see DEUDA_TECNICA.md.
+    # here — see technical_debt.md.
     similarity_threshold: float = 0.75
     min_support: int = 3          # one mention proposing a class is noise (ITER-BRANCH)
     max_phrases_in_prompt: int = 30

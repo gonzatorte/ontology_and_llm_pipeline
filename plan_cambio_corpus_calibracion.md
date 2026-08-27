@@ -1,8 +1,9 @@
 # Plan: calibrar contra corpus publicados anotados
 
-Enmienda al `BUILD` (secuencia de construcción) de `especificacion_pipeline_ontologia.md`. Los
+Enmienda al `BUILD` (secuencia de construcción) de `main_plan.md`. Los
 resultados de los barridos que este plan hizo posibles están en
-[`HALLAZGOS.md`](HALLAZGOS.md) `SCOPE-WHAT`–1.2.
+[`FINDINGS-MEASURED-MATCHER-CRAFT`](findings.md) y
+[`FINDINGS-MEASURED-GENUINE-ORPHANS`](findings.md).
 
 > Este documento se llamaba "separar el corpus de calibración del corpus de aplicación" y esa
 > separación resultó ser una premisa equivocada: no hay corpus de aplicación. Ver la nota de
@@ -163,7 +164,7 @@ o corpus diminuto. MaterioMiner es el mejor caso no biomédico encontrado.
 los cuatro pares son en inglés, así que ninguno las toca. La vía existe —los corpus clínicos en
 español del BSC contra SNOMED CT— pero pide tramitar una licencia y subsetear 360k conceptos, y
 no conviene que eso bloquee las tareas de calibración. Queda registrado como **deuda técnica 17** en
-[`DEUDA_TECNICA.md`](DEUDA_TECNICA.md).
+[`technical_debt.md`](technical_debt.md).
 
 Salida de la fase: un directorio con el corpus, su ontología en RDF, y una nota de una página
 sobre formato de anotación y criterio de subseteo si lo hubo.
@@ -381,7 +382,7 @@ están hechas; queda la tarea «más pares», la tarea «volver al par de aplica
 | más-pares | **Pares adicionales.** MaterioMiner **hecho** (ver abajo); quedan HPO GSC+ y CafeteriaFCD/CafeteriaSA. Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | par-primario | 3 pair.yml + 3 barridos |
 | ~~re-decidir-encoder~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de la tarea «par primario»**: ambas resueltas, comentarios de `config/default.yaml` reescritos. la tarea «más pares» puede refinar los umbrales, no estas dos | 4 | par-primario | — |
 | ~~volver-al-par~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
-| ~~corrida-completa~~ | ~~Correr el pipeline entero sobre un par publicado~~ — **hecha** sobre MaterioMiner: de la semilla a `v2` con 45 clases inducidas. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.13 y 1.14 | 5 | par-primario | — |
+| ~~corrida-completa~~ | ~~Correr el pipeline entero sobre un par publicado~~ — **hecha** sobre MaterioMiner: de la semilla a `v2` con 45 clases inducidas. Ver [`FINDINGS-MEASURED-SPURIOUS-CLASS`](findings.md) y [`FINDINGS-MEASURED-FULL-RUN`](findings.md) | 5 | par-primario | — |
 | dónde-parte-auto | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | par-primario | decisión |
 
 ### Segundo par: MaterioMiner — hecho (2026-09-09)

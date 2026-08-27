@@ -30,10 +30,10 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 
 | Documento | Qué contesta | Cuándo leerlo |
 |---|---|---|
-| [`especificacion_pipeline_ontologia.md`](especificacion_pipeline_ontologia.md) | El diseño entero, con las 26 decisiones vinculantes | **Primero, siempre.** Es la referencia canónica, y desde el 2026-09-10 sus partes se citan por nombre (`ITER-MATCH`, `GRADED-FEEDBACK`), no por número |
+| [`main_plan.md`](main_plan.md) | El diseño entero, con las 26 decisiones vinculantes | **Primero, siempre.** Es la referencia canónica, y desde el 2026-09-10 sus partes se citan por nombre (`ITER-MATCH`, `GRADED-FEEDBACK`), no por número |
 | [`README.md`](README.md) | Cómo se usa cada comando y en qué estado está cada etapa | Antes de tocar el CLI o de decir que algo falta |
-| [`HALLAZGOS.md`](HALLAZGOS.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
-| [`DEUDA_TECNICA.md`](DEUDA_TECNICA.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
+| [`findings.md`](findings.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
+| [`technical_debt.md`](technical_debt.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
 | [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
 | [`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md) | Por qué el corpus de calibración está separado del de aplicación, y las tareas la tarea «cablear el matcher»–la tarea «más pares» | Al tocar `calibration.py` o interpretar un barrido |
 
@@ -139,7 +139,7 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
   El asunto va en castellano como el resto de la documentación, sin punto final, y entra en 72
   caracteres. Un cambio que rompe algo lleva `!` antes de los dos puntos y un `BREAKING CHANGE:`
   al pie.
-- **`DEUDA_TECNICA.md` es para mejoras a futuro, no para bugs.** Lo que está roto se arregla.
+- **`technical_debt.md` es para mejoras a futuro, no para bugs.** Lo que está roto se arregla.
   Cada entrada lleva un id `DEBT-…`, así que dos sesiones en paralelo no colisionan como
   colisionaban los números.
 - **No leer fuera de `pipeline/` sin preguntar.** El corpus, la ontología semilla y los pares de
@@ -239,24 +239,27 @@ antes de proponer trabajo nuevo.
 La secuencia de construcción del spec (`BUILD`) está dada en sus cinco pasos y la tabla de estado del
 README lo detalla etapa por etapa. Lo que **no** está, y conviene saberlo antes de prometer nada:
 
-- **`ITER-TUNE`, el ajuste del matcher (LoRA)** — bloqueado por datos, no por código: hace falta que
-  alguien conteste unos cientos de pares de zona gris. Deuda 8i.
+- **`ITER-TUNE`, el ajuste del matcher** — el entrenamiento está hecho (`tune`) y lo que sigue
+  bloqueado es el circuito que el spec describe: que las etiquetas salgan solas de las
+  decisiones de zona gris en vez de un par anotado. Bloqueado por datos, no por código — hace
+  falta que alguien conteste unos cientos de pares. Ver `DEBT-MATCHER-TUNING`.
 - **`ITER-FEEDBACK`, el historial de feedback** — **cerrado el 2026-09-10**: esquema `GRADED-FEEDBACK`, forma normal y
   precedentes en el prompt de `axiomatize`. Lo que falta no es código sino una segunda iteración
-  con feedback humano real, para ver si algún precedente mueve un juicio. Deuda 20.
+  con feedback humano real, para ver si algún precedente mueve un juicio. Ver
+  `DEBT-FEEDBACK-HISTORY`.
 - **La compuerta no-go de `BUILD-NO-GO-GATE` sigue abierta**, y es la que decide si tiene sentido seguir
   construyendo encima. Ver el README.
 
 ## Antes de proponer una idea
 
-**Mirar `LAYERS` de [`HALLAZGOS.md`](HALLAZGOS.md), "Lo que se probó y no funcionó".** Siete formas de
+**Mirar `LAYERS` de [`findings.md`](findings.md), "Lo que se probó y no funcionó".** Siete formas de
 meterle más texto a la comparación están medidas y todas empeoran; la cobertura léxica como
 veredicto de alineación da el resultado invertido; reusar un re-ranker entre dominios resta. Cada
 una parecía razonable antes de medirla, y por eso están anotadas.
 
 ## Antes de decir que algo falta
 
-Mirar la tabla de estado del README y las entradas de `DEUDA_TECNICA.md`. Varias cosas que
+Mirar la tabla de estado del README y las entradas de `technical_debt.md`. Varias cosas que
 parecen faltantes son decisiones: el catálogo de patrones de modelado tiene tres entradas y una
 sin detector a propósito, el filtro de pitfalls es un subconjunto local de OOPS! y no OOPS!, y
 `next` no ejecuta nada por una razón escrita.

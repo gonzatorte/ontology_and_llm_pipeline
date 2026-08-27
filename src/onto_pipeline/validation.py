@@ -28,7 +28,7 @@ the chain treats it as one — it is reported and nothing is dropped.
 What is here is a **local subset of the OOPS! catalogue**, not OOPS!. The real scanner is a web
 service, and sending someone's ontology to a third party is a decision for its owner, not a step
 a pipeline takes on its own. The checks below are the ones computable offline from the graph;
-which pitfalls that leaves out is recorded in DEUDA_TECNICA.md rather than implied.
+which pitfalls that leaves out is recorded in technical_debt.md rather than implied.
 """
 
 from __future__ import annotations

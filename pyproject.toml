@@ -1,7 +1,7 @@
 [project]
 name = "onto-pipeline"
 version = "0.1.0"
-description = "LLM-assisted ontology enrichment pipeline (see especificacion_pipeline_ontologia.md)."
+description = "LLM-assisted ontology enrichment pipeline (see main_plan.md)."
 requires-python = ">=3.10"
 dependencies = [
     "pymupdf>=1.24.0",
