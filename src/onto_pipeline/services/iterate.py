@@ -1738,7 +1738,7 @@ class Regeneration:
 def regenerate(
     session: Session, *, version: str | None = None, force: bool = False
 ) -> Regeneration:
-    """Recalcular el ABox desde la capa de menciones (`plan_reglas_de_mapeo.md`).
+    """Recalcular el ABox desde la capa de menciones (`mapping_rules_plan.md`).
 
     No es una migración: el ABox se deriva de las menciones y de una versión de la ontología,
     así que una reorganización de la TBox nunca necesita una — cambian las reglas y esto corre

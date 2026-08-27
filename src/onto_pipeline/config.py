@@ -199,7 +199,7 @@ class Stopping(BaseModel):
 
 
 class Mapping(BaseModel):
-    """How the mention layer becomes an ABox (plan_reglas_de_mapeo.md).
+    """How the mention layer becomes an ABox (mapping_rules_plan.md).
 
     The global policy. Per-case exceptions live in `review_items`, because section 6.4 scopes
     notarize/force/refute per case while 6.8 recomputes the whole ABox, and a per-case decision

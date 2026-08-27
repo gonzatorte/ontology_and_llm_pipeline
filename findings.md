@@ -32,8 +32,8 @@ se lee del historial:
 | Sesión | De qué se ocupó | Dónde quedó |
 |---|---|---|
 | `f0449040` (la que escribe) | Fase B completa, cadena `ITER-VALIDATE`, criterios de parada, calibración con holdout | 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 y todo `DECISIONS` |
-| `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) y `plan_cambio_corpus_calibracion.md` |
-| `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `plan_reglas_de_mapeo.md`, `DEBT-CONTEXT-DISAMBIGUATION`, y 1.3 |
+| `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) y `calibration_plan.md` |
+| `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `mapping_rules_plan.md`, `DEBT-CONTEXT-DISAMBIGUATION`, y 1.3 |
 
 Hay dos transcripts más y ninguno aporta decisiones: `b8c7e99c` es **la misma conversación que
 `f0449040`, bifurcada** —mismo timestamp inicial, mismo primer mensaje— y `7994cb22` es una

@@ -1,5 +1,5 @@
 """Mapping rules and ABox regeneration (LAYERS, ITER-CONFLICTS, ITER-APPLY;
-see plan_reglas_de_mapeo.md).
+see mapping_rules_plan.md).
 
 The spec names "mapping rules" in five places and defines them in none, while resting its
 central claim on them: because the ABox derives from the mention layer and not from outside

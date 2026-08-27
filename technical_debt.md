@@ -535,7 +535,7 @@ capa está en `services/__init__.py` y hay un test que fija su invariante — **
 importa `typer` ni `rich`**.
 
 `review_items` sigue siendo donde viven las excepciones por caso de las reglas de mapeo — ver
-[`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
+[`mapping_rules_plan.md`](mapping_rules_plan.md).
 
 Lo que queda abierto es `DEBT-WIZARD-COVERAGE`, abajo.
 

@@ -82,7 +82,7 @@ def install(conn: sqlite3.Connection) -> None:
     # `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so a column added after the
     # fact needs this. `rules_hash` records which mapping rules produced a version's ABox:
     # without it the same TBox under different rules gives different ABoxes and nothing says
-    # so (plan_reglas_de_mapeo.md).
+    # so (mapping_rules_plan.md).
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
     if "rules_hash" not in columns:
         conn.execute("ALTER TABLE versions ADD COLUMN rules_hash TEXT")

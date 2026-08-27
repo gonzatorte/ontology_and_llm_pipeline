@@ -230,7 +230,7 @@ branching:
 # ─── Mapping rules: mention layer -> ABox ────────────────
 # La política global. Las excepciones por caso viven en `review_items`, no acá: ITER-CONFLICTS les da
 # alcance por caso y ITER-APPLY recomputa el ABox entero, así que no pueden vivir dentro del código
-# que recomputa. Ver plan_reglas_de_mapeo.md.
+# que recomputa. Ver mapping_rules_plan.md.
 mapping:
   individual_from: entity      # entity (componente de fusión) | mention (sólo diagnóstico)
   type_from: [auto]            # zonas que producen rdf:type. La gris no tipa hasta que la

@@ -557,7 +557,7 @@ def regenerate_cmd(
     version: str | None = VersionOption,
     force: bool = ForceRegenOption,
 ) -> None:
-    """Recompute the ABox from the mention layer (plan_reglas_de_mapeo.md)."""
+    """Recompute the ABox from the mention layer (mapping_rules_plan.md)."""
     render.regeneration(
         console, iterate.regenerate(_session(config_path), version=version, force=force)
     )

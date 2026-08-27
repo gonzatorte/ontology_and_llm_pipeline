@@ -890,7 +890,7 @@ reglas y esto se corre de nuevo.
 
 La función es pura y **sólo lee** la capa de menciones, que es el invariante de `LAYERS` y lo único
 que esta etapa podría romper por descuido. Las reglas de mapeo salen de `mapping:` en el config;
-el contrato completo está en [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md). Dos cosas que
+el contrato completo está en [`mapping_rules_plan.md`](mapping_rules_plan.md). Dos cosas que
 conviene saber al leer la salida:
 
 - **El IRI de un individuo se acuña desde su mención ancla**, no desde el grupo entero. Sumar
@@ -1096,7 +1096,7 @@ Lo que reporta, además del barrido de umbrales:
   mide cuánto error causaban.
 
 El plan completo y los resultados están en
-[`plan_cambio_corpus_calibracion.md`](plan_cambio_corpus_calibracion.md).
+[`calibration_plan.md`](calibration_plan.md).
 
 ## Dónde queda todo
 
