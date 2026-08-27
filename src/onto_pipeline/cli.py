@@ -35,6 +35,7 @@ from . import (
     matching,
     ontoclean,
     orchestration,
+    parse,
     review,
     stopping,
     structural,
@@ -190,7 +191,11 @@ def ingest_cmd(
     config = Config.load(config_path)
     paths = [p.resolve() for p in document] if document else discover(config.paths.corpus_root)
     if not paths:
-        raise typer.BadParameter(f"no PDFs under {config.paths.corpus_root}")
+        formats = ", ".join(sorted(parse.TEXT_SUFFIXES))
+        raise typer.BadParameter(
+            f"no hay documentos bajo {config.paths.corpus_root}: se buscan PDFs y texto "
+            f"plano ({formats})"
+        )
     if limit:
         paths = paths[:limit]
 

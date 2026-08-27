@@ -78,7 +78,7 @@ Las tareas T1–T4 de §14.2 están las cuatro: T1 `report`, T2 el banco de `cal
 | A0.1–A0.3 IRIs opacos, etiquetas, erratas | listo |
 | A0.4 glosas | listo (requiere proveedor LLM) |
 | A1 clasificación por página | listo |
-| A2 parseo e ingesta | listo, sólo ruta born-digital |
+| A2 parseo e ingesta | listo: PDF born-digital y **texto plano**; falta la ruta VLM |
 | A3 generación de CQ | listo (`cq propose`) |
 | A4 CQ del usuario | listo |
 | Chunking estructura-consciente | listo |

@@ -13,6 +13,7 @@ import random
 import sqlite3
 from pathlib import Path
 
+from . import parse
 from .config import Config
 from .parse import (
     CAPTION,
@@ -29,11 +30,17 @@ STAGE = "A1_A2_ingest"
 
 
 def discover(corpus_root: Path) -> list[Path]:
-    """Case-insensitive: `.PDF` is common enough in a real corpus that matching only `.pdf`
-    drops documents without saying so."""
+    """PDFs y texto plano, por extensión y sin distinguir mayúsculas.
+
+    Case-insensitive porque `.PDF` es bastante común en un corpus real como para perder
+    documentos sin decirlo. Y texto plano porque los corpus anotados —los que traen la
+    respuesta correcta— se publican en `.txt`, no en PDF: sin esta rama el pipeline sólo puede
+    correr sobre material que nadie anotó.
+    """
+    suffixes = {".pdf"} | set(parse.TEXT_SUFFIXES)
     return sorted(
         path for path in corpus_root.rglob("*")
-        if path.is_file() and path.suffix.lower() == ".pdf"
+        if path.is_file() and path.suffix.lower() in suffixes
     )
 
 
@@ -59,9 +66,16 @@ def ingest(
 
 
 def _payload(path: Path, config: Config) -> dict:
-    return {
+    payload = {
         "document_id": document_id(path, config.paths.corpus_root),
         "content_hash": _file_hash(path),
+    }
+    if path.suffix.lower() in parse.TEXT_SUFFIXES:
+        # Un documento de texto no pasa por el parser, la clasificación ni el boilerplate, así
+        # que esas opciones no cambian su salida y no tienen por qué invalidar su caché. La
+        # clave cubre "todo lo que cambia el resultado", no todo lo que hay en el config.
+        return payload | {"parser": "text"}
+    return payload | {
         "parser": config.parser.model_dump(),
         "classification": config.classification.model_dump(),
         "boilerplate": config.boilerplate.model_dump(),

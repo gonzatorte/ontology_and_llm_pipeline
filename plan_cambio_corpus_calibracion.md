@@ -381,8 +381,35 @@ están hechas; queda C5, C7 y C9.
 | C5 | **Pares adicionales: HPO GSC+, MaterioMiner, CafeteriaFCD/CafeteriaSA.** Mismo barrido. Objetivo: medir cómo se mueve el punto de operación entre inventarios de 179, 3.418 y ~40k clases, en vez de suponerlo. El reader `brat` ya está; falta el de HPO GSC+ y bajar los tres corpus | 3 | C4 | 3 pair.yml + 3 barridos |
 | ~~C6~~ | ~~Re-decidir `match_against` y `use_cross_encoder`~~ — **hecha con la evidencia de C4**: ambas resueltas, comentarios de `config/default.yaml` reescritos. C5 puede refinar los umbrales, no estas dos | 4 | C4 | — |
 | ~~C7~~ | ~~Volver al par de aplicación~~ — **retirada**: no hay par de aplicación, todos los pares son instrumentos. Ver la nota de corrección más arriba | 5 | — | — |
-| C8 | **Correr el pipeline entero sobre un par publicado**, no sólo el matcher: ingesta de texto plano (los corpus anotados vienen en `.txt`, no en PDF), y después extracción, puenteo, inducción y axiomatización con las anotaciones gold como control en cada etapa. Es la primera vez que las etapas posteriores al tipado se medirían contra una respuesta conocida | 5 | C4 | ruta de ingesta + corrida |
+| C8 | **Correr el pipeline entero sobre un par publicado**, no sólo el matcher. La **ingesta de texto plano ya está** (ver abajo); falta correr extracción, puenteo, inducción y axiomatización con las anotaciones gold como control en cada etapa. Es la primera vez que las etapas posteriores al tipado se medirían contra una respuesta conocida | 5 | C4 | corrida (LLM) |
 | C9 | El barrido mide un corte y el pipeline usa dos. Falta decidir dónde parte `auto` de zona gris, que es cuánta revisión humana se acepta y no se calibra contra un corpus | 4 | C4 | decisión |
+
+### Ingesta de texto plano — hecha (2026-09-09)
+
+Primera mitad de C8. `parse_text` toma un `.txt` y **el Markdown que entrega es el archivo,
+literal**: sin des-hyphenación, sin detección de encabezados, sin supresión de boilerplate. No es
+minimalismo, es el requisito: las anotaciones gold indexan caracteres de ese archivo, y cualquier
+normalización corre los offsets sin producir ningún error — la medición posterior simplemente da
+peor y no dice por qué.
+
+Verificado sobre los 97 artículos de CRAFT, 4.091.461 caracteres:
+
+| Chequeo | Resultado |
+|---|---|
+| Markdown en disco idéntico al `.txt` fuente | 97 de 97 |
+| Bloques que recuperan su texto por offset | 9.771 de 9.771 |
+| Menciones gold cuyo offset cae donde dice el Markdown | **8.723 de 8.723 (100%)** |
+| Menciones gold que caen enteras dentro de un bloque | **8.723 de 8.723 (100%)** |
+
+El corpus ya está ingestado y chunkeado. Lo que falta de C8 son las etapas que cuestan llamadas
+al modelo.
+
+**Un detalle para cuando se corra:** `seed_ontology` tiene que apuntar a
+`ontology/cl-base.owl`, no al `.obo` — rdflib no parsea OBO, y el `.owl` trae 123.864 tripletas
+y 7.159 clases. El `.obo` lo lee `calibration.py` con su propio reader, que es otra cosa.
+Consecuencia: `CL+extensions.obo` **no tiene equivalente en OWL**, así que la semilla del
+pipeline no incluye las clases de extensión de CRAFT que sí usa el banco de calibración. Hay que
+decidir si eso importa antes de leer los números.
 
 C4 era la compuerta —si el matcher no separaba en ningún punto de operación, no había nada que
 calibrar— y la pasó: separación +1,61 con etiquetas. Quedan **C5**, que ya no decide

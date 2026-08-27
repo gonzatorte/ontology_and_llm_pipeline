@@ -99,8 +99,10 @@ def test_line_break_hyphen_is_dropped_but_a_lexical_one_is_kept(tmp_path, config
     assert "universitybased" not in markdown
 
 
-def test_discovery_is_case_insensitive(tmp_path, config):
-    """A real corpus contains `.PDF`; matching only `.pdf` drops documents silently."""
+def test_discovery_takes_pdfs_and_plain_text_whatever_the_case(tmp_path, config):
+    """`.PDF` appears in real corpora and matching only `.pdf` drops documents silently. Plain
+    text is here because annotated corpora — the ones that come with the right answer — are
+    published as `.txt`."""
     from onto_pipeline.ingest import discover
 
     corpus = tmp_path / "corpus"
@@ -108,5 +110,6 @@ def test_discovery_is_case_insensitive(tmp_path, config):
     (corpus / "a" / "lower.pdf").write_bytes(b"%PDF-1.4")
     (corpus / "a" / "UPPER.PDF").write_bytes(b"%PDF-1.4")
     (corpus / "a" / "notes.txt").write_bytes(b"x")
+    (corpus / "a" / "figure.png").write_bytes(b"\x89PNG")
 
-    assert [p.name for p in discover(corpus)] == ["UPPER.PDF", "lower.pdf"]
+    assert [p.name for p in discover(corpus)] == ["UPPER.PDF", "lower.pdf", "notes.txt"]

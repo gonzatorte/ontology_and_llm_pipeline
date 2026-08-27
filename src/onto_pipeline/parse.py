@@ -110,7 +110,83 @@ def document_id(path: Path, corpus_root: Path) -> str:
     return f"{slug}_{digest}"
 
 
+# Formatos que ya vienen en texto: los corpus anotados que sirven de instrumento se publican
+# así, no en PDF.
+TEXT_SUFFIXES = frozenset({".txt", ".text", ".md"})
+
+_PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n")
+
+
+def paragraphs(text: str) -> list[tuple[int, int]]:
+    """Spans de cada párrafo, como offsets en `text`. Nunca reescribe un carácter.
+
+    Devuelve posiciones y no cadenas a propósito: lo que hace útil a un corpus anotado es que
+    sus anotaciones traen offsets sobre este mismo archivo, y cualquier normalización —recortar
+    espacios, re-flowear líneas, unir guiones— los desalinea en silencio.
+    """
+    spans: list[tuple[int, int]] = []
+    cursor = 0
+    for match in _PARAGRAPH_BREAK.finditer(text):
+        if (chunk := text[cursor:match.start()]).strip():
+            spans.append((cursor + len(chunk) - len(chunk.lstrip()),
+                          cursor + len(chunk.rstrip())))
+        cursor = match.end()
+    if (chunk := text[cursor:]).strip():
+        spans.append((cursor + len(chunk) - len(chunk.lstrip()),
+                      cursor + len(chunk.rstrip())))
+    return spans
+
+
+def parse_text(path: Path, config: Config, *, doc_id: str | None = None) -> ParsedDocument:
+    """Un documento que ya es texto. El Markdown que se entrega **es el archivo, literal**.
+
+    Es la única diferencia que importa con la ruta de PDF, y es deliberada. En un corpus anotado
+    las anotaciones gold indexan caracteres de este archivo; si la etapa reflowea, recorta o
+    normaliza algo, las mediciones posteriores comparan contra offsets corridos y el error no
+    se manifiesta como error, sino como una tasa de acierto peor sin explicación. Por eso acá no
+    hay des-hyphenación, ni detección de encabezados —`Block.render()` le agregaría `## ` y
+    cambiaría el texto—, ni supresión de boilerplate: eso se detecta por repetición entre
+    páginas y acá no hay páginas.
+
+    Los bloques son vistas sobre ese texto: `markdown[b.span_start:b.span_end] == b.text`, que
+    es el invariante que un test fija.
+    """
+    doc_id = doc_id or document_id(path, config.paths.corpus_root)
+    raw = path.read_bytes()
+    markdown = raw.decode("utf-8")
+
+    blocks = [
+        Block(
+            document_id=doc_id,
+            page=1,          # el formato no tiene páginas; una sola, y el ordinal desempata
+            ordinal=ordinal,
+            bbox=(0.0, 0.0, 0.0, 0.0),
+            block_type=PARAGRAPH,
+            text=markdown[start:end],
+            span_start=start,
+            span_end=end,
+        )
+        for ordinal, (start, end) in enumerate(paragraphs(markdown))
+    ]
+    _assign_languages(blocks, None)
+
+    return ParsedDocument(
+        document_id=doc_id,
+        path=path,
+        content_hash=hashlib.sha256(raw).hexdigest(),
+        n_pages=0,           # no las tiene, y ponerle 1 diría que sí
+        parser_used="text",
+        parser_version="1",
+        markdown=markdown,
+        markdown_hash="sha256:" + hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+        blocks=blocks,
+        page_classes=[],
+    )
+
+
 def parse_document(path: Path, config: Config, *, doc_id: str | None = None) -> ParsedDocument:
+    if path.suffix.lower() in TEXT_SUFFIXES:
+        return parse_text(path, config, doc_id=doc_id)
     doc_id = doc_id or document_id(path, config.paths.corpus_root)
     content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     assets_dir = config.paths.work_dir / "assets" / doc_id
