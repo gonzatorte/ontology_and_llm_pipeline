@@ -568,7 +568,7 @@ configuración que difieren en dos líneas.
 Como paliativo, `wizard` pregunta el par siempre —aunque el archivo lo tenga— y
 `Session.open()` acepta sobreescrituras. Eso resuelve el síntoma, no la forma: la superficie
 correcta probablemente sea un `--pair`, con los pares descritos como los de calibración (un
-directorio con su `pair.yml`, ver `../calibration/README.md`). Queda para discutir antes de
+directorio con su `pair.yml`, ver `calibration/README.md`). Queda para discutir antes de
 tocarlo, porque cambia `CONFIG` del spec.
 
 ### DEBT-OPEN-WORLD — Mundo abierto: lo que falta

@@ -35,17 +35,18 @@ El par de metodología cualitativa fue el andamio inicial y **está retirado**.
 | [`findings.md`](findings.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
 | [`technical_debt.md`](technical_debt.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
 | [`mapping_rules_plan.md`](mapping_rules_plan.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
-| [`calibration_plan.md`](calibration_plan.md) | Por qué el corpus de calibración está separado del de aplicación, y las tareas la tarea «cablear el matcher»–la tarea «más pares» | Al tocar `calibration.py` o interpretar un barrido |
+| [`pair_selection.md`](pair_selection.md) | Por qué **estos** pares y no otros: los criterios, lo que se midió de cada candidato y por qué se descartó cada descarte | Antes de agregar un par, y antes de proponer uno que ya se descartó |
 
 Los cuatro últimos son enmiendas o complementos del spec, no lo reemplazan.
 
-**Dos documentos viven fuera del repo**, junto a los pares de calibración, porque describen datos
-que no se versionan acá:
+**Dos documentos viven al lado de los pares**, en `calibration/`, porque describen datos que
+están adentro del repo pero **no se versionan** — 40 MB de artefactos publicados de terceros,
+gitignoreados salvo estos dos y los `pair.yml`:
 
 | Documento | Qué contesta |
 |---|---|
-| [`../calibration/README.md`](../calibration/README.md) | Qué pares hay, cuál es el primario y cuáles son tareas pendientes |
-| [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) | De dónde salió el par primario, su licencia, y qué se decidió al importarlo |
+| [`calibration/README.md`](calibration/README.md) | Qué pares hay, cuál es el primario, y cómo se agrega uno |
+| [`calibration/craft-cl/NOTA_FASE0.md`](calibration/craft-cl/NOTA_FASE0.md) | De dónde salió el par primario, su licencia, y qué se decidió al importarlo |
 
 ⚠️ **Los valores de configuración que aparecen en el spec (`CONFIG`) son históricos.**
 `auto_merge_threshold: 0.92` y `grey_zone_lower: 0.70` son los defaults con los que se escribió
@@ -142,12 +143,17 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 - **`technical_debt.md` es para mejoras a futuro, no para bugs.** Lo que está roto se arregla.
   Cada entrada lleva un id `DEBT-…`, así que dos sesiones en paralelo no colisionan como
   colisionaban los números.
-- **No leer fuera de `pipeline/` sin preguntar.** El corpus, la ontología semilla y los pares de
-  calibración viven afuera y el config los apunta; leer otra cosa del workspace es pedir permiso
-  primero.
+- **No leer fuera de `pipeline/` sin preguntar.** El corpus y la ontología semilla viven afuera
+  y el config los apunta; leer otra cosa del workspace es pedir permiso primero. Los pares de
+  calibración **ya no**: desde el 2026-09-10 están en `calibration/`, adentro.
 - **Los tests describen el porqué.** Los nombres son frases (`test_a_forced_parent_is_worse...`)
   y el docstring dice qué decisión de diseño fija. Un test nuevo que sólo verifica mecánica no
   está a tono con el resto.
+- **Comentarios que no repiten el código.** No se documenta lo obvio: un docstring que dice lo
+  que la firma ya dice es una copia más que hay que mantener. Se comenta el porqué, lo raro, y lo
+  que alguna vez costó un bug.
+- **El tipo va en la firma, no en el docstring.** El lenguaje ya tiene anotaciones; repetirlas en
+  prosa duplica algo que se desactualiza sin que nadie se entere.
 - **`pkill -f` se matchea a sí mismo.** Ya colgó dos shells en este proyecto. Matar por PID.
 
 ## Dónde está cada cosa
@@ -199,9 +205,33 @@ test que lo fija.
 Preferencias expresadas explícitamente. No son estilo: cambiaron el rumbo del trabajo cuando se
 ignoraron.
 
+- **Atribución estricta.** Toda afirmación dice de dónde sale: del modelo, del usuario, de la
+  literatura, o de un advisor que el usuario hizo generar. No se mezclan las suyas con las del
+  modelo, ni en un párrafo ni en un resumen. Y tres estados que no son lo mismo: **enunciado**
+  (alguien lo dijo), **avalado** (el usuario lo hizo suyo), **generado** (lo produjo el modelo).
+  **Preguntar no es avalar**: traer una idea para discutirla no la vuelve la posición de quien la
+  trae. Ante duda sobre qué prefiere o qué avala, se pregunta.
+  - **Una reformulación se confirma si va a operar como premisa.** Cuando el modelo reformula lo
+    que el usuario opinó y esa reformulación puede después sostener una decisión, se pide
+    confirmación. Las de bajo impacto pasan sin trámite. Sin confirmación la reformulación queda
+    en **zona gris**: ni del modelo ni establecida — y en zona gris tampoco se la puede usar para
+    decidir.
+- **Preguntar ante la duda.** Duda razonable, o chica pero que pesa en lo que sigue: se pregunta,
+  no se asume.
+- **Respuestas cortas.** Sin introducción, sin cortesías, sin cierre que repita lo ya dicho.
+- **Lenguaje simple y concreto.** Esquemático antes que creativo. Sin vocabulario rebuscado:
+  ni neologismos ni anglicismos que tienen palabra en castellano.
+- **Sin autoglorificación.** No se anuncia la calidad de la respuesta antes de darla, ni se
+  comenta el propio tono o enfoque. Los adjetivos absolutos para calificarse a uno mismo
+  («honesto», «real», «concreto») no van: los juzga el que lee.
+- **Términos oscuros y siglas se expanden la primera vez** que aparecen.
+- **Los insultos no se comentan.** Si el usuario putea al modelo, el modelo sigue con el tema. Ni
+  reclamo, ni acuse de recibo, ni nota al pie: la cortesía sobre eso no agrega nada.
 - **Preguntar no es pedir que se implemente.** Cuando hace una pregunta, quiere la respuesta —
   no la respuesta y además el cambio ya hecho. Empezar a implementar sin que lo pida es la
-  corrección que más veces tuvo que hacer.
+  corrección que más veces tuvo que hacer. **No usa ironía ni sarcasmo**: si pregunta, es porque
+  quiere que algo se aclare, y nada más. Primero se contesta; recién después, y si lo pide, se
+  toca el repo.
 - **Commitear después de cada hito**, con el log de los cambios en el mensaje. No una tanda al
   final. El formato del asunto está en Convenciones de trabajo, arriba: conventional commits.
 - **Nombres mnemotécnicos, no códigos — pero nombres, no ausencia de nombre.** Lo pidió cuatro
@@ -213,8 +243,8 @@ ignoraron.
 - **Verificar contra el repo antes de contestar.** "Lee el estado del repositorio antes de
   modificar o contestar" — dicho tal cual, más de una vez, y en general porque la respuesta
   anterior había salido de la memoria y no de los archivos.
-- **Localidad.** No leer fuera de `pipeline/` sin preguntar primero. Los pares de calibración y
-  el corpus están afuera y el config los apunta; cualquier otra cosa se pide.
+- **Localidad.** No leer fuera de `pipeline/` sin preguntar primero. El corpus y la semilla
+  están afuera y el config los apunta; cualquier otra cosa se pide.
 - **Nada de correr trabajos de horas en esta máquina.** Si un ajuste o un barrido no termina
   en minutos, se propone y se espera: puede configurar un proveedor en la nube.
 - **Castellano para hablar y documentar**, inglés para el código.

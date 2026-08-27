@@ -11,3 +11,20 @@ lib/
 .env
 *.env
 !example.env
+
+# Los pares (corpus anotado + su ontología). El directorio vive adentro del repo desde el
+# 2026-09-10 —antes estaba en la raíz del workspace, fuera de todo control de versiones— pero
+# **los datos no se versionan**: 40 MB de artefactos publicados de terceros, y cada NOTA_FASE0.md
+# dice exactamente cómo regenerarlos. Lo que sí se versiona es lo único que no se puede
+# regenerar: el `pair.yml` de cada par y su nota. Eran justamente los dos archivos que antes no
+# tenían historial.
+#
+# Las últimas dos reglas ganan por orden: `_nombre/` es la descarga cruda —`_craft/` trae su
+# propio `.git`— y queda afuera entera.
+calibration/**
+!calibration/
+!calibration/README.md
+!calibration/*/
+!calibration/*/pair.yml
+!calibration/*/NOTA_FASE0.md
+calibration/_*/

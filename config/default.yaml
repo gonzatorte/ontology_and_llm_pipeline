@@ -9,7 +9,7 @@ paths:
   # Pares de calibración: corpus publicado + su ontología, uno por subdirectorio con su
   # pair.yml. Todos los pares son instrumentos: el proyecto no tiene dominio comprometido, así
   # que un par se usa para medir el sistema y no al revés — ver calibration/README.md.
-  calibration_root: ../../calibration
+  calibration_root: ../calibration
 
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:

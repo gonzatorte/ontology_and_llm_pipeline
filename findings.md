@@ -32,7 +32,7 @@ se lee del historial:
 | Sesión | De qué se ocupó | Dónde quedó |
 |---|---|---|
 | `f0449040` (la que escribe) | Fase B completa, cadena `ITER-VALIDATE`, criterios de parada, calibración con holdout | 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 y todo `DECISIONS` |
-| `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`../calibration/craft-cl/NOTA_FASE0.md`](../calibration/craft-cl/NOTA_FASE0.md) y `calibration_plan.md` |
+| `e167c718` | Elegir e importar el par de calibración; CRAFT/CL como primario | [`calibration/craft-cl/NOTA_FASE0.md`](calibration/craft-cl/NOTA_FASE0.md) y `pair_selection.md` |
 | `c19367ed` | Blocking por embeddings, diff semántico, reglas de mapeo, `bridge`, homónimos | `mapping_rules_plan.md`, `DEBT-CONTEXT-DISAMBIGUATION`, y 1.3 |
 
 Hay dos transcripts más y ninguno aporta decisiones: `b8c7e99c` es **la misma conversación que
@@ -97,6 +97,91 @@ haga falta otro umbral: el orden que produce está anticorrelacionado con el cor
 El recall casi no se mueve entre 0,30 y 0,90 (69,8% → 67,2%): el ranking ya es correcto y el
 umbral sólo filtra mistypes. Por eso subir es casi gratis en recall y caro en huérfanas.
 `auto_merge_threshold: 0.95`, `grey_zone_lower: 0.80`.
+
+**Lo que el F1 esconde es el intercambio**, y es la parte que decide el diseño y no el barrido:
+en 0,90 la tasa de falsos huérfanos es **26,3%** con 563 mal tipados; en 0,70 es **4,7%** con
+2.300. Cuál duele más no lo contesta ningún número — un falso huérfano alimenta a `ITER-INDUCE`
+y sale de ahí convertido en clase espuria (`FINDINGS-MEASURED-SPURIOUS-CLASS`), y un mal tipado
+se ve.
+
+**Limitación que hay que nombrar: el barrido usa un corte y el pipeline usa dos.** Lo medido es
+el corte de huérfano. Dónde parte `auto` de zona gris es la pregunta separada de cuánta revisión
+humana se acepta, y **no se calibra contra un corpus**: no hay corpus que diga cuánto tiempo
+tiene alguien para contestar.
+
+**Efecto colateral, y sólo aparece con un inventario de verdad:** tipar 8.723 menciones contra
+3.418 clases son 30 millones de productos punto, que `matching.py` hacía en el intérprete y la
+corrida no terminaba. Resuelto con el mismo patrón numpy por bloques que ya usaba
+`_neighbour_pairs`, con un test que fija que los dos caminos rankeen igual. Con 34 clases el
+problema no existía.
+
+### FINDINGS-MEASURED-LABEL-COLLISION — Dos clases con la misma etiqueta: la mitad del error medido no era del matcher
+
+`CL:0000000` está etiquetada *cell*. Los anotadores de CRAFT no la usan nunca: usan la extension
+class `CL_GO_EXT:cell`, etiquetada *cell* también, y esa clase sola concentra **3.262 de las
+8.723 menciones (37%)**. Con las dos en el pool ningún encoder puede distinguirlas, y **2.759
+menciones caían en la que el propio corpus garantiza equivocada**.
+
+| inventario | recall@1 | separación |
+|---|---|---|
+| con `CL:0000000` | 3.343 (38,3%) | +0,39 |
+| sin ella (el default) | 6.090 (69,8%) | +1,61 |
+
+**La mitad del error medido era una colisión de modelado, no el matcher.** Por eso las clases que
+el corpus declara nunca-correctas salen del inventario por defecto —dejarlas es envenenar el pool
+a sabiendas— y `--keep-excluded` reproduce la corrida de arriba para poder verlo.
+
+Es además el argumento más fuerte a favor de medir sobre un inventario grande: este modo de falla
+—dos clases con etiqueta idéntica, una correcta y otra no— es **invisible en un inventario de 34
+clases** y aparece solo cuando hay miles.
+
+### FINDINGS-MEASURED-SIZE-CURVE — El punto de operación cambia con cada par, y un inventario chico no es más fácil
+
+Dos puntos de la curva de tamaño de inventario. MaterioMiner: 428 clases, 4 publicaciones, 2.229
+menciones gold, no biomédico.
+
+| | MaterioMiner | CRAFT/CL |
+|---|---|---|
+| Inventario | 428 clases | 3.418 |
+| Separación | 1,50 | 1,69 |
+| recall@1 | 21,5% | 68,5% |
+| Mejor F1 | 0,277 (0,75) | 0,774 (0,90) |
+
+*Las dos columnas son la corrida con `--holdout 0,2`, que es la única en que las dos son
+comparables; sobre el inventario completo CRAFT da 69,8% y +1,61
+(`FINDINGS-MEASURED-MATCHER-CRAFT`).*
+
+**Un inventario ocho veces más chico no es más fácil**, que era lo esperable y no pasa. Y las dos
+cifras se separan —la separación aguanta, el recall se cae—, lo que dice que acá el cuello no es
+el umbral sino la **recuperación**: el encoder distingue acierto de error, pero la clase correcta
+casi nunca está primera. Es un modo de falla distinto del de CRAFT, y es el que
+`FINDINGS-MEASURED-RETRIEVAL-CEILING` midió después con recall@k.
+
+Con dos puntos hay un salto, no una forma: **falta el tercero** (~40k clases, CafeteriaFCD contra
+FoodOn) para poder decir cómo se mueve el punto de operación con el tamaño, en vez de suponerlo.
+
+> **Un número sin conciliar.** `FINDINGS-MEASURED-RETRIEVAL-CEILING` reporta **25,3%** de recall@1
+> para MaterioMiner sobre las mismas n=2.229, contra el 21,5% de acá. La diferencia son 3,8
+> puntos y no se explica con lo que quedó guardado: `data/calibration/materiominer.json` conserva
+> sólo la última corrida, que fue la de `--context sentence`. Se resuelve corriendo
+> `calibrate materiominer` de nuevo, y hasta entonces el número que hay que citar es el que venga
+> con su n al lado.
+
+### FINDINGS-MEASURED-PLAIN-TEXT-INGEST — El Markdown de un `.txt` es el archivo, literal
+
+`parse_text` no des-hyphena, no detecta encabezados y no suprime boilerplate. **No es
+minimalismo, es el requisito:** las anotaciones gold indexan caracteres del archivo fuente, y
+cualquier normalización corre los offsets **sin producir ningún error** — la medición posterior
+simplemente da peor y no dice por qué.
+
+Verificado sobre los 97 artículos de CRAFT, 4.091.461 caracteres:
+
+| Chequeo | Resultado |
+|---|---|
+| Markdown en disco idéntico al `.txt` fuente | 97 de 97 |
+| Bloques que recuperan su texto por offset | 9.771 de 9.771 |
+| Menciones gold cuyo offset cae donde dice el Markdown | **8.723 de 8.723 (100%)** |
+| Menciones gold que caen enteras dentro de un bloque | **8.723 de 8.723 (100%)** |
 
 ### FINDINGS-MEASURED-GENUINE-ORPHANS — Huérfanas genuinas — la corrida con `--holdout 0.2`
 

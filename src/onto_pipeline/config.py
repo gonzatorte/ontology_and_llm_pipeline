@@ -16,7 +16,7 @@ class Paths(BaseModel):
     # Where the calibration pairs live: one directory per (corpus, ontología), each with its
     # own `pair.yml`. Separate from `corpus_root` because they answer different questions —
     # that pair is the case of application, these are the instrument.
-    calibration_root: Path = Path("../../calibration")
+    calibration_root: Path = Path("../calibration")
 
 
 class OwlProfile(BaseModel):

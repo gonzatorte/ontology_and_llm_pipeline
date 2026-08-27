@@ -1,0 +1,34 @@
+# Par de calibración primario (plan, tarea C4). Ver NOTA_FASE0.md al lado de este archivo.
+name: craft-cl
+language: en
+description: >-
+  CRAFT v5.0.2, conjunto CL+extensions: 97 artículos biomédicos completos anotados contra la
+  Cell Ontology. La ontología es el release actual de OBO Foundry (cl-base), no el .obo que
+  shippea CRAFT, que viene sin definiciones lógicas.
+
+documents:
+  dir: ../_craft/articles/txt
+  glob: "*.txt"
+
+annotations:
+  format: knowtator
+  dir: ../_craft/concept-annotation/CL/CL+extensions/knowtator
+  suffix: .txt.knowtator.xml
+
+ontology:
+  # El orden importa: el release manda, las extension classes de CRAFT completan lo que él no
+  # cubre. Sin el segundo archivo, 5 clases gold y 6 obsoletadas desde 2019 no resolverían.
+  files:
+    - ontology/cl-base.obo
+    - ontology/CL+extensions.obo
+
+# Clases que los anotadores de CRAFT decidieron no usar: su README garantiza que toda
+# predicción contra ellas es un falso positivo.
+excluded_classes: >-
+  ../_craft/concept-annotation/CL/CL+extensions/unused_classes_and_substitute_extension_classes_for_CL+extensions_annotations.txt
+
+# Retención de clases: apagada por defecto. Prendida con `calibrate --holdout 0.2`, convierte
+# una fracción determinista del inventario en huérfanos genuinos de respuesta conocida, que es
+# el único modo de medir esa mitad de la compuerta del §12.1 sobre un corpus donde `in_seed`
+# es verdadero por construcción.
+holdout_classes: null

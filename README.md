@@ -113,11 +113,12 @@ existe para que no se pierdan entre las entradas.
 | # | Qué | Por qué | Detalle |
 |---|---|---|---|
 | 1 | **La recuperación es el cuello, y el encoder es la causa** | Es el hallazgo más grande y no tiene tarea asignada. 21,5% de acierto en el primer puesto sobre MaterioMiner, y eso llega hasta el final: 44 de 45 clases inducidas quedan sin padre. Descartados ya: glosas, contexto, re-ranker de fábrica. Queda un encoder asimétrico o entrenado | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](findings.md), [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
-| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](technical_debt.md) |
+| 2 | **El tercer punto de la curva de tamaño** (~40k clases: CafeteriaFCD contra FoodOn) | Bajo esfuerzo, alta prioridad: el lector `brat` ya está escrito. Con 428 y 3.418 clases hay dos puntos y un salto de 21,5% a 68,5% entre ellos; dos puntos no dan una forma | [`DEBT-SIZE-CURVE-THIRD-POINT`](technical_debt.md), [`FINDINGS-MEASURED-SIZE-CURVE`](findings.md), [`pair_selection.md`](pair_selection.md) |
 | 3 | **Disparos automáticos**: `regenerate` tras aplicar una rama, `metaproperties` tras inducir clases nuevas, `match` tras cambiar glosas | Bajo esfuerzo, alta prioridad: los tres son comparar un hash contra el registrado, y `next` es el lugar. El último cierra el bucle de `PREP-NORMALIZE` | [`DEBT-AUTOMATIC-TRIGGERS`](technical_debt.md) |
 | 4 | **Precisión de la extracción**: `Scholarly research`, `Table reference` y `Results` se volvieron clases propuestas | Salen de `literature`, `studies`, `researchers`, `Table 1` — el metalenguaje de escribir un paper, no el dominio del que habla. Ninguno de los siete filtros los atrapa: son sintagmas legítimos con soporte suficiente | [`DEBT-ACADEMIC-METALANGUAGE`](technical_debt.md), [`FINDINGS-MEASURED-SPURIOUS-CLASS`](findings.md) |
 | 5 | **Resolver imports rotos** con un archivo local en vez de sólo avisar | Hoy se degrada con aviso; una ontología publicada importa otras y ésas pueden no responder | [`DEBT-ONTOLOGY-IMPORTS`](technical_debt.md) |
 | 6 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita. Sólo sobre lo que el pipeline mismo escribió: shapes sobre verdades del dominio chocan con el mundo abierto | [`DEBT-VALIDATION-CHAIN`](technical_debt.md) |
+| 7 | **Dónde parte `auto` de zona gris** | El barrido mide **un** corte y el pipeline usa **dos**: lo calibrado es el corte de huérfano. Dónde empieza la zona gris es cuánta revisión humana se acepta, y eso no lo contesta ningún corpus — es una decisión, no una medición | [`FINDINGS-MEASURED-MATCHER-CRAFT`](findings.md), [`DEBT-THRESHOLDS`](technical_debt.md) |
 
 <details>
 <summary>Lo que estaba en cola y se cerró</summary>
@@ -271,7 +272,7 @@ paths:
   seed_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
-  calibration_root: ../../calibration    # pares de calibración; ver Calibración, en Uso
+  calibration_root: ../calibration      # los pares; ver Calibración, en Uso
 ```
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
@@ -1078,10 +1079,14 @@ uv run onto-pipeline calibrate craft-cl -m label --cross-encoder
 uv run onto-pipeline calibrate craft-cl -m label --holdout 0.2
 ```
 
-Los pares viven fuera del repo, en [`../calibration/`](../calibration/README.md), al lado de los
-demás corpus de prueba; `paths.calibration_root` apunta ahí. Cada uno trae su `pair.yml` y una
-nota de fase 0 con procedencia, licencia, formato y decisiones de importación. El primario es
+Los pares viven en [`calibration/`](calibration/README.md) y `paths.calibration_root` apunta
+ahí. **El directorio está adentro del repo y sus datos no se versionan**: son 40 MB de
+artefactos publicados de terceros y cada nota de fase 0 dice cómo regenerarlos, así que lo único
+versionado de cada par es lo que no se puede regenerar — su `pair.yml` y esa nota. El primario es
 **CRAFT · CL+extensions**: 97 artículos, 8.723 menciones, 3.418 clases.
+
+Por qué se eligieron éstos y no otros —los criterios, lo medido de cada candidato y el porqué de
+cada descarte— está en [`pair_selection.md`](pair_selection.md).
 
 Lo que reporta, además del barrido de umbrales:
 
@@ -1095,8 +1100,8 @@ Lo que reporta, además del barrido de umbrales:
   que sus anotadores decidieron no usar. Salen del inventario por defecto; `--keep-excluded`
   mide cuánto error causaban.
 
-El plan completo y los resultados están en
-[`calibration_plan.md`](calibration_plan.md).
+Los resultados están en [`findings.md`](findings.md), y por qué se eligieron estos pares y no
+otros, en [`pair_selection.md`](pair_selection.md).
 
 ## Dónde queda todo
 
@@ -1112,10 +1117,10 @@ data/                 gitignoreado; todo es derivado y regenerable
   calibration/        resultados del barrido, un JSON por par
 lib/                  jars del razonador (gitignoreado)
 
-../calibration/       fuera del repo, al lado de Corpus-08052026 y qualitative_ontology.rdf
+calibration/          los pares. Sólo README.md, pair.yml y NOTA_FASE0.md se versionan
   README.md           índice de pares
-  craft-cl/           pair.yml, NOTA_FASE0.md, ontology/
-  _craft/             el clone esparso de CRAFT; regenerable, ver la nota
+  craft-cl/           pair.yml y NOTA_FASE0.md versionados; ontology/ no
+  _craft/             el clone esparso de CRAFT; gitignoreado entero, ver la nota
 ```
 
 ## Caché, checkpoint y telemetría

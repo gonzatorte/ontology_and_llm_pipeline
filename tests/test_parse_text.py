@@ -112,7 +112,7 @@ def test_block_ids_stay_unique_without_pages(document):
 
 # ─────────  contra el corpus anotado de verdad, si está bajado  ─────────
 
-CRAFT = Path(__file__).resolve().parents[1] / ".." / "calibration"
+CRAFT = Path(__file__).resolve().parents[1] / "calibration"
 
 
 @pytest.mark.skipif(
