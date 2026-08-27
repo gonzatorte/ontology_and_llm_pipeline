@@ -80,7 +80,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | # | Qué | Por qué ahora | Detalle |
 |---|---|---|---|
 | 1 | **Entrenar el re-ranker** sobre las 8.723 menciones gold del par publicado, evaluado sobre el holdout que ya existe | Es la tercera vía del spec para bajar los falsos huérfanos, y la única que no se probó. No necesita que nadie anote nada | [deuda 8i](DEUDA_TECNICA.md) |
-| 2 | **La variante con contexto**: comparar *mención + su oración* contra la clase, como una opción más de `match_against` | Es el ataque directo al eco léxico, que es el modo de falla que ningún umbral filtra, y se mide en el banco que ya está | [deuda 19](DEUDA_TECNICA.md) |
+| ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [hallazgo 1.11](HALLAZGOS.md) |
 | 3 | **Unificar el registro de decisiones** en una sola tabla | Hoy hay dos y se usa la que menos guarda; es barato y desbloquea el resto de esa entrada | [deuda 20](DEUDA_TECNICA.md) |
 | 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
 | 5 | **Terminar C8**: correr el pipeline entero sobre un par publicado. La ingesta ya está | Primera vez que se mediría algo posterior al tipado contra una respuesta conocida | [plan](plan_cambio_corpus_calibracion.md) |

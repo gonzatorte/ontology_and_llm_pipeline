@@ -116,6 +116,9 @@ class Mention:
     document_id: str
     language: str = "en"
     key_values: dict[str, str] = field(default_factory=dict)
+    # La oración en la que apareció. Vacía cuando no se pidió contexto, y entonces todo se
+    # comporta como antes.
+    context: str = ""
 
 
 @dataclass
@@ -134,6 +137,30 @@ class Decision:
     action: str  # merge | ask | separate
     reason: str
     score: float = 0.0
+
+
+NO_CONTEXT = "none"
+SENTENCE = "sentence"
+CONTEXT_MODES = frozenset({NO_CONTEXT, SENTENCE})
+
+
+def mention_text(mention: Mention, mode: str = NO_CONTEXT) -> str:
+    """Qué texto representa a la mención cuando se la compara contra una clase.
+
+    Por defecto, el sintagma pelado, que es lo que el pipeline hizo siempre. Con `sentence` se
+    le agrega la oración donde apareció, **detrás y separada**, no fundida: el sintagma tiene
+    que seguir dominando la forma del texto. Es la lección de la medición de glosas — una
+    mención es un sintagma corto y una etiqueta también, y un encoder simétrico pierde más por
+    la diferencia de forma que lo que gana en significado—, así que el contexto entra como
+    complemento y no como reemplazo.
+
+    Existe porque sobre MaterioMiner el cuello medido no es el umbral sino la recuperación: la
+    clase correcta no está en el top-50 el 37% de las veces, y `lifetime` a secas no tiene cómo
+    llegar a `FatigueLifetime`.
+    """
+    if mode == NO_CONTEXT or not mention.context:
+        return mention.text
+    return f"{mention.text}. {mention.context}"
 
 
 def dot(left: Sequence[float], right: Sequence[float]) -> float:
@@ -156,6 +183,7 @@ class Matcher:
         cross_language_always_grey: bool = True,
         respect_declared_haskey: bool = True,
         blocking_strategy: str = EMBEDDING,
+        context_mode: str = NO_CONTEXT,
     ) -> None:
         self.encoder = encoder
         self.reranker = reranker
@@ -164,6 +192,7 @@ class Matcher:
         self.cross_language_always_grey = cross_language_always_grey
         self.respect_declared_haskey = respect_declared_haskey
         self.blocking_strategy = blocking_strategy
+        self.context_mode = context_mode
         # Encoding is O(mentions); comparing is O(pairs). Caching the vectors keeps it that
         # way — without it every pair re-encodes both of its texts, which measured 6.9 ms per
         # pair against 0.38 ms per mention encoded once in batch.
@@ -186,7 +215,9 @@ class Matcher:
             return [Typing(m.id, None, 0.0, DISCARDED) for m in mentions]
 
         target_vectors = self.vectors_for([t.text for t in targets])
-        mention_vectors = self.vectors_for([m.text for m in mentions])
+        mention_vectors = self.vectors_for(
+            [mention_text(m, self.context_mode) for m in mentions]
+        )
         ranked = self._rank(mention_vectors, target_vectors, targets, top_k)
         return [
             self._resolve_typing(mention, candidates)

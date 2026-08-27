@@ -221,6 +221,46 @@ computa sobre el id de la mención, único por ocurrencia —`researchers` apare
 agujero está en el **tipado**, y la vía más directa para cerrarlo —meter la oración de la mención
 en la comparación— está sin implementar. Detalle completo en la deuda 19.
 
+### 1.11 El cuello es la recuperación, y meter contexto no la arregla
+
+Dos mediciones encadenadas, y la segunda cierra una línea de trabajo.
+
+**Recall@k, para saber qué techo tiene re-rankear.** Un re-ranker sólo puede reordenar lo que la
+recuperación trajo, así que cuánto puede aportar es exactamente la diferencia entre @1 y @k:
+
+| | @1 | @5 | @20 | @50 |
+|---|---|---|---|---|
+| CRAFT/CL (3.418 clases) | 69,8% | 78,8% | 84,6% | 86,7% |
+| MaterioMiner (428 clases) | 25,3% | 38,0% | 51,5% | 62,6% |
+
+O sea: re-rankear el top-5 tiene un techo de **+9 puntos** en CRAFT y **+12,7** en MaterioMiner.
+Y en MaterioMiner **el 37% de las clases correctas no está ni en el top-50** de un inventario de
+428 — no hay reordenamiento que las alcance.
+
+**Meter el contexto de la mención: medido en cuatro formas, las cuatro peores.** La idea era que
+comparar la oración y no el sintagma pelado desambiguaría —`lifetime` hacia `FatigueLifetime`—.
+Sobre MaterioMiner, n=2.229:
+
+| Qué se compara contra la clase | @1 | @5 |
+|---|---|---|
+| el sintagma solo | **25,3%** | **38,0%** |
+| sintagma + oración, concatenados | 11,3% | 24,6% |
+| una ventana de ±50 caracteres | 7,4% | 19,2% |
+| fusión de puntajes, α=0,9 | 25,7% | 37,0% |
+| fusión de puntajes, α=0,5 | 23,1% | 36,2% |
+
+Sobre CRAFT la concatenación es todavía peor: @1 cae de 69,8% a **14,3%**. Reproducible con
+`calibrate --context sentence`, que reporta separación **0,56** contra 1,50.
+
+**Es el mismo hallazgo que el de las glosas, otra vez.** Un encoder simétrico compara textos por
+su forma, y agregarle una oración a un sintagma lo convierte en una oración. La fusión de
+puntajes lo evita —el sintagma se sigue comparando solo— y entonces no aporta nada: +0,4 puntos
+en @1 y **pierde** un punto en @5, o sea ruido.
+
+Lo que queda dicho es dónde **no** está la solución: no es la representación de la mención. Es el
+encoder. Un modelo asimétrico o entrenado es la vía, y es lo mismo que ya decía la conclusión
+sobre glosas.
+
 ---
 
 ## 2. Decisiones tomadas, y por qué

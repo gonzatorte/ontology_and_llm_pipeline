@@ -603,12 +603,14 @@ en la comparación**.
 
 Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
 
-1. **Meter contexto en la comparación.** Hoy se compara el sintagma pelado contra la etiqueta.
-   Comparar *mención + su oración* contra la clase desambigua por definición: "the cell divided"
-   y "the cell claimed responsibility" dejan de ser el mismo texto. Entra como una variante más
-   de `match_against` en el barrido de `calibrate`, al lado de `label`, `gloss` y
-   `label_and_gloss`, y se mide igual que las otras tres. **Es la vía más directa y no está
-   implementada.**
+1. ~~**Meter contexto en la comparación.**~~ **Probado y descartado el 2026-09-10.** Se midió en
+   cuatro formas sobre MaterioMiner (n=2.229) y en dos sobre CRAFT (n=8.723): concatenar la
+   oración hunde @1 de 25,3% a 11,3% —y en CRAFT de 69,8% a **14,3%**—, una ventana angosta da
+   7,4%, y la fusión de puntajes, que es la única que no rompe la forma del sintagma, aporta
+   +0,4 puntos en @1 y pierde uno en @5. Reproducible con `calibrate --context sentence`.
+   Es el mismo hallazgo que el de las glosas: un encoder simétrico compara por forma, y
+   agregarle una oración a un sintagma lo convierte en una oración. **La solución no está en la
+   representación de la mención, está en el encoder** — ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.11.
 2. **Usar la jerarquía**, que es la entrada 17: preferir la clase cuyos ancestros también
    puntúan. Un `cell` biológico debería activar también `Anatomical Structure`; uno clandestino,
    nada del subárbol.

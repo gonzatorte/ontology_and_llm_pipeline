@@ -146,6 +146,10 @@ MatchAgainstOption = typer.Option(
 CrossEncoderSweepOption = typer.Option(
     False, "--cross-encoder", help="Run each variant with and without the re-ranker."
 )
+ContextOption = typer.Option(
+    "none", "--context",
+    help="none | sentence: qué texto representa a la mención. Medido: `sentence` empeora.",
+)
 HoldoutOption = typer.Option(
     None, "--holdout", help="Withhold this fraction of classes to manufacture genuine orphans."
 )
@@ -2048,6 +2052,7 @@ def calibrate_cmd(
     cross_encoder: bool = CrossEncoderSweepOption,
     holdout: float | None = HoldoutOption,
     keep_excluded: bool = KeepExcludedOption,
+    context: str = ContextOption,
     limit: int | None = LimitOption,
 ) -> None:
     """Sweep the matcher's thresholds against a published annotated corpus (plan, C3–C5).
@@ -2098,8 +2103,11 @@ def calibrate_cmd(
                 cross_language_always_grey=config.matching.cross_language_always_grey,
                 respect_declared_haskey=config.matching.respect_declared_haskey,
                 blocking_strategy=config.matching.blocking_strategy,
+                context_mode=context,
             )
             label = f"{variant} · {'cross' if use_cross else 'bi'}"
+            if context != matching.NO_CONTEXT:
+                label += f" · +{context}"
             with console.status(f"{label}: {len(pair.mentions())} mentions"):
                 ranking = calibration.rank(pair, matcher)
                 runs = calibration.sweep(

@@ -143,10 +143,34 @@ class Pair:
                 text=mention.text,
                 document_id=document.doc_id,
                 language=self.language,
+                context=sentence_around(document.text, mention.span),
             )
             for document in self.documents
             for mention in document.mentions
         ]
+
+
+_SENTENCE_END = re.compile(r"[.!?]\s|\n")
+
+
+def sentence_around(text: str, span: tuple[int, int], *, window: int = 400) -> str:
+    """La oración que contiene ese span, acotada por una ventana.
+
+    Acotada porque el texto de un documento puede no tener puntuación donde uno la espera —una
+    tabla, una lista, un encabezado— y sin tope la "oración" se vuelve el documento entero, que
+    es exactamente el desbalance de forma que hace perder al encoder.
+    """
+    start, end = span
+    left = max(0, start - window)
+    right = min(len(text), end + window)
+    before = text[left:start]
+    after = text[end:right]
+    cuts = [match.end() for match in _SENTENCE_END.finditer(before)]
+    opening = left + (cuts[-1] if cuts else 0)
+    closing = next(
+        (end + match.start() + 1 for match in _SENTENCE_END.finditer(after)), right
+    )
+    return " ".join(text[opening:closing].split())
 
 
 # ─────────────────────────────  annotation formats  ─────────────────────────────
