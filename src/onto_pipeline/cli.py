@@ -15,6 +15,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import (
+    alignment,
     annotate,
     annotation,
     axiomatization,
@@ -120,6 +121,10 @@ NoneOfTheseOption = typer.Option(
 )
 ExportLabelsOption = typer.Option(
     None, "--export", help="Write the accept/reject labels to this JSONL (spec 6.3)."
+)
+TermOption = typer.Option(
+    [], "--term",
+    help="Repetible: vocabulario que define el dominio. Si no aparece, el par no sirve.",
 )
 CurveOption = typer.Option(
     False, "--curve", help="Print the accumulation curve document by document."
@@ -922,6 +927,97 @@ def grey_labels(
             encoding="utf-8",
         )
         console.print(f"[green]wrote[/] {export}")
+
+
+@app.command("alignment")
+def alignment_cmd(
+    config_path: Path = ConfigOption,
+    version: str | None = VersionOption,
+    limit: int | None = LimitOption,
+    terms: list[str] = TermOption,
+) -> None:
+    """¿El corpus habla de lo que la semilla nombra? (deuda 9)
+
+    Un par desalineado no se ve en la tasa de huérfanas: da alta, igual que un matcher malo
+    sobre un par bien alineado. Las dos causas piden cosas opuestas —cambiar el corpus, o
+    arreglar el matcher— y confundirlas cuesta semanas. Contar las etiquetas en el texto sí las
+    distingue, cuesta un `grep`, y conviene correrlo **antes** de la primera iteración.
+
+    **La cobertura global es diagnóstico y no veredicto**, y eso está medido: la primera versión
+    de este comando la usaba para decidir y daba 20% sobre un par bueno contra 50% sobre uno
+    roto. Una ontología publicada cubre un dominio entero y un corpus cubre una franja.
+
+    Donde sí decide es con `--term`: si quien conoce el dominio nombra el vocabulario que lo
+    define y nada de eso está en el corpus, no hay matcher que lo arregle.
+    """
+    config = Config.load(config_path)
+    conn = connect(config.paths.work_dir)
+    version_id = _resolve_version(conn, version)
+    _, graph = versioning.load(conn, version_id)
+
+    labels = [
+        (target.iri, target.label)
+        for target in typing_store.targets_from(graph, "label")
+    ]
+    if not labels:
+        raise typer.BadParameter(f"{version_id} no tiene clases con etiqueta")
+
+    documents = [
+        markdown_path(config, row["id"]).read_text(encoding="utf-8")
+        for row in conn.execute("SELECT id FROM documents WHERE held_out = 0 ORDER BY id")
+        if markdown_path(config, row["id"]).exists()
+    ]
+    if not documents:
+        raise typer.BadParameter("no hay documentos parseados; corré ingest primero")
+
+    report = alignment.survey(labels, documents)
+    multiword = report.multiword
+    present_multi = [item for item in multiword if not item.absent]
+
+    table = Table("qué", "cuántas", "de")
+    table.add_row("clases sin una sola aparición", str(len(report.absent)), str(len(labels)))
+    table.add_row("clases en un solo documento", str(len(report.single_document)),
+                  str(len(labels)))
+    table.add_row("cobertura léxica", f"{report.coverage:.0%}", "")
+    table.add_row("  de etiquetas multipalabra", f"{len(present_multi)}/{len(multiword)}", "")
+    console.print(table)
+    console.print(
+        "[dim]Diagnóstico, no veredicto: una ontología publicada cubre un dominio entero y un "
+        "corpus cubre una franja, así que baja cobertura no prueba desajuste. Medido: esta "
+        "cifra daba 20% sobre un par bueno y 50% sobre uno roto.[/]"
+    )
+
+    if report.absent:
+        console.print("\n[dim]las que no aparecen (las primeras):[/]")
+        for item in report.absent[: limit or 12]:
+            console.print(f"  [yellow]{item.label}[/]")
+
+    if not terms:
+        console.print(
+            "\nPara que esto **decida** algo, nombrá el vocabulario que define el dominio: "
+            "`--term 'field note' --term informant`. Si lo que alguien declara central no está "
+            "en el corpus, no hay matcher que lo arregle."
+        )
+        return
+
+    found = alignment.check_terms(terms, documents)
+    missing = [term for term, count in found.items() if count == 0]
+    check = Table("término declarado central", "apariciones")
+    for term, count in sorted(found.items(), key=lambda item: item[1]):
+        check.add_row(term, "[red]0[/]" if count == 0 else str(count))
+    console.print(check)
+    if missing:
+        console.print(
+            f"[red]desalineado[/]: {len(missing)} de {len(terms)} términos centrales no "
+            f"aparecen ni una vez en {len(documents)} documentos. Cambiá el corpus o la "
+            "ontología; iterar sobre este par mide el desajuste, no el pipeline."
+        )
+    else:
+        console.print(
+            f"[green]los {len(terms)} términos centrales aparecen[/]. Que estén no prueba que "
+            "el corpus hable de ellos en el sentido de la ontología — eso es el eco léxico —, "
+            "pero que faltaran sí lo habría descartado."
+        )
 
 
 @app.command("next")

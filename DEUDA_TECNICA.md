@@ -449,12 +449,21 @@ anotado. Los pares publicados lo reemplazan por completo.
 
 Lo que dejó, y que sigue valiendo porque es sobre el método y no sobre el par:
 
-- **El desajuste temático es medible y vale la pena medirlo.** Sobre 495.213 caracteres,
-  `field note`, `informant`, `coding scheme`, `thematic analysis`, `grounded theory` y
-  `theoretical framework` aparecen **cero veces**. Que un par esté desalineado no se ve mirando
-  la tasa de huérfanas —da alta y no dice por qué—: se ve contando el vocabulario núcleo de la
-  semilla en el corpus, que cuesta un `grep`. **Debería ser un chequeo del pipeline**, no algo
-  que se descubre a mano tres semanas después.
+- **El desajuste temático es medible, y el comando `alignment` lo hace** — pero sólo cuando se
+  le nombra el vocabulario. Sobre 495.213 caracteres, `field note`, `informant`, `coding scheme`,
+  `thematic analysis` y `grounded theory` aparecen **cero veces**: 0 de 5, contra 5 de 5 sobre
+  MaterioMiner. Ésa es la parte que decide.
+
+  Lo que **no** funciona, medido: la cobertura global —qué fracción de las etiquetas de la
+  ontología aparece— no sirve de veredicto. Daba **20% sobre MaterioMiner**, un par real anotado
+  por expertos, y **50% sobre el par roto**. Es estructural: una ontología publicada cubre un
+  dominio entero y un corpus cubre una franja, así que la mayoría de las clases no tiene por qué
+  aparecer. Restringir a etiquetas multipalabra tampoco separa (9% contra 18%). Queda como
+  diagnóstico y el comando lo dice.
+
+  Lo que faltaría para decidir sin que nadie nombre términos es mirar del lado de las
+  **menciones** —¿lo que el corpus nombra tiene clase?— y eso pide anotaciones o el matcher, que
+  es justo lo que este chequeo quería evitar.
 - **El eco léxico se hace visible cuando el par está desalineado**, y por eso este par sirvió:
   las 18 automáticas de `v5` son casi todas la palabra corriente que da nombre a la clase. Ver
   la entrada 19.

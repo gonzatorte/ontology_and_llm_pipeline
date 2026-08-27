@@ -34,6 +34,7 @@ códigos no dicen qué hace cada una. Estos son los nombres que usan el CLI y lo
 | 6.8 | **functional** | Candidatas a propiedad funcional, y qué fusionaría declararlas |
 | 10.3 | **stop** | Los cuatro criterios de parada, con su rol |
 | — | **next** | Qué corresponde correr, y qué está esperándote a vos |
+| — | **alignment** | ¿El corpus habla de lo que la ontología nombra? |
 | B3 | **induce** | Convierte huérfanas en clases nuevas |
 | B4 | **axiomatize** | Propone axiomas; el código arma el OWL |
 | B4b | **enrich** | Mejora las glosas con pasajes definicionales del corpus |
@@ -84,7 +85,7 @@ con el detalle; esta lista existe para que no se pierdan entre las entradas.
 | 3 | **Unificar el registro de decisiones** en una sola tabla | Hoy hay dos y se usa la que menos guarda; es barato y desbloquea el resto de esa entrada | [deuda 20](DEUDA_TECNICA.md) |
 | 4 | **`next --run`**: que ejecute la etapa siguiente en vez de sólo nombrarla, frenando en el primer punto de decisión | Requiere extraer diez comandos de sus envoltorios de Typer | [deuda 8g](DEUDA_TECNICA.md) |
 | 5 | **Terminar C8**: correr el pipeline entero sobre un par publicado. La ingesta ya está | Primera vez que se mediría algo posterior al tipado contra una respuesta conocida | [plan](plan_cambio_corpus_calibracion.md) |
-| 6 | **Chequeo de desalineación**: contar el vocabulario núcleo de la semilla en el corpus | Un par desalineado es invisible en la tasa de huérfanas y obvio con un `grep`; hoy se descubre a mano semanas después | [deuda 9](DEUDA_TECNICA.md) |
+| ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el par roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un par desalineado era invisible en la tasa de huérfanas | [deuda 9](DEUDA_TECNICA.md) |
 
 | Etapa | Estado |
 |---|---|
