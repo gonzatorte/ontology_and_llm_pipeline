@@ -775,6 +775,7 @@ def find(conn: sqlite3.Connection, branch_id: str) -> dict | None:
 def settle(
     conn: sqlite3.Connection, branch_id: str, *, note: str = "",
     invalid: Sequence[str] = (), state_hash: str = "",
+    normal_forms: dict[str, str] | None = None,
 ) -> dict:
     """Elegir una rama, y grabar la decisión en `decisions`, que es el registro de §6.7.
 
@@ -806,10 +807,17 @@ def settle(
     conn.execute("UPDATE branches SET status = ?, note = ? WHERE id = ?",
                  (CHOSEN, note or row["note"] or "", branch_id))
 
-    chosen = dict(row) | {"status": CHOSEN, "note": note or row["note"] or ""}
+    normal_forms = normal_forms or {}
+    chosen = dict(row) | {
+        "status": CHOSEN, "note": note or row["note"] or "",
+        "normal_form": normal_forms.get(branch_id, ""),
+    }
     _record(conn, chosen, CHOSEN, state_hash)
     for other in siblings:
-        _record(conn, other, INVALID if other["id"] in invalid else REJECTED, state_hash)
+        _record(
+            conn, other | {"normal_form": normal_forms.get(other["id"], "")},
+            INVALID if other["id"] in invalid else REJECTED, state_hash,
+        )
     conn.commit()
     return dict(row)
 
@@ -833,11 +841,59 @@ def _record(conn: sqlite3.Connection, branch: dict, status: str, state_hash: str
                 status,
                 category_of(entry["axis"]),
                 branch["note"] or "",
-                branch["add_axioms"],
+                branch.get("normal_form") or branch["add_axioms"],
                 state_hash or branch["state_hash"] or "",
                 _now(),
             ),
         )
+
+
+def already_rejected(conn: sqlite3.Connection, normal: str) -> dict | None:
+    """La decisión anterior sobre **esta misma** propuesta, si la hubo.
+
+    Compara por forma normal: el mismo compromiso vuelve en otra iteración con IRIs distintos, y
+    sin normalizar no se parece en nada al anterior. Devuelve la más fuerte que haya —`invalid`
+    antes que `rejected`—, porque lo que interesa es si ya se dijo que estaba mal.
+    """
+    install(conn)
+    if not normal:
+        return None
+    row = conn.execute(
+        "SELECT * FROM decisions WHERE normalized_axioms = ? AND status IN (?, ?) "
+        "ORDER BY (status = ?) DESC, created_at DESC LIMIT 1",
+        (normal, REJECTED, INVALID, INVALID),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def precedents_like(
+    conn: sqlite3.Connection, normal: str, similarity, *, limit: int = 5,
+    minimum: float = 0.5,
+) -> list[dict]:
+    """Las decisiones anteriores más parecidas a esta propuesta.
+
+    Es lo que §6.7 quiere hacer con el registro, y elige explícitamente **recuperación de
+    ejemplos** sobre ajustar un modelo: con decenas o pocos cientos de decisiones no se ajusta
+    nada, y esto además es inspeccionable — ante una propuesta rara se puede ver qué precedentes
+    se usaron.
+
+    Se traen las que tienen comentario primero: el spec dice que es el campo que más rinde, y una
+    decisión sin explicación aporta el veredicto pero no el motivo.
+    """
+    install(conn)
+    rows = [
+        dict(row) for row in conn.execute(
+            "SELECT * FROM decisions WHERE normalized_axioms != '' ORDER BY created_at DESC"
+        )
+    ]
+    if not rows or not normal:
+        return []
+    scores = similarity([normal], [row["normalized_axioms"] for row in rows])[0]
+    ranked = sorted(
+        ((score, row) for score, row in zip(scores, rows, strict=True) if score >= minimum),
+        key=lambda item: (-item[0], not item[1]["comment"]),
+    )
+    return [row | {"similarity": score} for score, row in ranked[:limit]]
 
 
 def precedents(

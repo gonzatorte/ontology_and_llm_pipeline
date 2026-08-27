@@ -484,3 +484,67 @@ def test_the_resulting_state_is_recorded_with_the_decision(tmp_path):
     expiración de rechazos va a necesitar."""
     conn, _ = settled(tmp_path, state_hash="sha256:abc")
     assert all(row["ontology_state"] == "sha256:abc" for row in rows(conn))
+
+
+# ─────────  re-proposición: lo mismo con otros IRIs (forma normal)  ─────────
+
+
+def with_forms(tmp_path, forms):
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    br.settle(conn, decision.branches[0].id, note="no va", normal_forms=forms)
+    return conn, decision
+
+
+def test_a_proposal_already_rejected_is_found_by_its_normal_form(tmp_path):
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    forms = {b.id: "Focus Group subClassOf Technique" for b in decision.branches}
+    br.settle(conn, decision.branches[0].id, note="ya se probó", normal_forms=forms)
+    found = br.already_rejected(conn, "Focus Group subClassOf Technique")
+    assert found and found["status"] in (br.REJECTED, br.INVALID)
+
+
+def test_the_chosen_one_is_not_reported_as_rejected(tmp_path):
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    br.settle(conn, decision.branches[0].id,
+              normal_forms={decision.branches[0].id: "elegida", decision.branches[1].id: "otra"})
+    assert br.already_rejected(conn, "elegida") is None
+
+
+def test_invalid_wins_over_rejected_when_both_exist(tmp_path):
+    """Lo que interesa es si ya se dijo que estaba mal, no sólo que no se eligió."""
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    br.settle(conn, decision.branches[0].id, invalid=[decision.branches[1].id],
+              normal_forms={b.id: "misma forma" for b in decision.branches})
+    assert br.already_rejected(conn, "misma forma")["status"] == br.INVALID
+
+
+def test_an_empty_normal_form_matches_nothing(tmp_path):
+    conn, _ = with_forms(tmp_path, {})
+    assert br.already_rejected(conn, "") is None
+
+
+def test_precedents_come_back_by_similarity(tmp_path):
+    decision = stored_decision()
+    conn = connect(tmp_path)
+    br.persist(conn, "v1", [decision])
+    br.settle(conn, decision.branches[0].id, note="porque sí",
+              normal_forms={b.id: f"forma {i}" for i, b in enumerate(decision.branches)})
+
+    def similarity(left, right):
+        return [[1.0 if a == b else 0.0 for b in right] for a in left]
+
+    found = br.precedents_like(conn, "forma 0", similarity)
+    assert [row["normalized_axioms"] for row in found] == ["forma 0"]
+
+
+def test_a_precedent_below_the_floor_is_not_offered(tmp_path):
+    conn, decision = with_forms(tmp_path, {b.id: "algo" for b in stored_decision().branches})
+    assert br.precedents_like(conn, "x", lambda left, right: [[0.1] * len(right)]) == []

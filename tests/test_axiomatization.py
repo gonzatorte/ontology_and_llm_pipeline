@@ -159,3 +159,77 @@ def test_every_annotation_it_writes_is_declared_by_the_seed():
     assert written <= set(DECLARED_ANNOTATIONS), (
         f"undeclared: {written - set(DECLARED_ANNOTATIONS)}"
     )
+
+
+# ─────────────  forma normal: la misma propuesta con otros IRIs  ─────────────
+
+
+# `LABELS` de arriba va etiqueta -> IRI, que es lo que `assemble` necesita. La forma normal
+# nombra IRIs, así que necesita el mapa al revés.
+BY_IRI = {iri: label for label, iri in LABELS.items()}
+
+
+def minted(iri: str, label: str = "Focus Group", parent: str = "c:Technique", gloss: str = "g"):
+    return [
+        Axiom(iri, "type", str(OWL.Class)),
+        Axiom(iri, "prefLabel", literal=label, language="en"),
+        Axiom(iri, "subClassOf", parent),
+        Axiom(iri, "definition", literal=gloss, language="en"),
+    ]
+
+
+def test_the_same_commitment_with_other_iris_has_the_same_normal_form():
+    """Un IRI acuñado sale de uuid5 sobre el id de la propuesta, así que el mismo compromiso
+    vuelve en otra iteración con otro identificador. Sin normalizar no se detecta."""
+    assert ax.normal_form(minted("urn:a"), BY_IRI) == ax.normal_form(minted("urn:b"), BY_IRI)
+
+
+def test_a_rewritten_gloss_is_not_another_proposal():
+    a = ax.normal_form(minted("urn:a", gloss="una cosa"), BY_IRI)
+    b = ax.normal_form(minted("urn:a", gloss="otra explicación"), BY_IRI)
+    assert a == b
+
+
+def test_another_parent_is_another_commitment():
+    assert ax.normal_form(minted("urn:a"), BY_IRI) != ax.normal_form(
+        minted("urn:a", parent="c:Organization"), LABELS
+    )
+
+
+def test_another_name_is_another_commitment():
+    """La etiqueta sí importa: entra como el nombre del sujeto."""
+    assert ax.normal_form(minted("urn:a"), BY_IRI) != ax.normal_form(
+        minted("urn:a", label="Group Interview"), LABELS
+    )
+
+
+def test_the_parent_is_named_by_its_label_not_its_iri():
+    assert "Technique" in ax.normal_form(minted("urn:a"), BY_IRI)
+    assert "c:Technique" not in ax.normal_form(minted("urn:a"), BY_IRI)
+
+
+def test_the_order_of_the_axioms_does_not_matter():
+    forward = minted("urn:a")
+    assert ax.normal_form(forward, BY_IRI) == ax.normal_form(list(reversed(forward)), BY_IRI)
+
+
+def test_precedents_carry_the_comment_because_that_is_what_transfers():
+    """El veredicto dice qué pasó; el comentario dice por qué, que es lo único aplicable a una
+    propuesta distinta."""
+    rendered = ax.render_precedents([
+        {"normalized_axioms": "X subClassOf Y", "status": "rejected",
+         "comment": "el padre ya lo cubre"},
+    ])
+    assert "se descartó" in rendered and "el padre ya lo cubre" in rendered
+
+
+def test_no_precedents_says_so_rather_than_showing_nothing():
+    assert "primera iteración" in ax.render_precedents([])
+
+
+def test_the_prompt_says_precedents_are_evidence_and_not_rules():
+    rendered = ax.PROMPT.render(**ax.payload(
+        PROPOSAL, [{"label": "Technique", "gloss": "A systematic procedure."}], ["focus group"],
+        [{"normalized_axioms": "X subClassOf Y", "status": "rejected", "comment": "porque sí"}],
+    ))
+    assert "precedents, not rules" in rendered and "porque sí" in rendered

@@ -703,6 +703,12 @@ def axiomatize_cmd(
     # suggested: on real data that one is often unrelated, and a forced parent is worse
     # than none.
     payloads = []
+    shapes: dict[str, str] = {}
+    matcher = matching.Matcher(_encoder(config))
+    has_history = bool(
+        conn.execute("SELECT 1 FROM decisions LIMIT 1").fetchone()
+        if _table_exists(conn, "decisions") else None
+    )
     for proposal in proposals:
         nearest = by_iri.get(proposal["nearest_iri"] or "")
         candidates = [{"label": nearest.label, "gloss": nearest.gloss}] if nearest else []
@@ -719,7 +725,26 @@ def axiomatize_cmd(
                 (proposal["id"],),
             )
         ]
-        payloads.append((proposal["id"], axiomatization.payload(proposal, candidates, phrases)))
+        # Lo que se decidió antes sobre una propuesta de esta forma. Requiere la forma normal,
+        # que es lo que hace comparable una propuesta de hoy con una de tres iteraciones atrás
+        # aunque los IRIs sean otros.
+        shape = axiomatization.normal_form(
+            [
+                axiomatization.Axiom("urn:proposal", "prefLabel", literal=proposal["label"]),
+                axiomatization.Axiom(
+                    "urn:proposal", "subClassOf", proposal["nearest_iri"] or "urn:none"
+                ),
+            ],
+            {target.iri: target.label for target in targets},
+        )
+        shapes[proposal["id"]] = shape
+        precedents = branching.precedents_like(
+            conn, shape, lambda left, right: _label_similarity(matcher, left, right)
+        ) if has_history else []
+        payloads.append((
+            proposal["id"],
+            axiomatization.payload(proposal, candidates, phrases, precedents),
+        ))
 
     model = llm.build(config.llm, timeout_s=config.execution.request_timeout_s)
     stage = llm.settings(config.llm, axiomatization.STAGE)
@@ -743,6 +768,15 @@ def axiomatize_cmd(
     assembly.axioms, uncited = validation.evidence(assembly.axioms)
     axiomatization.persist(conn, version_id, assembly.axioms)
 
+    # Re-proposición: lo mismo que ya se descartó, volviendo con otros IRIs. Se avisa y no se
+    # bloquea — con semilla reorganizable un rechazo no es permanente (§6.7), y bloquearlo para
+    # siempre acorrala el proceso. Que expire solo es problema abierto, ver la deuda 16.
+    repeats = {
+        proposal_id: previous
+        for proposal_id, shape in shapes.items()
+        if (previous := branching.already_rejected(conn, shape))
+    }
+
     tally: dict[str, int] = {}
     for judgement in judgements.values():
         tally[judgement.relation] = tally.get(judgement.relation, 0) + 1
@@ -753,10 +787,17 @@ def axiomatize_cmd(
     table.add_row("classes to mint", str(len(assembly.minted)))
     table.add_row("axioms assembled", str(len(assembly.axioms)))
     table.add_row("  dropped for lack of evidence", str(len(uncited)))
+    table.add_row("  ya descartadas antes", str(len(repeats)))
     table.add_row("proposals refused", str(len(assembly.rejected)))
     console.print(table)
     for proposal_id, why in list(assembly.rejected.items())[:5]:
         console.print(f"  [yellow]refused[/] {proposal_id}: {why}")
+    for previous in list(repeats.values())[:5]:
+        comment = f" — «{previous['comment']}»" if previous["comment"] else ""
+        console.print(
+            f"  [yellow]ya se había descartado[/] {previous['normalized_axioms']}"
+            f" ({previous['status']}){comment}"
+        )
 
     if not assembly.axioms:
         console.print("nothing to apply")
@@ -1938,9 +1979,16 @@ def _apply_branch(
     if not committed:
         console.print("[yellow]decision not recorded[/]: nothing was applied")
         return
+    labels = versioning.label_index(graph)
     branching.settle(
         conn, branch_id, note=why, invalid=invalid,
         state_hash=versioning.state_hash(axiomatization.apply(graph, chosen)),
+        normal_forms={
+            row["id"]: axiomatization.normal_form(
+                [by_id[a] for a in json.loads(row["add_axioms"]) if a in by_id], labels
+            )
+            for row in branching.load(conn, version_id)
+        },
     )
     console.print(
         f"[green]chose[/] {branch_id}. Its siblings are recorded as rejected"
@@ -2159,6 +2207,14 @@ def induce_cmd(
             "señal de que pasó. B4 decide.[/]"
         )
     console.print("[dim]nothing applied; B4 decides the axioms[/]")
+
+
+def _table_exists(conn, name: str) -> bool:
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        ).fetchone()
+    )
 
 
 def _label_similarity(matcher, left, right) -> list[list[float]]:

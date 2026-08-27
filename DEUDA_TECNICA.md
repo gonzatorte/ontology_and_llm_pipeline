@@ -318,6 +318,30 @@ decisión suya, no un default. Si alguna vez se agrega, va detrás de un flag ex
 hoy siempre reporta SKIPPED. Escribir el primer juego —procedencia obligatoria, cardinalidad de
 las etiquetas, individuos sin tipo— es trabajo pendiente y barato.
 
+**Y hay que escribirlas sabiendo que SHACL es de mundo cerrado y OWL de mundo abierto.** No es
+una contradicción del formalismo: es una contradicción de la *lectura*. `sh:minCount 1` sobre una
+propiedad no dice «esta cosa no tiene valor», dice «este grafo no registra ninguno», que en
+mundo abierto son afirmaciones distintas. Mientras el resultado se lea como lo segundo, no hay
+conflicto.
+
+De ahí sale la regla para elegir qué escribir:
+
+- **Seguras — completitud sobre un artefacto que el pipeline controla.** Todo individuo lleva
+  `derivedFromMention`; toda mención lleva documento y desplazamientos; una sola etiqueta
+  preferida por idioma; ningún individuo sin tipo. Acá el mundo cerrado es *verdad*: el ABox lo
+  escribió `regenerate` en esta corrida, y si algo falta es porque el pipeline no lo escribió, no
+  porque el mundo no lo sepa. La shape está diagnosticando el generador.
+- **Un error de categoría — verdades del dominio.** «Todo Experimento tiene un Resultado» como
+  shape marca inválido cualquier experimento cuyo resultado el corpus no mencione, que es la
+  mayoría. Eso en OWL es una restricción de cardinalidad y ahí *pertenece*: el razonador infiere
+  que el resultado existe aunque no esté nombrado, que es exactamente lo contrario de lo que hace
+  la shape.
+
+Por eso el spec pone este filtro sobre el ABox y no sobre el TBox: sobre datos generados el
+mundo cerrado es la suposición correcta; sobre la ontología no lo es. La regla práctica al
+escribir una shape: si el remedio a una violación es *escribir mejor código*, va en SHACL; si el
+remedio es *conseguir más texto*, no va.
+
 
 ### 8f. Las propiedades funcionales están listas y no tienen qué mirar
 
@@ -353,6 +377,347 @@ Dos límites del relevamiento mismo, para cuando lo tenga:
 > De paso se arregló algo peor: `next` **no corría sobre un almacén nuevo**, porque exigía una
 > versión de ontología que todavía no existe. El comando que dice qué hacer primero fallaba
 > justo cuando no se había hecho nada.
+
+<details>
+<summary>El diagnóstico original</summary>
+
+### `next` guía pero no ejecuta
+
+El orquestador contesta qué corresponde hacer y se detiene donde hace falta una persona, que es
+la parte difícil y la que importa. Lo que no hace es **correr la etapa por vos**, y no por
+diseño sino por una razón mecánica: los comandos de etapa viven dentro de sus wrappers de Typer,
+así que llamarlos desde Python pasa objetos `OptionInfo` en lugar de valores. Para tener `--run`
+hay que extraer primero cada comando en (wrapper delgado + función común), que son unos diez
+comandos.
+
+Se dejó sin hacer en vez de resolverlo a medias porque un runner que se saltea un punto de
+decisión es peor que no tener runner: los cinco puntos donde decide el usuario son justamente
+donde el sistema no debe elegir solo. Cuando se haga, `--run` tiene que avanzar **de a una
+etapa** y frenar en el primer `waiting on you`.
+
+</details>
+
+Dos cosas que `next` todavía no mira: si el `rules_hash` cambió desde la última regeneración (hoy
+siempre sugiere `regenerate`, que es conservador pero ruidoso) y si las glosas cambiaron desde el
+último `match`, que es lo que cierra el bucle de §4.3.
+
+
+### 8h. Las CQ generadas heredan el sesgo del corpus, y eso no se arregla acá
+
+Es la advertencia del propio spec y conviene tenerla escrita como deuda y no sólo como nota: las
+CQ de A3 miden completitud **respecto al corpus**. Si el corpus no habla de algo, no va a haber
+una CQ que lo pida, y la tasa de aprobación va a subir sin que la ontología mejore en el dominio.
+La mitigación es A4 —las CQ que el usuario escribe sin mirar las generadas, 20–30% del total— y
+hoy **no hay ninguna escrita**: `examples/competency_questions.json` tiene cinco de ejemplo. Sin
+ese 20–30%, el criterio de parada primario está midiendo el corpus contra sí mismo.
+
+**La cita se verifica que exista, no que sostenga.** El filtro comprueba que el número de pasaje
+citado sea uno de los que se le mostraron al modelo, y eso descarta las citas inventadas — pero
+no que el pasaje diga algo que justifique la pregunta. Observado en la primera corrida real: una
+pregunta inferencial correcta sobre `Interview ⊑ Technique ⊑ Methodological Strategy` citando un
+pasaje que anuncia las secciones del paper. La pregunta sirve; la cita no la sostiene. Verificar
+eso mecánicamente no es obvio —haría falta algo como el chequeo de solapamiento léxico entre
+pregunta y pasaje, con su propio umbral sin calibrar— así que por ahora es carga de la revisión
+humana del paso 4, y conviene que quien revise lo sepa.
+
+Dos huecos concretos en la etapa:
+
+- **La regeneración de consultas bajo reorganización (D1) no está.** El spec elige "regenerar la
+  consulta cuando cambian las clases involucradas", y `cq.sparql_regeneration: on_class_change`
+  está en el config sin nada que lo lea. Hoy una CQ cuya clase se dividió en una iteración pasa a
+  fallar por una razón que no es la que el criterio quiere medir.
+- **La deduplicación cae a texto normalizado sin encoder.** Dos preguntas que difieren en una
+  palabra sobreviven, lo que es costo de revisión y no un criterio de parada equivocado — pero
+  conviene saberlo antes de leer 60 candidatas.
+
+
+### 8i. Ajuste del matcher (§6.3) — HECHO, con un resultado que cambia el default
+
+> **Resuelto el 2026-09-10.** El comando es `tune`. Ajustado con las anotaciones del propio par
+> da **+9,9 puntos** en CRAFT y **+11,6** en MaterioMiner sobre documentos no vistos — la mejora
+> más grande que se midió acá— y **sólo sirve en su propio dominio**: el de CRAFT aplicado a MaterioMiner
+> resta 2,1 puntos. Ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.12.
+>
+> **Ajuste completo en vez de LoRA**, apartándose de la letra del spec: LoRA existe para no tocar
+> todos los pesos de un modelo grande, y éste tiene 33 millones de parámetros y entrena en 79
+> segundos. Agregar `peft` para evitar un costo que no existe sería complejidad sin
+> contrapartida; la sustancia es la misma.
+>
+> Lo que queda abierto es el circuito que el spec describe: hoy las etiquetas salen de un par
+> anotado, y la idea era que salieran solas de las decisiones de zona gris del usuario.
+> `grey labels --export` ya escribe ese formato y hay **cero** respuestas acumuladas, así que esa
+> mitad sigue esperando a que alguien conteste.
+
+<details>
+<summary>Lo que decía antes de medirlo</summary>
+
+### LoRA (§6.3) — la única pieza del plan bloqueada por falta de datos, no de código
+
+El spec pone el ajuste del matcher como el arreglo de la compuerta no-go: si la tasa de falsos
+huérfanos es alta, mejor modelo, mejores glosas, **LoRA con las primeras etiquetas**. Las
+primeras dos ya se probaron —las glosas empeoraron el matching y el encoder es el que hay— así
+que queda la tercera, y es la única del plan que no se puede escribir todavía.
+
+Lo que falta es el insumo, y ahora se sabe exactamente cuál: las respuestas de zona gris que
+`grey answer` acumula. Hoy hay **una**. `grey labels --export` ya las escribe en el formato que
+un entrenamiento necesita (mención, clase ofrecida, puntaje, si se aceptó), así que la
+infraestructura de datos está; falta que alguien conteste unos cientos de pares.
+
+**No escribir el entrenador antes de tener con qué probarlo.** Un script de fine-tuning que
+nunca corrió sobre datos reales es código que parece listo y no lo está, y el proyecto ya
+documenta esa clase de falla (la edición silenciosa de la entrada de coordinación). El orden es:
+contestar zona gris → exportar → medir el cross-encoder tuneado contra el barrido de `calibrate`
+→ recién ahí decidir si `use_cross_encoder` vuelve a `true`.
+
+Cuánto hace falta es desconocido, y el techo disponible es más bajo de lo que parecía: contra
+`v5`, que es la versión vigente, hay **131 pares** esperando respuesta, no los 219 de `v2` —esa
+versión quedó tipada contra una capa de menciones que después se volvió a extraer—. Un re-ranker
+entrenado con ciento y pico de ejemplos es una apuesta, no una medición.
+
+</details>
+
+**La fuente de etiquetas que no requiere trabajo humano, que resultó ser la buena:** el par de
+calibración trae 8.723 menciones gold. Entrenar el re-ranker ahí y evaluarlo sobre el holdout es
+medible hoy mismo, sin que nadie conteste nada. Lo que no dice es cuánto **transfiere** a otro
+dominio, y con el entregable siendo la caracterización del sistema esa pregunta deja de ser una
+salvedad y pasa a ser parte del resultado: entrenar en un par y evaluar en otro es justamente lo
+que hay que medir. Los pares de la tarea «más pares» son el banco para eso.
+
+
+### 9. El par cualitativo, retirado — y lo que sí dejó
+
+La semilla de metodología cualitativa contra el corpus de política de ciencia abierta **está
+fuera de circulación** desde el 2026-09-09. No es un caso de aplicación al que haya que volver:
+el proyecto no tiene dominio comprometido —el entregable es el sistema y su caracterización a
+través de pares— y esa dupla fue el andamio para tener con qué probar mientras no existía un par
+anotado. Los pares publicados lo reemplazan por completo.
+
+Lo que dejó, y que sigue valiendo porque es sobre el método y no sobre el par:
+
+- **El desajuste temático es medible, y el comando `alignment` lo hace** — pero sólo cuando se
+  le nombra el vocabulario. Sobre 495.213 caracteres, `field note`, `informant`, `coding scheme`,
+  `thematic analysis` y `grounded theory` aparecen **cero veces**: 0 de 5, contra 5 de 5 sobre
+  MaterioMiner. Ésa es la parte que decide.
+
+  Lo que **no** funciona, medido: la cobertura global —qué fracción de las etiquetas de la
+  ontología aparece— no sirve de veredicto. Daba **20% sobre MaterioMiner**, un par real anotado
+  por expertos, y **50% sobre el par roto**. Es estructural: una ontología publicada cubre un
+  dominio entero y un corpus cubre una franja, así que la mayoría de las clases no tiene por qué
+  aparecer. Restringir a etiquetas multipalabra tampoco separa (9% contra 18%). Queda como
+  diagnóstico y el comando lo dice.
+
+  Lo que faltaría para decidir sin que nadie nombre términos es mirar del lado de las
+  **menciones** —¿lo que el corpus nombra tiene clase?— y eso pide anotaciones o el matcher, que
+  es justo lo que este chequeo quería evitar.
+- **El eco léxico se hace visible cuando el par está desalineado**, y por eso este par sirvió:
+  las 18 automáticas de `v5` son casi todas la palabra corriente que da nombre a la clase. Ver
+  la entrada 19.
+
+Los datos derivados (`data/`, versiones `v0`–`v5`) quedan como están: son historia, y los
+números que se citaron de ahí están fechados en [`HALLAZGOS.md`](HALLAZGOS.md).
+
+---
+
+## Alcance pendiente del spec
+
+### 10. Sesión interactiva
+
+El spec tiene cinco puntos donde decide el usuario —elegir rama (§6.6), zona gris del matcher
+(§6.2), propiedad funcional (§6.8), validación de CQ (§4.4), revisión de erratas (§4.3)— y los
+cinco tienen ahora por dónde contestarse: `branch --choose`, `grey answer`, `functional
+--declare`, `cq`, `review resolve`. Las decisiones sobreviven a re-correr en los cinco casos.
+
+Lo que falta es **una interfaz encima**, no la maquinaria. Contestar 219 pares de zona gris de a
+uno por CLI es correcto y es tedioso; el anotador de navegador del conjunto de retención ya
+demuestra que la forma existe, y aplicarla acá es trabajo conocido. Y falta que `next` pueda
+ejecutar la etapa siguiente además de nombrarla — ver 8g.
+
+Cuando exista, `review_items` también es donde viven las excepciones por caso de las reglas de
+mapeo — ver [`plan_reglas_de_mapeo.md`](plan_reglas_de_mapeo.md).
+
+### 11. Mundo abierto: lo que falta
+
+- **Propiedades funcionales (§6.8)**: la etapa está (`functional`) y no tiene propiedades que
+  mirar — ver 8f. Lo que sí quedó resuelto es hacer visible el riesgo silencioso: `--declare`
+  corre el razonador y muestra qué individuos se fusionarían antes de commitear nada.
+- **`NegativePropertyAssertion` (§6.4)**: `refuted` ya se escribe (`mark --mark refuted`) y saca
+  la aserción del ABox, que es lo que el spec pide. Lo que sigue sin existir es la aserción
+  negativa explícita, y con razón: bajo OWA sólo corresponde cuando **se sabe** que algo es
+  falso, no cuando hay duda, y no hay propiedades donde ponerla todavía.
+- **CQ negativas**: `cq_a4_05` en los ejemplos pregunta por completitud del grafo con
+  `FILTER NOT EXISTS`, que es mundo cerrado. Sirve como diagnóstico del artefacto, pero §4.4
+  define el tipo negativo como "mundo abierto explícito". Mal precedente para quien escriba CQ
+  nuevas.
+
+### 12. Ruta VLM
+
+Páginas `scan`/`uncertain` quedan sin parsear, las figuras sin captioning y las fórmulas sin
+extraer. El pipeline lo registra en vez de fingir que las procesó.
+
+### 13. Tablas sin bordes
+
+`find_tables` solo ve tablas con líneas; la estrategia por texto devuelve la página entera como
+tabla. El hueco se **mide** —columna "table gap"— pero no se cubre. La respuesta del spec es
+rutear esas páginas a MinerU.
+
+### 14. `language.py` está cableado a es/en
+
+Los marcadores de palabras función están hardcodeados. Otro idioma son ~10 líneas más, o
+apoyarse en el `/Lang` declarado del PDF.
+
+### 15. Código sin consumidor
+
+Tres cosas implementadas y probadas que nada invoca. No están rotas: están desconectadas, y
+cada una es o bien un cable que falta o bien código a borrar.
+
+- **`versioning.nearest_state`** — detección de loops *parciales* (§6.8): la rama vuelve *casi*
+  al estado anterior, mismo compromiso de modelado con IRIs distintos, y el hash exacto no lo ve.
+  Ahora sí hay dónde enchufarlo: `branch` computa el hash de cada rama y avisa cuando es un
+  retorno exacto, pero usa `find_by_hash` y no esto. Falta el umbral en el config y una línea en
+  el llamador.
+- **`iteration.trigger | batch_size`** — cuándo se dispara una iteración y de a cuántos
+  documentos. Describen un loop automático que sigue sin existir: `next` dice qué corresponde y
+  las etapas se corren a mano, una por comando (ver 8g). `max_iterations` **sí** se consume
+  ahora, como criterio duro de `stop`.
+- **`llm.B6_branching`** — `branch` no llama a ningún modelo, y no puede: la única prohibición
+  explícita del spec para esa etapa es pedirle alternativas a un LLM. La clave quedó de cuando
+  se pensaba que haría falta. Es candidata a borrar, no a cablear.
+- **`cq.sparql_regeneration`** — la política D1 de regenerar consultas cuando cambian las clases
+  involucradas. Nada la lee todavía; ver 8h.
+
+Lo que hay que evitar es que crezcan en silencio: una clave de config que nadie lee afirma algo
+falso sobre lo que el sistema hace. `matching.blocking_strategy` fue el caso —decía `embedding`
+y bloqueaba por prefijo de 4 caracteres— y se resolvió haciendo que el config **rechace** un
+valor no implementado en vez de aceptarlo. Ese es el patrón para las que quedan.
+
+### 16. Multi-rama: las preguntas que el spec deja abiertas
+
+B6 ya está implementado (`branch`). Lo que va acá es distinto: el diseño multi-rama tiene
+preguntas que **el spec mismo declara sin resolver**, y siguen sin resolverse — implementar la
+etapa no las contesta, sólo las vuelve alcanzables.
+
+- **Expiración de rechazos (§6.7, riesgo R2).** Con semilla reorganizable un rechazo no es
+  permanente: lo rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura
+  cambió. Bloquearlo para siempre acorrala el proceso; no bloquearlo produce un loop. La
+  política elegida —registrar el rechazo relativo al estado de la ontología y expirarlo cuando
+  las clases involucradas se reorganizan— está marcada textualmente como **"no es una regla
+  limpia, requiere ajuste empírico"**. Es la deuda más profunda del aparato y no se resuelve
+  leyendo: se resuelve con iteraciones reales encima.
+- **Comparación por forma normal (§6.7).** Para detectar re-proposición hay que normalizar el
+  axioma antes de comparar, o el mismo compromiso vuelve con IRIs distintos y no se detecta.
+  La pieza existe —`versioning.logical_axioms` canonicaliza— pero no está conectada a la tabla
+  `decisions`, que es donde vive el historial de rechazos.
+- **Scoring de ramas en frío (§11).** `historical_affinity` y `parsimonia` requieren historial,
+  y el spec dice explícitamente que se **omitan** en las primeras iteraciones en vez de
+  calcularse con datos insuficientes. O sea: el scoring nace incompleto por diseño y hay que
+  implementarlo sabiéndolo.
+- **Techo de 3–5 ramas (§6.6).** Es un número puesto a dedo contra una explosión de 2^k. El
+  mecanismo real que lo evita es presentar los ejes independientes por separado y armar ramas
+  completas sólo cuando están acoplados; el techo es la red, no la solución. **Implementado
+  así**: `couple()` agrupa por axiomas compartidos y `max_branches` es sólo el corte final.
+- **El umbral de `nearest_state`.** Lo que menciona el punto 15 como cable faltante tiene además
+  un parámetro sin calibrar: cuánta distancia de Jaccard cuenta como "casi el mismo estado". No
+  hay forma de fijarlo sin iteraciones reales, igual que la expiración de rechazos.
+
+Todo esto comparte una propiedad incómoda: **no se puede calibrar contra un corpus externo**,
+como sí se puede el matcher. Depende del historial de decisiones de este proyecto en particular,
+que hoy tiene cero entradas.
+
+### 17. Tipado consciente de la jerarquía
+
+Hoy el matcher rankea cada mención contra las clases como si fueran independientes: no sabe que
+`Interview ⊑ Technique`. Usar la estructura —preferir la clase más específica cuyos ancestros
+también puntúan, penalizar una cuyos hermanos puntúan idéntico— es el mecanismo natural contra
+el eco léxico, que es el modo de falla que ningún umbral filtra (punto 7).
+
+No se puede medir sobre la semilla actual: 34 clases, profundidad 3, seis raíces. Sí sobre un
+par de calibración con jerarquía profunda, donde entra como una variable más del barrido de
+umbrales.
+
+### 18. `cross_language_always_grey` nunca se midió
+
+`matching.cross_language_always_grey: true` y la elección de un bi-encoder multilingüe son
+decisiones de config sin una sola medición detrás. El razonamiento declarado —un encoder
+monolingüe empujaría todo par es/en a la zona gris por idioma solo— es plausible y nunca se
+verificó, y la regla que lo acompaña es fuerte: manda a revisión humana *todo* par en idiomas
+distintos, sin importar el score.
+
+**Ningún par de calibración disponible la toca**, porque todos son en inglés. La única vía
+encontrada son los corpus clínicos del BSC —**SympTEMIST**, **DisTEMIST**, **MedProcNER**: 1.000
+casos clínicos en español cada uno, anotados y normalizados a SNOMED CT, en standoff BRAT, que
+`calibration.read_brat` ya lee—. SNOMED CT es lo más axiomatizado disponible (EL++, definiciones
+lógicas en casi todo el vocabulario) y **Argentina es país miembro de SNOMED International**, con
+lo cual la Affiliate License es gratuita.
+
+Lo que cuesta: la licencia hay que tramitarla, y SNOMED son ~360k conceptos, así que hay que
+subsetear y documentar el criterio como pide la fase 0 del plan. Por eso está acá y no en la
+tabla de tareas: no está en el camino crítico de la calibración, y no conviene que bloquee las tareas de calibración.
+
+Mientras tanto el default se queda como está. Lo honesto es que se queda por falta de evidencia
+en contra, no por evidencia a favor.
+
+### 19. Desambiguación por contexto: el agujero que el eco léxico deja abierto
+
+Salió analizando el caso del homónimo —`cell` de biología contra `cell` de una organización
+clandestina—. Conviene separar dónde **no** está el problema, porque la intuición apunta al
+lugar equivocado:
+
+- **No está en cómo se acuñan los IRIs.** El `uuid5` se computa sobre el **id de la mención**,
+  que es único por ocurrencia, no sobre la forma superficial: verificado sobre la base,
+  `researchers` aparece 12 veces y tiene 12 ids distintos. Nunca se computa `uuid5("cell")`.
+- **No está en la resolución de entidades.** Dos menciones homónimas terminan en el mismo
+  individuo sólo si algo decide fusionarlas, y las reglas ya cubren el caso: nombre propio
+  idéntico fusiona **sólo si además tipan a la misma clase**, y si no, la decisión es
+  `identical_name_different_class` y va a zona gris. Un sintagma genérico de una palabra en
+  minúscula se separa sin preguntar. El homónimo genérico ni siquiera llega a evaluarse.
+
+**Está en el tipado.** Nada impide que `cell` en sentido de célula clandestina tipe a la clase
+`Cell` de biología con coseno alto: es eco léxico puro, es el modo de falla que el barrido midió
+—11 de 24 clases sobre umbral en la semilla, y las 32 automáticas del corpus real— y ningún
+umbral lo filtra, porque la palabra coincide con el nombre de la clase y **el contexto no entra
+en la comparación**.
+
+Dos caminos, con costo distinto y ambos medibles sobre el banco que ya existe:
+
+1. ~~**Meter contexto en la comparación.**~~ **Probado y descartado el 2026-09-10.** Se midió en
+   cuatro formas sobre MaterioMiner (n=2.229) y en dos sobre CRAFT (n=8.723): concatenar la
+   oración hunde @1 de 25,3% a 11,3% —y en CRAFT de 69,8% a **14,3%**—, una ventana angosta da
+   7,4%, y la fusión de puntajes, que es la única que no rompe la forma del sintagma, aporta
+   +0,4 puntos en @1 y pierde uno en @5. Reproducible con `calibrate --context sentence`.
+   Es el mismo hallazgo que el de las glosas: un encoder simétrico compara por forma, y
+   agregarle una oración a un sintagma lo convierte en una oración. **La solución no está en la
+   representación de la mención, está en el encoder** — ver [`HALLAZGOS.md`](HALLAZGOS.md) 1.11.
+2. **Usar la jerarquía**, que es la entrada 17: preferir la clase cuyos ancestros también
+   puntúan. Un `cell` biológico debería activar también `Anatomical Structure`; uno clandestino,
+   nada del subárbol.
+
+Lo que **no** arregla nada es tocar el esquema de IRIs. La identidad no es el problema; la
+desambiguación sí.
+
+### 20. El historial de feedback (§6.7) — RESUELTO
+
+> **Resuelto el 2026-09-10.** El registro y su destino, que era lo que lo justificaba.
+>
+> **El registro.** `decisions` se escribe: una fila por (rama, eje) con las seis categorías
+> fijas, el estado `invalid` separado de `rejected`, el comentario y el hash del estado contra el
+> que se decidió. `branches` sigue siendo la cola de propuestas —su trabajo— y dejó de ser el
+> registro.
+>
+> **La forma normal.** `axiomatization.normal_form` nombra cada compromiso por etiquetas y no por
+> IRIs, y saltea glosa, nota de alcance y etiquetas alternativas. El mismo compromiso vuelto a
+> proponer con otros IRIs y otra redacción da la misma cadena; cambiarle el padre o el nombre la
+> cambia. `settle(normal_forms=…)` la guarda en `decisions.normalized_axioms`, que antes tenía
+> ids de axioma —inservibles para comparar entre iteraciones—.
+>
+> **Los precedentes en el prompt.** `axiomatize` calcula la forma de cada propuesta, consulta
+> `branching.already_rejected` y `branching.precedents_like`, y el prompt (v2) lleva una sección
+> «WHAT WAS DECIDED BEFORE» con veredicto y comentario. El comentario es lo que se transfiere: el
+> veredicto dice qué pasó, el comentario dice por qué, y sólo el porqué aplica a una propuesta
+> distinta. La última línea de esa sección es explícita: son precedentes, no reglas.
+>
+> Medido sobre MaterioMiner v1: 45 propuestas juzgadas, 0 ya descartadas antes —lo esperable en
+> la primera iteración, y la prueba de que la consulta corre—. Falta la segunda iteración con
+> feedback humano real para ver si los precedentes mueven algún juicio.
 
 <details>
 <summary>El diagnóstico original</summary>
@@ -719,7 +1084,7 @@ como re-proposición. Ver también la entrada 16, que reúne las preguntas que e
 sobre este mismo aparato.
 
 Orden razonable si se retoma: ~~unificar en `decisions`~~ → ~~mapear el eje a las seis
-categorías~~ → recuperación por embedding → forma normal. Los dos primeros están hechos.
+categorías~~ → ~~recuperación por embedding~~ → ~~forma normal~~. Los cuatro están hechos.
 
 </details>
 
@@ -794,3 +1159,73 @@ falla que este proyecto encontró tres veces y no conviene sumar la cuarta.
 
 Mientras tanto conviene leer los veredictos del razonador sobre una ontología con imports rotos
 sabiendo que son sobre menos axiomas. `validate` lo dice arriba de la tabla.
+
+### 23. La extracción confunde el metalenguaje académico con el dominio — BAJO ESFUERZO, ALTA PRIORIDAD
+
+De 45 clases inducidas sobre MaterioMiner, tres salieron de vocabulario sobre el paper y no
+sobre la mecánica de materiales:
+
+| Clase propuesta | De qué menciones salió |
+|---|---|
+| `Scholarly research` | `Previous studies`, `literature`, `research`, `researchers`, `publication` |
+| `Table reference` | `Table 1`, `Table S1`, `Table 2` |
+| `Results` | `results`, `corrected results` |
+
+**No son encabezados de sección.** Verificado: `Abstract`, `Introduction`, `Conclusions` y
+`References` aparecen **cero veces** entre las 1.309 menciones, así que la extracción no confunde
+la estructura del documento con su contenido. Confunde el metalenguaje de escribir un paper con
+el dominio del que el paper habla, que es más difícil de atajar.
+
+**Por qué no lo atrapa nada de lo que hay.** No son falsos huérfanos —la ontología hace bien en
+no tener `Table reference`—, así que el chequeo de redundancia no los ve. Son sintagmas
+nominales legítimos con soporte suficiente, así que `min_support` tampoco. Y el razonador no
+tiene nada que objetarle a una clase nueva sin padre. Pasan los siete filtros.
+
+**Tres vías, de más barata a más cara:**
+
+1. **Una lista de bloqueo de metalenguaje**, aplicada a la mención antes de agrupar: `table`,
+   `figure`, `section`, `study`, `studies`, `literature`, `paper`, `results`, `reference`. Barato
+   y frágil: `results` es basura en un paper de materiales y podría no serlo en uno de
+   metodología, así que la lista tiene que ser configurable por par y no una constante del
+   código.
+2. **Decírselo al prompt de extracción.** Hoy pide sintagmas que denoten conceptos; agregar que
+   el metalenguaje de la publicación no es el dominio es una línea. Más general que la lista y
+   sin garantía: es una instrucción, no un filtro.
+3. **Filtrar por distribución.** Un término del metalenguaje aparece parejo en todos los
+   documentos de cualquier dominio; uno del dominio se concentra. Es el criterio más
+   principiado y el que más cuesta, y necesita más de cuatro documentos para tener señal.
+
+Empezar por la 2, medir sobre el mismo par, y recién ahí decidir si hace falta la 1.
+
+### 24. El tercer punto de la curva de tamaño — BAJO ESFUERZO, ALTA PRIORIDAD
+
+Hay dos puntos medidos: 428 clases (MaterioMiner) y 3.418 (CRAFT/CL), y el comportamiento cambia
+tanto entre ellos —recall@1 de 21,5% contra 68,5%— que dos puntos no dan una forma, dan una
+recta imaginaria entre dos observaciones.
+
+El tercero es un inventario grande: **CafeteriaFCD/CafeteriaSA contra FoodOn**, ~40k clases, que
+la tarea «más pares» ya identifica. El lector `brat` está escrito, así que el trabajo es bajar el
+corpus, escribir un `pair.yml` y correr el barrido. Es la tarea de mejor relación entre lo que
+cuesta y lo que responde, porque **caracterizar el sistema a través de pares es el entregable**.
+
+Ojo con una cosa antes de correrlo: con ~40k clases el hash de estado y la carga de la ontología
+entran en un régimen que no se probó. El hash ya está arreglado (entrada 21), pero 40k clases es
+diez veces `cl-base.owl`.
+
+### 25. Disparos automáticos que hoy hay que recordar — BAJO ESFUERZO, ALTA PRIORIDAD
+
+Tres lugares donde el pipeline sabe que algo quedó viejo y no hace nada:
+
+- **`regenerate` después de aplicar una rama.** El ABox se deriva de las menciones y de una
+  versión de la TBox; al cambiar la TBox queda viejo. `versioning.record_rules` ya sabe si algo
+  cambió, así que es cablear el aviso o el disparo.
+- **`metaproperties` después de inducir clases nuevas.** Las clases nuevas llegan sin etiquetar,
+  así que OntoClean saltea sus subsunciones — que son justamente las que acaba de proponer el
+  sistema y las que más conviene revisar.
+- **`match` después de cambiar las glosas.** Es el que cierra el bucle autocorrectivo de §4.3:
+  mejor glosa, mejor matching, menos falsos huérfanos. Hoy `enrich` deja escrito el comando y
+  nadie lo corre.
+
+Los tres son la misma forma —comparar un hash contra el que quedó registrado— y `next` es el
+lugar natural: ya reporta estado por etapa, y le faltan estas tres comparaciones para dejar de
+sugerir `regenerate` siempre y empezar a sugerirlo cuando corresponde.

@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -54,7 +55,7 @@ WORLD_KNOWLEDGE = "world_knowledge"
 
 PROMPT = Prompt(
     stage=STAGE,
-    version="v1",
+    version="v2",   # v2: el prompt muestra precedentes (§6.7)
     template="""A new concept was found in a research corpus. Decide how it relates to the
 concepts an existing ontology already has.
 
@@ -66,6 +67,9 @@ Phrases it was found as: {phrases}
 CANDIDATES FROM THE EXISTING ONTOLOGY:
 {candidates}
 
+WHAT WAS DECIDED BEFORE, on proposals like this one:
+{precedents}
+
 Answer exactly one of:
 
 - `"subclass_of"` — every instance of the new concept is also an instance of the candidate.
@@ -74,6 +78,11 @@ Answer exactly one of:
   kind of it. A named company is an example of Organization; "Startup Company" is a kind of it.
 - `"unrelated"` — none of the candidates is a supertype. This is a normal answer and often the
   right one; a forced parent is worse than none.
+
+The past decisions above are precedents, not rules. They were made by the user on this ontology,
+so a rejection there is evidence that the same shape of answer was wrong before — read the
+comment, which says why. If this concept differs from the precedent in a way that matters, say
+so in `why` and decide on its merits.
 
 Answer with JSON only:
 {{"relation": "subclass_of" | "instance_of" | "unrelated",
@@ -142,7 +151,10 @@ def install(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def payload(proposal: dict, candidates: list[dict], phrases: list[str]) -> dict[str, str]:
+def payload(
+    proposal: dict, candidates: list[dict], phrases: list[str],
+    precedents: Sequence[dict] = (),
+) -> dict[str, str]:
     rendered = "\n".join(
         f"- {item['label']}: {item.get('gloss') or '(no definition)'}" for item in candidates
     ) or "- (none)"
@@ -152,7 +164,26 @@ def payload(proposal: dict, candidates: list[dict], phrases: list[str]) -> dict[
         "criterion": proposal.get("criterion") or "(none given)",
         "phrases": ", ".join(phrases[:12]) or "(none)",
         "candidates": rendered,
+        "precedents": render_precedents(precedents),
     }
+
+
+def render_precedents(precedents: Sequence[dict]) -> str:
+    """Las decisiones anteriores, como texto para el prompt.
+
+    Con el comentario del usuario, que es lo que las vuelve útiles: "se rechazó" dice el
+    veredicto y "se rechazó porque el criterio ya lo cubre el padre" dice el motivo, que es lo
+    único transferible a una propuesta distinta.
+    """
+    if not precedents:
+        return "(ninguna todavía — es la primera iteración, o nada parecido se decidió antes)"
+    lines = []
+    for item in precedents:
+        verdict = {"chosen": "se eligió", "rejected": "se descartó",
+                   "invalid": "se marcó INVÁLIDA"}.get(item["status"], item["status"])
+        because = f" — «{item['comment']}»" if item.get("comment") else ""
+        lines.append(f"- {item['normalized_axioms']}: {verdict}{because}")
+    return "\n".join(lines)
 
 
 def parse(text: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -240,6 +271,44 @@ def assemble(
                 assembly.axioms = [a for a in assembly.axioms if a.subject_iri != iri]
         # UNRELATED leaves the class a root, which the spec prefers to a forced parent.
     return assembly
+
+
+def normal_form(axioms: Sequence[Axiom], labels: dict[str, str]) -> str:
+    """La forma normal de una propuesta: qué dice, sin depender de los IRIs que le tocaron.
+
+    Sin esto no se puede detectar una re-proposición (§6.7). Un IRI acuñado sale de `uuid5` sobre
+    el id de la propuesta, así que el **mismo** compromiso —la misma clase, con el mismo nombre,
+    colgando del mismo padre— vuelve en la iteración siguiente con otro identificador y no se
+    parece en nada al anterior. Lo que se conserva entre iteraciones es cómo se llaman las cosas,
+    no cómo se las identifica.
+
+    Así que cada IRI se reemplaza por su etiqueta —la del sujeto viene con la propuesta, la del
+    objeto la trae la ontología— y las anotaciones se descartan salvo el nombre, porque una glosa
+    reescrita no es otro compromiso. El resultado se ordena, así que el orden en que se armaron
+    los axiomas no cambia nada.
+    """
+    # El sujeto es un IRI recién acuñado, así que su etiqueta no está en la ontología todavía:
+    # está en el propio lote, en su axioma `prefLabel`.
+    minted = {
+        axiom.subject_iri: axiom.literal
+        for axiom in axioms if axiom.predicate == "prefLabel" and axiom.literal
+    }
+
+    def name(iri: str | None) -> str:
+        if iri is None:
+            return ""
+        return minted.get(iri) or labels.get(iri) or iri.rsplit("/", 1)[-1]
+
+    statements = {
+        f"{name(axiom.subject_iri)} {axiom.predicate} {name(axiom.object_iri)}"
+        for axiom in axioms
+        # Cómo se explica una clase no es qué se compromete con ella: una glosa reescrita no es
+        # otra propuesta. La etiqueta sí importa, y entra como el nombre del sujeto.
+        if axiom.predicate not in ("definition", "scopeNote", "historyNote", "altLabel",
+                                   "prefLabel")
+        and axiom.object_iri is not None
+    }
+    return " | ".join(sorted(statements))
 
 
 _PREDICATES = {

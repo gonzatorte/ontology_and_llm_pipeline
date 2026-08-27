@@ -358,6 +358,8 @@ Confunde el metalenguaje de la escritura académica con el dominio del que se es
 
 Es precisión de la extracción, no del matcher, y ningún filtro de los siete lo atrapa: son
 sintagmas nominales legítimos, con soporte suficiente, y el razonador no tiene nada que objetar.
+Las tres vías para atacarlo —lista de bloqueo, instrucción en el prompt de extracción, filtro por
+distribución entre documentos— están en la [entrada 23 de deuda técnica](DEUDA_TECNICA.md).
 
 ### 1.14 El pipeline entero sobre un par anotado (tarea «corrida completa»), y qué se ve al final
 
