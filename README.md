@@ -11,6 +11,9 @@ qué conviene rehacer— y [`CLAUDE.md`](CLAUDE.md), el índice y los invariante
 El sistema opera en inglés (prompts, esquemas, logs). El corpus y las glosas son bilingües
 es/en con etiqueta de idioma.
 
+Licencia **CC BY 4.0** ([`LICENSE`](LICENSE)). Los corpus y las ontologías de los casos de uso
+**no** se distribuyen acá y tienen sus propias licencias: ver [`NOTICE.md`](NOTICE.md).
+
 ## Índice
 
 Cada parte del diseño tiene un nombre, y el nombre es el identificador que se usa en todos lados:

@@ -2,8 +2,11 @@
 
 # ─── Paths (not in spec section 7; the pipeline needs them to find its inputs) ──
 paths:
-  corpus_root: ../../Corpus-08052026/General/files
-  seed_ontology: ../../qualitative_ontology.rdf
+  # Sobre qué corre el pipeline. Vive bajo `use_cases/` como cualquier otro caso de uso, y como
+  # cualquier otro los datos no se versionan: acá son dos symlinks a material que está fuera del
+  # repo. Ver use_cases/qualitative/PROCEDENCIA.md.
+  corpus_root: ../use_cases/qualitative/corpus
+  seed_ontology: ../use_cases/qualitative/ontology.rdf
   work_dir: ../data              # SQLite stores, markdown, crops, reports
   reasoner_lib: ../lib           # OWL API, ELK, HermiT (scripts/fetch-jars.sh)
   # Casos de uso: corpus publicado anotado + su ontología, uno por subdirectorio con su

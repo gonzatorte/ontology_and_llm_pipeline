@@ -36,6 +36,12 @@ quedan afuera enteros.
 | [`materiominer/`](materiominer/PROCEDENCIA.md) | MaterioMiner v1.0.1, 4 publicaciones de mecánica de materiales, 2.229 menciones | Materials Mechanics Ontology | 428 clases, 420 con definición | **segundo**, listo |
 | `hpo-gsc-plus/` | GSC+, 228 abstracts, ~1.933 anotaciones | Human Phenotype Ontology | ~19k clases | pendiente |
 | `cafeteria/` | CafeteriaFCD + CafeteriaSA, recetas y abstracts | FoodOn | ~40k clases | pendiente |
+| [`qualitative/`](qualitative/PROCEDENCIA.md) | corpus de trabajo, sin anotar y sin publicar | semilla de metodología cualitativa | 34 clases | **el default del config**; retirado como instrumento |
+
+`qualitative/` es el único **sin `use_case.yml`**, porque no tiene anotaciones gold y un
+descriptor que `load_use_case` no puede cargar haría creer que se lo puede pasar a `calibrate`.
+Está acá igual: todo par (corpus, ontología) vive bajo este directorio, y así una sola regla
+decide qué se versiona de cada uno.
 
 Los dos pendientes existen para una sola pregunta, y no es cuál es el mejor corpus: **cómo se
 mueve el punto de operación con el tamaño del inventario**. Con 428, 3.418 y ~40k candidatos se

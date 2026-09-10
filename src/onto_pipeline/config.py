@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class Paths(BaseModel):
+    # Los dos apuntan adentro de `use_cases/`, que es donde vive todo par (corpus, ontología).
+    # Que el material sea un symlink a algo de afuera es asunto del caso de uso, no de acá.
     corpus_root: Path
     seed_ontology: Path
     work_dir: Path = Path("data")

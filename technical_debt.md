@@ -63,14 +63,15 @@ por qué se descartó una alternativa, qué se midió y no se anotó, qué pregu
 
 La consecuencia práctica: **lo que importa se escribe en el repo antes de cerrar una sesión**, no
 se deja "por si hace falta mirar la conversación". Esta ronda de auditoría encontró un hallazgo
-sustantivo que sólo vivía en un transcript (el análisis del homónimo, hoy `DEBT-CONTEXT-DISAMBIGUATION`) y estuvo a
-semanas de perderse. Si se prefiere la otra vía, hay que subir `cleanupPeriodDays` en
-`~/.claude/settings.json`, pero eso conserva el transcript, no lo vuelve encontrable.
+sustantivo que sólo vivía en un transcript (el análisis del homónimo, hoy
+`DEBT-CONTEXT-DISAMBIGUATION`) y estuvo a semanas de perderse. Subir `cleanupPeriodDays` en la
+configuración del cliente conserva el transcript, pero no lo vuelve encontrable, así que no es
+una alternativa a escribirlo acá.
 
 ### Cómo leer el historial de sesiones, si hace falta
 
-Los transcripts están en `~/.claude-personal/projects/-home-gonzalo-workspace-propio-ontology-and-llm-pipeline/*.jsonl`,
-uno por sesión. Dos advertencias al auditarlos:
+El cliente guarda un `.jsonl` por sesión bajo su directorio de proyectos. Dos advertencias al
+auditarlos:
 
 - **Un fork comparte el principio con su origen.** `f0449040` y `b8c7e99c` arrancan con el mismo
   timestamp y el mismo mensaje: son la misma conversación, bifurcada. Contarlas como dos sesiones
