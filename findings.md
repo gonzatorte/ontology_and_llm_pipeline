@@ -702,6 +702,24 @@ resultado que parecía correcto.
 | subsunción contada como conflicto | 4 desacuerdos | 1 desacuerdo y 3 veces la jerarquía (`FINDINGS-MEASURED-SUBSUMPTION-CONFLICT`) |
 | `set(A) \| {b} - set(c)` | los estratos faltantes | `-` liga más fuerte que `\|`: nombraba estratos que sí se habían encontrado |
 
+**La quinta no es del código, es del proceso, y por eso estuvo a punto de no anotarse.** Dos
+sesiones sobre el mismo working tree: una editó `cq eval` con un reemplazo anclado a esta línea,
+
+```python
+console.print(f"evaluating against version [bold]{row['id']}[/]")
+```
+
+mientras la otra extraía `_resolve_version()` y `row['id']` pasaba a ser `version_id`. El
+reemplazo **no matcheó y no hizo nada**. El código siguió con el comportamiento anterior, los
+tests siguieron pasando —probaban otra cosa— y se detectó al notar que el comando imprimía el
+mensaje viejo en una corrida a mano.
+
+Es la misma forma que las cuatro de arriba: una edición anclada a texto exacto **falla abierta**
+cuando otro movió el contexto. No rompe, no avisa, deja todo como estaba. De ahí salen dos reglas
+que están en `CLAUDE.md` porque son operativas: preferir herramientas que aborten cuando el ancla
+no está, y **un worktree por sesión**, que convierte esta falla silenciosa en un conflicto de
+merge, que es ruidoso.
+
 Y de más atrás en el proyecto, la misma clase: propiedades de anotación SKOS sin declarar
 —que sacaban la ontología de OWL 2 DL y hacían que ELK se salteara, **sin error**, con la
 cobertura EL cayendo de 84% a 0%— y una clave de caché que omitía el modelo, de modo que cambiar

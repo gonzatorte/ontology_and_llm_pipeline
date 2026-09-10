@@ -35,10 +35,12 @@ El caso de uso de metodología cualitativa fue el andamio inicial y **está reti
 | [`README.md`](README.md) | Cómo se usa cada comando y en qué estado está cada etapa | Antes de tocar el CLI o de decir que algo falta |
 | [`findings.md`](findings.md) | Qué se **midió**, qué se **decidió**, y **qué se probó y no funcionó**, con el n de cada número | Antes de proponer cambiar un umbral, un encoder o una política — y **antes de proponer una idea**, porque su `LAYERS` lista las que ya se descartaron con datos |
 | [`technical_debt.md`](technical_debt.md) | Qué falta, y qué conviene rehacer cuando haya evidencia | Antes de "arreglar" algo que quizás ya está registrado como deuda deliberada |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Cómo se trabaja sobre este repo: setup, worktrees por sesión, commits, dónde va una etapa nueva | Al entrar al repo por primera vez, y antes de escribir en paralelo con otra sesión |
+| [`NOTICE.md`](NOTICE.md) | Qué licencia tiene esto y qué **no** cubre: los corpus y ontologías de los casos de uso son de terceros | Antes de redistribuir cualquier cosa que salga de acá |
 | [`mapping_rules_plan.md`](mapping_rules_plan.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
 | [`use_case_selection.md`](use_case_selection.md) | Por qué **estos** casos de uso y no otros: los criterios, lo que se midió de cada candidato y por qué se descartó cada descarte | Antes de agregar uno, y antes de proponer uno que ya se descartó |
 
-Los cuatro últimos son enmiendas o complementos del spec, no lo reemplazan.
+Los dos últimos son enmiendas o complementos del spec, no lo reemplazan.
 
 **Dos documentos viven al lado de los casos de uso**, en `use_cases/`, porque describen datos que
 están adentro del repo pero **no se versionan** — 40 MB de artefactos publicados de terceros,
@@ -155,6 +157,34 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
   que alguna vez costó un bug.
 - **El tipo va en la firma, no en el docstring.** El lenguaje ya tiene anotaciones; repetirlas en
   prosa duplica algo que se desactualiza sin que nadie se entere.
+- **Una sesión, un worktree.** Hay más de una sesión trabajando sobre este repo, y dos sesiones
+  escribiendo el mismo working tree ya produjo la falla que `FINDINGS-SILENT-FAILURES` registra:
+  una edición anclada a texto exacto **falla abierta** cuando otro movió el contexto — no rompe,
+  no avisa, deja el código como estaba, y los tests siguen pasando porque prueban otra cosa.
+
+  ```bash
+  git worktree add ../pipeline-<nombre> -b <nombre>
+  ```
+
+  Con un checkout por sesión nadie puede pisar a nadie, y el desacuerdo aparece al mergear, que
+  es ruidoso: se invierte el modo de falla. **El repositorio es el único canal entre sesiones** —
+  lo que tiene que llegar a la otra se commitea, no se deja en el árbol. Un subagente que va a
+  **escribir** necesita su propio worktree por la misma razón; para leer —búsqueda, revisión,
+  auditoría— no hace falta, porque leer en paralelo no se pisa.
+- **Verificar el efecto, no la ausencia de error.** Después de editar un comando, correrlo y
+  mirar la salida. Que los tests pasen no prueba que la edición se aplicó. Y preferir
+  herramientas que **fallen cerradas**: `Edit` sobre un archivo recién leído aborta si el texto
+  no está; un `str.replace` en un script no. Si hay que usar un script, verificar después con un
+  `grep` de lo que se esperaba escribir.
+- **Lo que importa se escribe en el repo antes de cerrar la sesión.** El transcript de una sesión
+  es el único registro del razonamiento que no llegó al repositorio —por qué se descartó una
+  alternativa, qué se midió y no se anotó— y **vence a los 30 días** con la configuración por
+  defecto del cliente. Una auditoría encontró un hallazgo sustantivo que sólo vivía ahí (el
+  análisis del homónimo, hoy `DEBT-CONTEXT-DISAMBIGUATION`) y estuvo a semanas de perderse.
+  Conservar el transcript no lo vuelve encontrable, así que no es una alternativa a escribirlo.
+- **La atribución no se lee de `git log`.** Los commits tienen un solo autor aunque el trabajo
+  haya salido de varias sesiones. Quién decidió qué está en la tabla de procedencia de
+  [`findings.md`](findings.md).
 - **`pkill -f` se matchea a sí mismo.** Ya colgó dos shells en este proyecto. Matar por PID.
 
 ## Dónde está cada cosa

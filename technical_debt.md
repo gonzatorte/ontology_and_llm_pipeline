@@ -4,81 +4,14 @@ Documento vivo. Registra **mejoras a futuro** —cosas que hoy funcionan pero po
 mejor, y decisiones tomadas con evidencia insuficiente que conviene rehacer cuando la haya—.
 No es una lista de bugs: lo que está roto se arregla, no se documenta.
 
-> **Al agregar una entrada:** los números colisionan cuando dos sesiones escriben en paralelo —
-> ya pasó con el 17—. Antes de numerar, mirá el último `###` que hay. Y al referenciar otra
-> entrada, mejor por título que por número, porque los números se corren.
+> **Al agregar una entrada:** lleva un id `DEBT-…`, no un número. Los números colisionaban
+> cuando dos sesiones escribían en paralelo —ya pasó con el 17— y se corrían al insertar; un
+> nombre no hace ninguna de las dos cosas y además se puede buscar.
 
 El estado de implementación por etapa está en el [README](README.md) y los números que
-sostienen cada decisión en [findings.md](findings.md); acá va lo que no se ve mirando ninguno
-de los dos.
-
----
-
-## Coordinación entre conversaciones
-
-**Hay más de una sesión trabajando sobre este repo.** Al momento de escribir esto: tres
-(`pipeline-a4`, `pipeline-26`, y la que escribe). Eso está bien, pero tiene un modo de falla
-concreto que ya ocurrió.
-
-### El conflicto que ya pasó
-
-Una sesión editó `cq eval` con un reemplazo de texto anclado a esta línea:
-
-```python
-console.print(f"evaluating against version [bold]{row['id']}[/]")
-```
-
-Otra sesión, en paralelo, había extraído `_resolve_version()` y refactorizado los tres lugares
-que resolvían la versión (`validate`, `match`, `cq eval`), con lo que `row['id']` pasó a ser
-`version_id`. El reemplazo **no matcheó y no hizo nada**, en silencio. El código siguió con el
-comportamiento anterior, los tests siguieron pasando —porque probaban otra cosa— y el problema
-solo se detectó al notar que el comando imprimía el mensaje viejo en una corrida manual.
-
-### Por qué importa más de lo que parece
-
-No es un error de tipeo: es una clase de falla. Una edición anclada a texto exacto **falla
-abierta** cuando otro cambió el contexto — no rompe nada, no avisa, deja el código como estaba.
-Es exactamente el modo de falla más difícil de detectar, porque no produce ninguna señal.
-
-### Qué hacer
-
-- **Verificar el efecto, no la ausencia de error.** Después de editar un comando, correrlo y
-  mirar la salida. Que los tests pasen no prueba que la edición se aplicó.
-- **Preferir herramientas que fallan cerradas.** `Edit` sobre un archivo recién leído aborta si
-  el texto no está; un `str.replace` en un script no. Cuando haya que usar un script, verificar
-  después con un `grep` de lo que se esperaba escribir.
-- **Zonas calientes**: `cli.py` es el archivo que todas las sesiones tocan, porque cada etapa
-  nueva agrega un comando. Es donde este conflicto va a volver a pasar.
-- **Commitear seguido.** Un working tree con 126 líneas sin commitear de otra sesión —lo que
-  pasó con `matching.py`— hace imposible distinguir trabajo en progreso de trabajo terminado.
-  Durante un rato esas líneas rompían 6 tests; era un estado intermedio, pero desde afuera no
-  se podía saber.
-
-### Los transcripts tienen fecha de vencimiento
-
-Verificado: `cleanupPeriodDays` no está configurado, así que rige el default de **30 días**. Los
-transcripts de las sesiones son el único registro del razonamiento que no llegó al repositorio —
-por qué se descartó una alternativa, qué se midió y no se anotó, qué preguntó el usuario— y a los
-30 días no están más.
-
-La consecuencia práctica: **lo que importa se escribe en el repo antes de cerrar una sesión**, no
-se deja "por si hace falta mirar la conversación". Esta ronda de auditoría encontró un hallazgo
-sustantivo que sólo vivía en un transcript (el análisis del homónimo, hoy
-`DEBT-CONTEXT-DISAMBIGUATION`) y estuvo a semanas de perderse. Subir `cleanupPeriodDays` en la
-configuración del cliente conserva el transcript, pero no lo vuelve encontrable, así que no es
-una alternativa a escribirlo acá.
-
-### Cómo leer el historial de sesiones, si hace falta
-
-El cliente guarda un `.jsonl` por sesión bajo su directorio de proyectos. Dos advertencias al
-auditarlos:
-
-- **Un fork comparte el principio con su origen.** `f0449040` y `b8c7e99c` arrancan con el mismo
-  timestamp y el mismo mensaje: son la misma conversación, bifurcada. Contarlas como dos sesiones
-  independientes lleva a buscar conflictos donde no hay más que una rama abandonada.
-- **La atribución no se lee del historial de git.** Los 44 commits tienen un solo autor y un solo
-  trailer de sesión, aunque el trabajo salió de tres. Quién decidió qué está en la tabla de
-  procedencia de [`findings.md`](findings.md), no en `git log`.
+sostienen cada decisión en [findings.md](findings.md); cómo se trabaja sobre este repo —worktrees
+por sesión, commits, tests— está en [CONTRIBUTING.md](CONTRIBUTING.md). Acá va lo que no se ve
+mirando ninguno de los tres.
 
 ---
 

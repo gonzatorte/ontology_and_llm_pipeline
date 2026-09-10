@@ -4,9 +4,10 @@ Enriquecimiento ontológico asistido por LLM. La especificación de diseño es
 [`main_plan.md`](main_plan.md); este README
 sólo explica cómo se usa lo que está construido y qué falta.
 
-Los otros tres documentos, por si buscás otra cosa: [`findings.md`](findings.md) —qué se midió
-y qué se decidió, con el n de cada número—, [`technical_debt.md`](technical_debt.md) —qué falta y
-qué conviene rehacer— y [`CLAUDE.md`](CLAUDE.md), el índice y los invariantes del proyecto.
+Los otros documentos, por si buscás otra cosa: [`findings.md`](findings.md) —qué se midió y qué
+se decidió, con el n de cada número—, [`technical_debt.md`](technical_debt.md) —qué falta y qué
+conviene rehacer—, [`CONTRIBUTING.md`](CONTRIBUTING.md) —cómo se trabaja acá— y
+[`CLAUDE.md`](CLAUDE.md), el índice y los invariantes del proyecto.
 
 El sistema opera en inglés (prompts, esquemas, logs). El corpus y las glosas son bilingües
 es/en con etiqueta de idioma.
