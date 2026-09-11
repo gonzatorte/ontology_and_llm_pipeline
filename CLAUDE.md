@@ -12,7 +12,7 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología inicial, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~19.100 líneas en 56 módulos, 597 tests, uno de ellos de punta a punta. **Dos
+con `uv`, ~19.100 líneas en 56 módulos, 602 tests, uno de ellos de punta a punta. **Dos
 interfaces sobre el mismo pipeline**: un CLI de ~40 comandos y `wizard`, que recorre el mismo plan
 preguntando en cada punto de decisión. Las dos llaman a `services/`.
 
@@ -61,7 +61,7 @@ antes de ver datos.
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 597 tests, ~6 s, sin red ni Docker
+uv run pytest -q                       # 602 tests, ~6 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
 uv run onto-pipeline --help

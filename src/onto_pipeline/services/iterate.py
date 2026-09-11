@@ -1581,6 +1581,7 @@ def survey_conflicts(workspace: Workspace, *, version: str | None = None) -> Con
     sync = review.sync(
         conn, items, version_id=version_id,
         kinds=[conflicts.FACTUAL_CONFLICT, conflicts.CONFLICT_PATTERN],
+        session_id=session,
     )
     return Conflicts(
         version_id=version_id, entities=len(groups), mentions=len(rows), found=found,
@@ -1672,6 +1673,7 @@ def survey_functional(
     ABox es inválido de principio bajo mundo abierto: que cada entidad tenga un solo valor
     prueba que no se vio contraejemplo, no que no exista.
     """
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
     abox = _abox(workspace, version_id)
@@ -1683,7 +1685,8 @@ def survey_functional(
         min_individuals=workspace.config.mapping.functional_min_individuals,
     )
     sync = review.sync(
-        workspace.conn, items, version_id=version_id, kinds=[functional.FUNCTIONAL_CANDIDATE]
+        workspace.conn, items, version_id=version_id,
+        kinds=[functional.FUNCTIONAL_CANDIDATE], session_id=session,
     )
     return FunctionalCandidates(
         version_id=version_id, supports=supports, items=items, review_added=sync.added,

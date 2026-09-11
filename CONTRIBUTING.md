@@ -4,7 +4,7 @@
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 597 tests, ~6 s, sin red ni Docker
+uv run pytest -q                       # 602 tests, ~6 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars, Java 11+)
 ```

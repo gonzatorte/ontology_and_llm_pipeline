@@ -129,7 +129,11 @@ def survey(
         conn, "SELECT COUNT(*) AS n FROM branches WHERE version_id = ? AND status = 'proposed'",
         (version_id,),
     )
-    open_reviews = _count(conn, "SELECT COUNT(*) AS n FROM review_items WHERE status = 'open'")
+    open_reviews = _count(
+        conn,
+        "SELECT COUNT(*) AS n FROM review_items WHERE session_id = ? AND status = 'open'",
+        (session_id,),
+    )
     questions = _count(
         conn,
         "SELECT COUNT(*) AS n FROM competency_questions WHERE session_id = ? AND status='accepted'",

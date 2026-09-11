@@ -118,6 +118,7 @@ def normalize(workspace: Workspace) -> Normalization:
         conn, review.findings_from_initial(seed),
         version_id=current.id if current else workspace.next_version_id(),
         kinds=[review.DIVERGENT_LABEL, review.PENDING_SEMANTIC_CHECK, review.TYPO],
+        session_id=session,
     )
 
     kinds: dict[str, int] = {}

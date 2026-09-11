@@ -114,7 +114,7 @@ def test_an_open_review_item_is_a_decision(tmp_path):
 
     conn = store(tmp_path)
     review.sync(conn, [review.Finding("typo", "c:A", "looks misspelled")],
-                version_id="v1", kinds=["typo"])
+                version_id="v1", kinds=["typo"], session_id=SESSION)
     assert named(survey(conn), "review").state == WAITING
 
 

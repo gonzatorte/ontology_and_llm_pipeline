@@ -23,6 +23,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "src" / "onto_pipeline"
 SCOPED = (
     "documents", "blocks", "page_classification", "mentions", "versions",
     "competency_questions", "cq_results", "decisions", "assertion_marks", "grey_decisions",
+    "review_items",
 )
 
 _STATEMENT = re.compile(
@@ -55,10 +56,16 @@ def touches(sql: str, table: str) -> bool:
 _BY_VERSION_ID = re.compile(r"\b(id|version_id|parent_id)\s*=\s*\?", re.IGNORECASE)
 
 
+# La única consulta que lee una tabla por sesión sin filtrar, porque lee la tabla **anterior** a
+# la columna: en un almacén que precede a las sesiones no hay `session_id` que filtrar. Que
+# además la rellene lo fija el test de abajo.
+_BEFORE_SESSIONS = ("SELECT * FROM review_items",)
+
+
 def test_every_query_on_a_per_session_table_filters_by_the_session():
     offenders = []
     for path, sql in statements():
-        if "session_id" in sql:
+        if "session_id" in sql or sql in _BEFORE_SESSIONS:
             continue
         if touches(sql, "versions") and _BY_VERSION_ID.search(sql):
             continue
@@ -84,4 +91,23 @@ def test_the_work_unit_cache_is_looked_up_across_sessions_on_purpose():
     )
     assert "session_id = ? AND stage = ?" in " ".join(telemetry.split()), (
         "el barrier y el reporte por etapa tienen que ser de la sesión, no de la tabla entera"
+    )
+
+
+def test_the_exempt_query_is_a_migration_that_fills_the_column_it_lacks():
+    """La otra excepción, y la razón por la que se le puede permitir leer sin filtro.
+
+    `_BEFORE_SESSIONS` exime una consulta sobre `review_items`. Vale sólo mientras sea la
+    migración: lee la tabla que precede a la columna y la rellena desde `version_id`, que es
+    `<sesión>:v<N>`. Si algún día esa consulta deja de rellenarla, la exención quedaría tapando
+    una consulta sin sesión de verdad.
+    """
+    review = (SOURCE / "review.py").read_text(encoding="utf-8")
+    migration = review[review.index("def _rescue_from_before_sessions"):]
+
+    assert 'str(row["version_id"] or "").split(":")[0]' in migration, (
+        "la migración tiene que deducir la sesión del id de versión"
+    )
+    assert "INSERT INTO review_items (id, session_id," in review, (
+        "y escribirla, o las filas rescatadas quedarían sin sesión"
     )

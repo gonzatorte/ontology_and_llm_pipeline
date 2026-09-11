@@ -263,12 +263,13 @@ def review_items(
 ) -> list[dict]:
     """Lo que necesita una decisión. Nada se aplica acá; la decisión se registra."""
     return review.load(
-        workspace.conn, status=None if status == "any" else status, kind=kind
+        workspace.conn, status=None if status == "any" else status, kind=kind,
+        session_id=workspace.require_session(),
     )
 
 
 def review_counts(workspace: Workspace) -> dict:
-    return review.counts(workspace.conn)
+    return review.counts(workspace.conn, session_id=workspace.require_session())
 
 
 def resolve_review(
@@ -276,7 +277,10 @@ def resolve_review(
 ) -> None:
     """Registrar una decisión sobre un hallazgo: aceptar o rechazar."""
     try:
-        found = review.resolve(workspace.conn, item_id, decision, comment)
+        found = review.resolve(
+            workspace.conn, item_id, decision, comment,
+            session_id=workspace.require_session(),
+        )
     except ValueError as exc:
         raise StageError(str(exc)) from exc
     if not found:

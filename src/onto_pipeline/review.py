@@ -43,7 +43,8 @@ RESOLVED = (ACCEPTED, REJECTED)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS review_items (
-  id           TEXT PRIMARY KEY,   -- derived from the content, so a re-run is idempotent
+  id           TEXT NOT NULL,      -- derived from the content, so a re-run is idempotent
+  session_id   TEXT NOT NULL,
   kind         TEXT NOT NULL,      -- divergent_label | pending_semantic_check | typo
   version_id   TEXT,               -- the ontology version it was raised against
   subject_iri  TEXT,
@@ -52,9 +53,10 @@ CREATE TABLE IF NOT EXISTS review_items (
   status       TEXT NOT NULL,      -- open | accepted | rejected | superseded
   comment      TEXT,
   created_at   TEXT,
-  resolved_at  TEXT
+  resolved_at  TEXT,
+  PRIMARY KEY (session_id, id)
 );
-CREATE INDEX IF NOT EXISTS idx_review_status ON review_items(status, kind);
+CREATE INDEX IF NOT EXISTS idx_review_status ON review_items(session_id, status, kind);
 """
 
 
@@ -86,17 +88,50 @@ def _now() -> str:
 
 
 def install(conn: Store) -> None:
+    rescued = _rescue_from_before_sessions(conn)
     conn.script(SCHEMA)
+    if rescued:
+        conn.executemany(
+            "INSERT INTO review_items (id, session_id, kind, version_id, subject_iri, summary, "
+            "payload, status, comment, created_at, resolved_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rescued,
+        )
     conn.commit()
 
 
+def _rescue_from_before_sessions(conn: Store) -> list[tuple]:
+    """Carry a pre-session table's decisions over instead of dropping them.
+
+    A store older than user sessions has this table without `session_id` and keyed on the id
+    alone. The session is recoverable: `version_id` is `<session>:v<N>`. The table is rebuilt
+    rather than altered because the primary key is what makes a decision belong to one session,
+    and no `ALTER` changes a key — leaving the old one would keep two sessions sharing the
+    decision only one of them took.
+    """
+    if not conn.table_exists("review_items") or "session_id" in conn.columns("review_items"):
+        return []
+    rows = [dict(row) for row in conn.execute("SELECT * FROM review_items")]
+    conn.execute("DROP TABLE review_items")
+    return [
+        (row["id"], str(row["version_id"] or "").split(":")[0], row["kind"], row["version_id"],
+         row["subject_iri"], row["summary"], row["payload"], row["status"], row["comment"],
+         row["created_at"], row["resolved_at"])
+        for row in rows
+    ]
+
+
 def sync(
-    conn: Store, findings: list[Finding], *, version_id: str, kinds: list[str]
+    conn: Store, findings: list[Finding], *, version_id: str, kinds: list[str], session_id: str
 ) -> SyncReport:
     """Record this run's findings, leaving decisions already made untouched.
 
     `kinds` bounds what may be superseded, so syncing one kind of finding cannot retire
     another kind that simply was not part of this run.
+
+    The id is content-derived, so two user sessions over the same use case raise findings with
+    the same id: without the session in the key, the second one would inherit the first one's
+    decisions and retire its open items as superseded.
     """
     install(conn)
     report = SyncReport()
@@ -104,7 +139,8 @@ def sync(
 
     for finding in findings:
         existing = conn.execute(
-            "SELECT status FROM review_items WHERE id = ?", (finding.id,)
+            "SELECT status FROM review_items WHERE session_id = ? AND id = ?",
+            (session_id, finding.id),
         ).fetchone()
         if existing is not None:
             report.already_known += 1
@@ -112,15 +148,16 @@ def sync(
             # user already made is left alone.
             if existing["status"] == SUPERSEDED:
                 conn.execute(
-                    "UPDATE review_items SET status = ?, version_id = ? WHERE id = ?",
-                    (OPEN, version_id, finding.id),
+                    "UPDATE review_items SET status = ?, version_id = ? "
+                    "WHERE session_id = ? AND id = ?",
+                    (OPEN, version_id, session_id, finding.id),
                 )
             continue
         conn.execute(
-            "INSERT INTO review_items (id, kind, version_id, subject_iri, summary, payload, "
-            "status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (finding.id, finding.kind, version_id, finding.subject_iri, finding.summary,
-             json.dumps(finding.payload, ensure_ascii=False), OPEN, _now()),
+            "INSERT INTO review_items (id, session_id, kind, version_id, subject_iri, summary, "
+            "payload, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (finding.id, session_id, finding.kind, version_id, finding.subject_iri,
+             finding.summary, json.dumps(finding.payload, ensure_ascii=False), OPEN, _now()),
         )
         report.added += 1
 
@@ -128,14 +165,15 @@ def sync(
     stale = [
         row["id"]
         for row in conn.execute(
-            f"SELECT id FROM review_items WHERE status = ? AND kind IN ({placeholders})",  # noqa: S608
-            (OPEN, *kinds),
+            "SELECT id FROM review_items WHERE session_id = ? AND status = ? "  # noqa: S608
+            f"AND kind IN ({placeholders})",
+            (session_id, OPEN, *kinds),
         )
         if row["id"] not in seen
     ]
     conn.executemany(
-        "UPDATE review_items SET status = ?, resolved_at = ? WHERE id = ?",
-        [(SUPERSEDED, _now(), item_id) for item_id in stale],
+        "UPDATE review_items SET status = ?, resolved_at = ? WHERE session_id = ? AND id = ?",
+        [(SUPERSEDED, _now(), session_id, item_id) for item_id in stale],
     )
     report.superseded = len(stale)
     conn.commit()
@@ -143,25 +181,26 @@ def sync(
 
 
 def resolve(
-    conn: Store, item_id: str, status: str, comment: str = ""
+    conn: Store, item_id: str, status: str, comment: str = "", *, session_id: str
 ) -> bool:
     if status not in RESOLVED:
         raise ValueError(f"a review item is accepted or rejected, not {status!r}")
     install(conn)
     cursor = conn.execute(
-        "UPDATE review_items SET status = ?, comment = ?, resolved_at = ? WHERE id = ?",
-        (status, comment or None, _now(), item_id),
+        "UPDATE review_items SET status = ?, comment = ?, resolved_at = ? "
+        "WHERE session_id = ? AND id = ?",
+        (status, comment or None, _now(), session_id, item_id),
     )
     conn.commit()
     return cursor.rowcount == 1
 
 
 def load(
-    conn: Store, *, status: str | None = OPEN, kind: str | None = None
+    conn: Store, *, status: str | None = OPEN, kind: str | None = None, session_id: str
 ) -> list[dict]:
     install(conn)
-    query = "SELECT * FROM review_items WHERE 1=1"
-    params: list[Any] = []
+    query = "SELECT * FROM review_items WHERE session_id = ?"
+    params: list[Any] = [session_id]
     if status:
         query += " AND status = ?"
         params.append(status)
@@ -174,12 +213,14 @@ def load(
     ]
 
 
-def counts(conn: Store) -> dict[tuple[str, str], int]:
+def counts(conn: Store, *, session_id: str) -> dict[tuple[str, str], int]:
     install(conn)
     return {
         (row["kind"], row["status"]): row["n"]
         for row in conn.execute(
-            "SELECT kind, status, COUNT(*) AS n FROM review_items GROUP BY kind, status"
+            "SELECT kind, status, COUNT(*) AS n FROM review_items WHERE session_id = ? "
+            "GROUP BY kind, status",
+            (session_id,),
         )
     }
 

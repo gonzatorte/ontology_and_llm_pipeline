@@ -5,6 +5,9 @@ import pytest
 from onto_pipeline import review
 from onto_pipeline.db import connect
 
+SESSION = "test-1"
+OTHER = "test-2"
+
 
 def finding(token="subre", suggestion="sobre", subject="c:1"):
     return review.Finding(
@@ -18,8 +21,18 @@ def conn(tmp_path):
     return connect(tmp_path)
 
 
-def sync(conn, findings, version="v0"):
-    return review.sync(conn, findings, version_id=version, kinds=[review.TYPO])
+def sync(conn, findings, version="v0", session=SESSION):
+    return review.sync(
+        conn, findings, version_id=version, kinds=[review.TYPO], session_id=session
+    )
+
+
+def load(conn, session=SESSION, **kwargs):
+    return review.load(conn, session_id=session, **kwargs)
+
+
+def resolve(conn, item_id, status, comment="", session=SESSION):
+    return review.resolve(conn, item_id, status, comment, session_id=session)
 
 
 def test_the_same_finding_keeps_its_identity_across_runs(conn):
@@ -30,19 +43,19 @@ def test_the_same_finding_keeps_its_identity_across_runs(conn):
     assert sync(conn, [finding()]).added == 1
     report = sync(conn, [finding()])
     assert (report.added, report.already_known) == (0, 1)
-    assert len(review.load(conn)) == 1
+    assert len(load(conn)) == 1
 
 
 def test_a_decision_survives_a_rerun(conn):
     """What was rejected stays rejected — that history is the point of keeping it."""
     sync(conn, [finding()])
-    review.resolve(conn, finding().id, review.REJECTED, "a domain term, not a typo")
+    resolve(conn, finding().id, review.REJECTED, "a domain term, not a typo")
 
     sync(conn, [finding()])
 
-    stored = review.load(conn, status=review.REJECTED)[0]
+    stored = load(conn, status=review.REJECTED)[0]
     assert stored["comment"] == "a domain term, not a typo"
-    assert review.load(conn, status=review.OPEN) == []
+    assert load(conn, status=review.OPEN) == []
 
 
 def test_a_finding_that_stops_being_raised_is_superseded_not_left_open(conn):
@@ -52,44 +65,100 @@ def test_a_finding_that_stops_being_raised_is_superseded_not_left_open(conn):
     report = sync(conn, [finding()])
 
     assert report.superseded == 1
-    assert [item["summary"] for item in review.load(conn, status=review.OPEN)] == \
-        ["subre -> sobre"]
+    assert [item["summary"] for item in load(conn, status=review.OPEN)] == ["subre -> sobre"]
 
 
 def test_a_superseded_finding_that_returns_reopens(conn):
     sync(conn, [finding()])
     sync(conn, [])
-    assert review.load(conn, status=review.OPEN) == []
+    assert load(conn, status=review.OPEN) == []
 
     sync(conn, [finding()])
-    assert len(review.load(conn, status=review.OPEN)) == 1
+    assert len(load(conn, status=review.OPEN)) == 1
 
 
 def test_a_decided_finding_is_not_superseded_by_disappearing(conn):
     """Superseding only touches what is still open; a decision is history, not a pending item."""
     sync(conn, [finding()])
-    review.resolve(conn, finding().id, review.ACCEPTED)
+    resolve(conn, finding().id, review.ACCEPTED)
 
     assert sync(conn, []).superseded == 0
-    assert len(review.load(conn, status=review.ACCEPTED)) == 1
+    assert len(load(conn, status=review.ACCEPTED)) == 1
 
 
 def test_syncing_one_kind_does_not_retire_another(conn):
     conn_findings = [finding(), review.Finding(kind=review.DIVERGENT_LABEL, subject_iri="c:2",
                                                summary="a | b", payload={"labels": []})]
-    review.sync(conn, conn_findings, version_id="v0",
+    review.sync(conn, conn_findings, version_id="v0", session_id=SESSION,
                 kinds=[review.TYPO, review.DIVERGENT_LABEL])
 
-    review.sync(conn, [finding()], version_id="v0", kinds=[review.TYPO])
+    review.sync(conn, [finding()], version_id="v0", kinds=[review.TYPO], session_id=SESSION)
 
-    assert len(review.load(conn, status=review.OPEN, kind=review.DIVERGENT_LABEL)) == 1
+    assert len(load(conn, status=review.OPEN, kind=review.DIVERGENT_LABEL)) == 1
 
 
 def test_only_accept_or_reject_are_decisions(conn):
     sync(conn, [finding()])
     with pytest.raises(ValueError, match="accepted or rejected"):
-        review.resolve(conn, finding().id, review.SUPERSEDED)
+        resolve(conn, finding().id, review.SUPERSEDED)
 
 
 def test_resolving_something_that_does_not_exist_reports_it(conn):
-    assert review.resolve(conn, "nosuchid", review.ACCEPTED) is False
+    assert resolve(conn, "nosuchid", review.ACCEPTED) is False
+
+
+def test_a_decision_belongs_to_the_session_that_took_it(conn):
+    """El id sale del contenido, así que dos sesiones sobre el mismo caso de uso levantan el
+    mismo hallazgo con el mismo id. Sin la sesión en la clave, la segunda heredaba una decisión
+    que nadie tomó ahí — y «lo rechazado vale más que lo aceptado» deja de valer si lo rechazó
+    otra corrida."""
+    sync(conn, [finding()])
+    resolve(conn, finding().id, review.REJECTED, "es un término del dominio")
+
+    assert sync(conn, [finding()], session=OTHER).added == 1
+    assert [item["status"] for item in load(conn, status=None, session=OTHER)] == [review.OPEN]
+
+
+BEFORE_SESSIONS = """
+CREATE TABLE review_items (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,
+  version_id   TEXT,
+  subject_iri  TEXT,
+  summary      TEXT NOT NULL,
+  payload      TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  comment      TEXT,
+  created_at   TEXT,
+  resolved_at  TEXT
+);
+CREATE INDEX idx_review_status ON review_items(status, kind);
+"""
+
+
+def test_a_store_older_than_the_sessions_keeps_its_decisions(conn):
+    """La sesión se deduce de `version_id`, que es `<sesión>:v<N>`. Descartar la tabla sería
+    tirar lo único que no está en ningún otro lado: lo que alguien ya rechazó."""
+    conn.script(BEFORE_SESSIONS)
+    conn.execute(
+        "INSERT INTO review_items (id, kind, version_id, subject_iri, summary, payload, "
+        "status, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (finding().id, review.TYPO, "qualitative-1:v0", "c:1", "subre -> sobre", "{}",
+         review.REJECTED, "es un término del dominio"),
+    )
+
+    review.install(conn)
+
+    stored = load(conn, status=review.REJECTED, session="qualitative-1")
+    assert [(item["id"], item["comment"]) for item in stored] == \
+        [(finding().id, "es un término del dominio")]
+
+
+def test_one_session_does_not_retire_what_another_left_open(conn):
+    """Sincronizar los hallazgos de una sesión no puede jubilar los de otra: el hallazgo que la
+    otra no volvió a levantar sigue esperando su decisión, no la de esta corrida."""
+    sync(conn, [finding()])
+    report = sync(conn, [finding(token="frm", suggestion="framework")], session=OTHER)
+
+    assert report.superseded == 0
+    assert len(load(conn, status=review.OPEN)) == 1
