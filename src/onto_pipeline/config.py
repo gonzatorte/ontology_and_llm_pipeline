@@ -131,7 +131,7 @@ class Axiomatization(BaseModel):
 class InitialOntology(BaseModel):
     """La ontología que se enriquece, y cómo se la normaliza (`PREP-NORMALIZE`).
 
-    Se llamaba «semilla». El nombre decía de dónde parte y no qué es: lo que entra es una
+    Se llamaba «ontología inicial». El nombre decía de dónde parte y no qué es: lo que entra es una
     ontología a la que el corpus le agrega clases y glosas, y sale otra versión de ella.
     """
 

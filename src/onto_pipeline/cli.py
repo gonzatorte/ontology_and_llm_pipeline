@@ -169,7 +169,7 @@ StaleAboxOption = typer.Option(
 )
 InitialOntologyOption = typer.Option(
     None, "--seed-ontology",
-    help="Ontología semilla de esta corrida. Reemplaza a paths.initial_ontology.",
+    help="Ontología inicial de esta corrida.",
 )
 
 
@@ -258,7 +258,7 @@ def alignment_cmd(
     limit: int | None = LimitOption,
     terms: list[str] = TermOption,
 ) -> None:
-    """¿El corpus habla de lo que la semilla nombra? (DEBT-QUALITATIVE-PAIR)
+    """¿El corpus habla de lo que la ontología inicial nombra? (DEBT-QUALITATIVE-PAIR)
 
     La cobertura global es diagnóstico y no veredicto, y eso está medido: la primera versión de
     este comando la usaba para decidir y daba 20% sobre un par bueno contra 50% sobre uno roto.
@@ -813,7 +813,8 @@ def export_cmd(
     que estaba sólo en SQLite, y el ABox, que estaba en disco por su cuenta.
 
     La procedencia va en un manifiesto JSON al lado y no adentro de la ontología: escribirla
-    adentro pediría propiedades de anotación que la semilla no declara, y eso saca la ontología
+    adentro pediría propiedades de anotación que la ontología inicial no declara, y eso saca la
+    ontología
     de OWL 2 DL sin dar ningún error.
     """
     with console.status("export") as status:

@@ -108,7 +108,7 @@ class Comparison:
 
 
 def split_by_document(documents: Sequence, fraction: float, seed: int = 0) -> tuple[list, list]:
-    """Documentos de entrenamiento y de evaluación, barajados con semilla.
+    """Documentos de entrenamiento y de evaluación, barajados con ontología inicial.
 
     Al menos uno de cada lado: con cuatro documentos, `fraction` redondeado hacia abajo puede
     dejar la evaluación vacía y el resultado sería un número sin conjunto de prueba.

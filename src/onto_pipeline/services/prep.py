@@ -1,4 +1,4 @@
-"""Las etapas de `PREP`, sin interfaz: corpus adentro, semilla normalizada, glosas, CQ.
+"""Las etapas de `PREP`, sin interfaz: corpus adentro, ontología inicial normalizada, glosas, CQ.
 
 Cada función devuelve lo que pasó; ninguna imprime. Lo que antes era el cuerpo de un comando
 de Typer vive acá, y el comando quedó como adaptador — ver `services/workspace.py` para por qué.
@@ -108,14 +108,15 @@ def normalize(workspace: Workspace) -> Normalization:
     committed = None
     if existing is None:
         committed = versioning.commit(
-            conn, seed.graph, version_id="v0", note="normalized seed"
+            conn, seed.graph, version_id=workspace.next_version_id(),
+            note="ontología inicial normalizada"
         , session_id=session)
 
     contexts = gloss_contexts(seed)
     current = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
     sync = review.sync(
         conn, review.findings_from_initial(seed),
-        version_id=current.id if current else "v0",
+        version_id=current.id if current else workspace.next_version_id(),
         kinds=[review.DIVERGENT_LABEL, review.PENDING_SEMANTIC_CHECK, review.TYPO],
     )
 
@@ -194,7 +195,7 @@ def generate_glosses(
     )
 
 
-# ─────────────────────────────  alineación corpus/semilla  ─────────────────────────────
+# ─────────────────────────────  alineación corpus/ontología inicial  ─────────────────────────────
 
 
 @dataclass
@@ -215,7 +216,7 @@ class Alignment:
 def alignment(
     workspace: Workspace, *, version: str | None = None, terms: list[str] | None = None
 ) -> Alignment:
-    """¿El corpus habla de lo que la semilla nombra? (`DEBT-QUALITATIVE-PAIR`)
+    """¿El corpus habla de lo que la ontología inicial nombra? (`DEBT-QUALITATIVE-PAIR`)
 
     La cobertura global es diagnóstico y no veredicto, y eso está medido. Donde sí decide es
     con los términos declarados: si quien conoce el dominio nombra el vocabulario que lo define
@@ -355,7 +356,8 @@ def decide_questions(
 
 
 def initial_graph(workspace: Workspace) -> Graph:
-    """La semilla normalizada tal como quedó en disco, para quien la necesite sin versión."""
+    """La ontología inicial normalizada tal como quedó en disco, para quien la necesite sin
+    versión."""
     path = workspace.config.paths.work_dir / "ontology" / "initial_normalized.ttl"
     if not path.exists():
         raise StageError(f"{path} not found; run `normalize` first")

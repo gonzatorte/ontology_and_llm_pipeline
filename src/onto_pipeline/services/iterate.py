@@ -484,10 +484,11 @@ class Bridging:
 def bridge(
     workspace: Workspace, *, version: str | None = None, progress: Progress = silent
 ) -> Bridging:
-    """`ITER-BRIDGE`: relacionar huérfanas con clases de la semilla por conocimiento del mundo.
+    """`ITER-BRIDGE`: relacionar huérfanas con clases de la ontología inicial por conocimiento del
+    mundo.
 
     Corre entre `match` e `induce`, y correrlo no es opcional si `induce` va a correr: si no,
-    toda mención que la semilla sí cubría pero el matcher no conectó se vuelve una clase
+    toda mención que la ontología inicial sí cubría pero el matcher no conectó se vuelve una clase
     inducida espuria.
 
     Al modelo nunca se le pide OWL. Recibe un sintagma y una lista corta de clases candidatas,
@@ -588,7 +589,8 @@ def induce(
     if not found:
         raise StageError(f"no orphan mentions against {version_id}; run match first")
 
-    # Una mención que un puente ya explica no es huérfana: la semilla sí la cubre, lo dijo el
+    # Una mención que un puente ya explica no es huérfana: la ontología inicial sí la cubre, lo
+    # dijo el
     # conocimiento del mundo, e inducirle una clase sería la clase espuria que `ITER-BRIDGE`
     # existe para evitar.
     bridged = bridging.bridged_mentions(conn, version_id)
@@ -1042,12 +1044,12 @@ def axiomatize(
     )
     # `ITER-VALIDATE-6-EVIDENCE`, antes de guardar nada: un axioma `textual` tiene que citar las
     # menciones de las que salió. Aplicado a `world_knowledge` borraría justo los puentes que
-    # hacen útil a la semilla, así que a ésos no se les aplica.
+    # hacen útil a la ontología inicial, así que a ésos no se les aplica.
     assembly.axioms, uncited = validation.evidence(assembly.axioms)
     axiomatization.persist(conn, version_id, assembly.axioms)
 
     # Re-proposición: lo mismo que ya se descartó, volviendo con otros IRIs. Se avisa y no se
-    # bloquea — con semilla reorganizable un rechazo no es permanente (`ITER-FEEDBACK`).
+    # bloquea — con ontología inicial reorganizable un rechazo no es permanente (`ITER-FEEDBACK`).
     repeats = {
         proposal_id: previous
         for proposal_id, shape in shapes.items()

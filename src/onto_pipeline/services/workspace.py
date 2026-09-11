@@ -185,7 +185,7 @@ class Workspace:
     def latest_version(self) -> str | None:
         """Como `resolve_version`, pero un almacén recién creado no es un error.
 
-        `next` y el wizard preguntan esto: antes de la semilla no hay versión y eso es el
+        `next` y el wizard preguntan esto: antes de la ontología inicial no hay versión y eso es el
         estado normal, no una falla.
         """
         try:

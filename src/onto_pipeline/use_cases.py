@@ -22,7 +22,8 @@ Tres cosas que esta carga **no** hace, a propósito:
                      extractor y no al matcher.
     sin normalizar   `initial_ontology.normalize_initial_ontology` acuña IRIs opacos y caza
     erratas, que es el
-     la semilla      tratamiento correcto para una semilla que escribió una persona y el
+     la ontología inicial      tratamiento correcto para una ontología inicial que escribió una
+     persona y el
                      equivocado para una ontología publicada: las anotaciones gold nombran
                      clases por su id propio, así que los ids tienen que sobrevivir intactos.
 

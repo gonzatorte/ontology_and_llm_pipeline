@@ -118,7 +118,7 @@ FOREIGN_SUFFIXES = frozenset({".obo", ".owx", ".ofn"})
 
 
 def load_ontology(path: Path, *, reasoner_lib: Path | None = None) -> Graph:
-    """La semilla como grafo, venga en el formato que venga.
+    """La ontología inicial como grafo, venga en el formato que venga.
 
     Un `.obo` no es un error de entrada: es un formato con un mapeo normativo a OWL 2, y su
     implementación de referencia ya está en `lib/`. Convertirlo es parte de leerlo.
@@ -278,7 +278,8 @@ def detect_typos(entities: list[Entity]) -> list[TypoFinding]:
 def _bucket(lexicon: dict[str, int]) -> dict[tuple[str, int], list[str]]:
     """El léxico indexado por (primera letra, largo), que es lo que `_near_miss` exige igual.
 
-    Sin esto la comparación es cada token contra todo el léxico. Con la semilla de 34 clases no
+    Sin esto la comparación es cada token contra todo el léxico. Con la ontología inicial de 34
+    clases no
     se notaba; con una ontología de verdad —7.159 clases, ~20 mil tokens— son cientos de
     millones de iteraciones y la etapa deja de terminar. El predicado no cambia: son los mismos
     candidatos, buscados en vez de barridos.

@@ -446,7 +446,8 @@ def _decide_branch(console: Console, workspace: Workspace) -> None:
 
 
 def _decide_review(console: Console, workspace: Workspace) -> None:
-    """Lo que espera decisión: erratas de la semilla, conflictos, propiedades funcionales."""
+    """Lo que espera decisión: erratas de la ontología inicial, conflictos, propiedades
+    funcionales."""
     items = evaluate.review_items(workspace)
     if not items:
         return
@@ -480,7 +481,7 @@ DECISIONS = {
 }
 
 
-# ─────────────────────────────  la semilla  ─────────────────────────────
+# ─────────────────────────────  la ontología inicial  ─────────────────────────────
 
 
 def _normalize_initial(console: Console, workspace: Workspace) -> bool:
@@ -495,7 +496,7 @@ def _normalize_initial(console: Console, workspace: Workspace) -> bool:
         return True
 
     console.print(Panel.fit(
-        "[bold]PREP-NORMALIZE[/] · normalizar la semilla\n"
+        "[bold]PREP-NORMALIZE[/] · normalizar la ontología inicial\n"
         "IRIs opacos, etiquetas derivadas del nombre, detección de erratas, y el contexto de "
         "cada clase que todavía no tiene definición.",
         border_style="cyan",
@@ -503,7 +504,7 @@ def _normalize_initial(console: Console, workspace: Workspace) -> bool:
     if not _confirm(console, "¿La normalizo?"):
         return False
 
-    with console.status("normalizando la semilla"):
+    with console.status("normalizando la ontología inicial"):
         result = prep.normalize(workspace)
     render.normalization(console, result)
     if result.committed is not None:

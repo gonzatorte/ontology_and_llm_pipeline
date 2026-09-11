@@ -285,7 +285,8 @@ def export(
 
     **No se escribe ninguna anotación nueva en la ontología.** La procedencia —el linaje, qué
     hizo cada iteración, con qué reglas se derivó el ABox— va en un manifiesto JSON al lado.
-    Escribirla adentro pediría propiedades de anotación que la semilla no declara, y eso saca
+    Escribirla adentro pediría propiedades de anotación que la ontología inicial no declara, y eso
+    saca
     la ontología de OWL 2 DL sin dar ningún error (`initial_ontology.DECLARED_ANNOTATIONS`).
     """
     if fmt not in _SUFFIX:
@@ -349,7 +350,7 @@ def export(
     classes = _named_classes(tbox)
     # Lo que agregó el pipeline es lo que está en la cabeza y no estaba en la raíz. Contar los
     # IRIs bajo `base_iri` daría otra cosa: `PREP-NORMALIZE` acuña opacos para *toda* la
-    # semilla, así que ese prefijo no distingue lo inducido de lo que ya venía.
+    # ontología inicial, así que ese prefijo no distingue lo inducido de lo que ya venía.
     root = _root_classes(workspace, lineage)
     inventory_classes = len(root)
 
@@ -404,7 +405,7 @@ def _history(workspace: Workspace, lineage: list[str]) -> list[Step]:
 
 
 def _root_classes(workspace: Workspace, lineage: list[str]) -> set:
-    """Las clases que traía la versión raíz, o sea la semilla normalizada."""
+    """Las clases que traía la versión raíz, o sea la ontología inicial normalizada."""
     if not lineage:
         return set()
     return _named_classes(workspace.graph(lineage[-1]))

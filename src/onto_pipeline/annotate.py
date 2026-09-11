@@ -141,9 +141,9 @@ kbd { font:11px ui-monospace,monospace; border:1px solid var(--line); border-rad
   <div id="text">__TEXT__</div>
   <aside>
     <div class="sel" id="sel"><em>Seleccioná texto para anotar.</em></div>
-    <input type="search" id="filter" placeholder="Filtrar clases de la semilla…" disabled>
+    <input type="search" id="filter" placeholder="Filtrar clases de la ontología inicial…" disabled>
     <div id="classes"></div>
-    <h2>Clase fuera de la semilla</h2>
+    <h2>Clase fuera de la ontología inicial</h2>
     <input type="text" id="custom" placeholder="Nombre de clase nueva + Enter" disabled>
     <button id="noclass" disabled style="margin-top:8px;width:100%">
       Mención válida sin clase asignable
@@ -205,7 +205,7 @@ function render() {
 
   const inInventory = mentions.filter((m) => m.in_inventory).length;
   document.getElementById("counts").textContent =
-    `${mentions.length} menciones · ${inInventory} con clase de la semilla`;
+    `${mentions.length} menciones · ${inInventory} con clase de la ontología`;
 
   document.getElementById("list").innerHTML = sorted.map((m) =>
     `<div><span><b>${esc(m.gold_class || "—")}</b> `
@@ -266,7 +266,7 @@ document.getElementById("filter").onkeydown = (e) => {
 };
 document.getElementById("custom").onkeydown = (e) => {
   if (e.key === "Enter" && e.target.value.trim()) {
-    add(e.target.value.trim(), false);       // no está en la semilla -> in_inventory false
+    add(e.target.value.trim(), false);       // no está en la ontología -> in_inventory false
     e.target.value = "";
   }
 };
