@@ -96,6 +96,6 @@ o está en el diseño como decisión; los diez se leen en dos minutos.
 
 ## Agregar una etapa
 
-Va en `services/` —una función que recibe una `Session` y devuelve un resultado tipado, sin
+Va en `services/` —una función que recibe un `Workspace` y devuelve un resultado tipado, sin
 importar `typer` ni `rich`—, se muestra en `render.py`, y la llaman las dos interfaces: `cli.py`
 y `wizard.py`. Hay un test que verifica que ningún servicio importe una interfaz.

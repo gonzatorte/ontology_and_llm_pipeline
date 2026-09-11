@@ -1,7 +1,7 @@
 """Las etapas de `PREP`, sin interfaz: corpus adentro, semilla normalizada, glosas, CQ.
 
 Cada función devuelve lo que pasó; ninguna imprime. Lo que antes era el cuerpo de un comando
-de Typer vive acá, y el comando quedó como adaptador — ver `services/session.py` para por qué.
+de Typer vive acá, y el comando quedó como adaptador — ver `services/workspace.py` para por qué.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from ..ingest import discover, markdown_path
 from ..ingest import ingest as ingest_documents
 from ..parse import TEXT_SUFFIXES
 from ..seed import NormalizedSeed, gloss_contexts, normalize_seed
-from .session import Progress, Session, StageError, silent
+from .workspace import Progress, StageError, Workspace, silent
 
 # ─────────────────────────────  PREP-CLASSIFY + PREP-PARSE  ─────────────────────────────
 
@@ -33,7 +33,7 @@ class Ingestion:
 
 
 def ingest(
-    session: Session,
+    workspace: Workspace,
     *,
     documents: list[Path] | None = None,
     limit: int | None = None,
@@ -42,19 +42,19 @@ def ingest(
     """`PREP-CLASSIFY`+`PREP-PARSE`: clasificar páginas, parsear, poblar bloques y Markdown."""
     paths = (
         [path.resolve() for path in documents] if documents
-        else discover(session.config.paths.corpus_root)
+        else discover(workspace.config.paths.corpus_root)
     )
     if not paths:
         formats = ", ".join(sorted(TEXT_SUFFIXES))
         raise StageError(
-            f"no hay documentos bajo {session.config.paths.corpus_root}: se buscan PDFs y "
+            f"no hay documentos bajo {workspace.config.paths.corpus_root}: se buscan PDFs y "
             f"texto plano ({formats})"
         )
     if limit:
         paths = paths[:limit]
 
     progress(f"ingesting {len(paths)} document(s)")
-    result = ingest_documents(session.config, session.conn, paths)
+    result = ingest_documents(workspace.config, workspace.conn, paths)
     return Ingestion(
         paths=paths, outputs=result.outputs, executed=result.executed,
         cached=result.cached, failures=result.failures,
@@ -82,13 +82,13 @@ class SeedNormalization:
         return (self.committed or self.same_state_as).id
 
 
-def normalize(session: Session) -> SeedNormalization:
+def normalize(workspace: Workspace) -> SeedNormalization:
     """`PREP-NORMALIZE`: IRIs opacos, etiquetas derivadas, erratas, contextos de glosa.
 
     No genera glosas: eso es `generate_glosses`, que llama al modelo y por eso es una etapa
     aparte que la interfaz decide si corre.
     """
-    config = session.config
+    config = workspace.config
     seed = normalize_seed(
         config.paths.seed_ontology,
         config.seed.base_iri,
@@ -96,10 +96,10 @@ def normalize(session: Session) -> SeedNormalization:
         reasoner_lib=config.paths.reasoner_lib,
     )
 
-    target = session.ontology_dir() / "seed_normalized.ttl"
+    target = workspace.ontology_dir() / "seed_normalized.ttl"
     seed.graph.serialize(target, format="turtle")
 
-    conn = session.conn
+    conn = workspace.conn
     existing = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
     committed = None
     if existing is None:
@@ -141,7 +141,7 @@ class GlossBootstrap:
 
 
 def generate_glosses(
-    session: Session,
+    workspace: Workspace,
     normalization: SeedNormalization,
     *,
     progress: Progress = silent,
@@ -151,7 +151,7 @@ def generate_glosses(
     La glosa es contra lo que compara `ITER-MATCH`, así que esto es lo que cierra la brecha de
     falsos huérfanos que el matcher muestra mientras cada clase tiene sólo una etiqueta.
     """
-    config, conn = session.config, session.conn
+    config, conn = workspace.config, workspace.conn
     seed, contexts, target = normalization.seed, normalization.contexts, normalization.target
     if not contexts:
         raise StageError("no class is missing a gloss; nothing to bootstrap")
@@ -160,7 +160,7 @@ def generate_glosses(
     stage = llm.settings(config.llm, glosses.STAGE)
     progress(f"glosses: {len(contexts)} at temperature {stage.temperature}")
     result = llm.run(
-        session.ledger(), model, glosses.PROMPT, stage,
+        workspace.ledger(), model, glosses.PROMPT, stage,
         [(context.iri, glosses.payload(context)) for context in contexts],
         glosses.parse,
     )
@@ -208,7 +208,7 @@ class Alignment:
 
 
 def alignment(
-    session: Session, *, version: str | None = None, terms: list[str] | None = None
+    workspace: Workspace, *, version: str | None = None, terms: list[str] | None = None
 ) -> Alignment:
     """¿El corpus habla de lo que la semilla nombra? (`DEBT-QUALITATIVE-PAIR`)
 
@@ -216,8 +216,8 @@ def alignment(
     con los términos declarados: si quien conoce el dominio nombra el vocabulario que lo define
     y nada de eso está en el corpus, no hay matcher que lo arregle.
     """
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     labels = [
         (target.iri, target.label)
@@ -227,11 +227,11 @@ def alignment(
         raise StageError(f"{version_id} no tiene clases con etiqueta")
 
     documents = [
-        markdown_path(session.config, row["id"]).read_text(encoding="utf-8")
-        for row in session.conn.execute(
+        markdown_path(workspace.config, row["id"]).read_text(encoding="utf-8")
+        for row in workspace.conn.execute(
             "SELECT id FROM documents WHERE held_out = 0 ORDER BY id"
         )
-        if markdown_path(session.config, row["id"]).exists()
+        if markdown_path(workspace.config, row["id"]).exists()
     ]
     if not documents:
         raise StageError("no hay documentos parseados; corré ingest primero")
@@ -248,9 +248,9 @@ def alignment(
 # ─────────────────────────────  PREP-CQ  ─────────────────────────────
 
 
-def import_questions(session: Session, path: Path) -> int:
+def import_questions(workspace: Workspace, path: Path) -> int:
     """`PREP-CQ-USER`: preguntas escritas por el usuario, cada una con su SPARQL."""
-    return cq.add(session.conn, cq.read_file(path))
+    return cq.add(workspace.conn, cq.read_file(path))
 
 
 @dataclass
@@ -266,7 +266,7 @@ class ProposedQuestions:
 
 
 def propose_questions(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     per_stratum: int = 12,
@@ -281,9 +281,9 @@ def propose_questions(
     """
     from .deliver import corpus_blocks
 
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     blocks = corpus_blocks(conn)
     if not blocks:
@@ -302,18 +302,18 @@ def propose_questions(
         (cq_type, cq_generation.payload(cq_type, pool, labels, count))
         for cq_type, count in sorted(quota.items()) if count
     ]
-    model = session.model()
+    model = workspace.model()
     stage = llm.settings(config.llm, cq_generation.STAGE)
     progress(f"propose-cq · {len(payloads)} types")
     result = llm.run(
-        session.ledger(), model, cq_generation.PROMPT, stage,
+        workspace.ledger(), model, cq_generation.PROMPT, stage,
         payloads, cq_generation.parse,
     )
 
     answers = {cq_type: answer["questions"] for cq_type, answer in result.outputs.items()}
     existing = [question.question for question in cq.load(conn, status=cq.ACCEPTED)]
     existing += [question.question for question in cq.load(conn, status=cq_generation.PROPOSED)]
-    similarity = session.text_similarity()
+    similarity = workspace.text_similarity()
     filtered = cq_generation.screen(
         answers, {cq_type: pool for cq_type in answers}, existing, similarity=similarity,
     )
@@ -330,18 +330,20 @@ def propose_questions(
     )
 
 
-def list_questions(session: Session, *, status: str = "proposed") -> list:
-    return cq.load(session.conn, status=status)
+def list_questions(workspace: Workspace, *, status: str = "proposed") -> list:
+    return cq.load(workspace.conn, status=status)
 
 
-def decide_questions(session: Session, ids: list[str], *, discard: bool = False) -> tuple[str, int]:
+def decide_questions(
+    workspace: Workspace, ids: list[str], *, discard: bool = False
+) -> tuple[str, int]:
     decision = cq.DISCARDED if discard else cq.ACCEPTED
-    return decision, cq.decide(session.conn, ids, decision)
+    return decision, cq.decide(workspace.conn, ids, decision)
 
 
-def seed_graph(session: Session) -> Graph:
+def seed_graph(workspace: Workspace) -> Graph:
     """La semilla normalizada tal como quedó en disco, para quien la necesite sin versión."""
-    path = session.config.paths.work_dir / "ontology" / "seed_normalized.ttl"
+    path = workspace.config.paths.work_dir / "ontology" / "seed_normalized.ttl"
     if not path.exists():
         raise StageError(f"{path} not found; run normalize-seed first")
     return Graph().parse(path)

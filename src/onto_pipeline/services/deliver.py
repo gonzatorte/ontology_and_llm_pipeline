@@ -19,7 +19,7 @@ from ..chunking import chunk_document
 from ..ingest import STAGE, load_block_objects
 from ..report import build_report
 from ..store import Store
-from .session import Progress, Session, StageError, silent
+from .workspace import Progress, StageError, Workspace, silent
 
 # ─────────────────────────────  lecturas compartidas  ─────────────────────────────
 
@@ -72,32 +72,32 @@ class Comparison:
     root: bool = False
 
 
-def write_diff(session: Session, baseline: str, target: str, result: versioning.Diff) -> Path:
+def write_diff(workspace: Workspace, baseline: str, target: str, result: versioning.Diff) -> Path:
     """Al lado de la ontología entera, porque las dos se leen juntas: el artefacto dice qué es
     la ontología, el diff dice qué le hizo esta iteración."""
-    path = session.ontology_dir() / f"{baseline}-to-{target}.diff.json"
+    path = workspace.ontology_dir() / f"{baseline}-to-{target}.diff.json"
     payload = {"from": baseline, "to": target, **asdict(result)}
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return path
 
 
-def publish_diff(session: Session, version_id: str) -> Comparison | None:
+def publish_diff(workspace: Workspace, version_id: str) -> Comparison | None:
     """Todo comando que commitea una versión reporta el diff contra la anterior."""
-    pair = versioning.diff_with_parent(session.conn, version_id)
+    pair = versioning.diff_with_parent(workspace.conn, version_id)
     if pair is None:
         return None
     parent, result = pair
-    before = session.graph(parent.id)
-    after = session.graph(version_id)
+    before = workspace.graph(parent.id)
+    after = workspace.graph(version_id)
     return Comparison(
         baseline=parent.id, target=version_id, diff=result,
         labels=versioning.label_index(before, after),
-        path=write_diff(session, parent.id, version_id, result),
+        path=write_diff(workspace, parent.id, version_id, result),
     )
 
 
 def compare(
-    session: Session, *, version: str | None = None, against: str | None = None
+    workspace: Workspace, *, version: str | None = None, against: str | None = None
 ) -> Comparison:
     """Diff semántico entre dos versiones (`ITER-APPLY`).
 
@@ -105,35 +105,35 @@ def compare(
     carril: una serialización reordenada no es un cambio, y un renombre es un cambio de
     etiqueta antes que revuelo de axiomas.
     """
-    target = session.resolve_version(version)
+    target = workspace.resolve_version(version)
     if against is None:
-        pair = versioning.diff_with_parent(session.conn, target)
+        pair = versioning.diff_with_parent(workspace.conn, target)
         if pair is None:
             return Comparison(
                 baseline=target, target=target, diff=versioning.Diff(), labels={}, root=True
             )
         baseline, result = pair[0].id, pair[1]
     else:
-        baseline = session.resolve_version(against)
+        baseline = workspace.resolve_version(against)
         result = None
 
-    before = session.graph(baseline)
-    after = session.graph(target)
+    before = workspace.graph(baseline)
+    after = workspace.graph(target)
     if result is None:
         result = versioning.diff(before, after)
     return Comparison(
         baseline=baseline, target=target, diff=result,
         labels=versioning.label_index(before, after),
-        path=write_diff(session, baseline, target, result),
+        path=write_diff(workspace, baseline, target, result),
     )
 
 
-def version_rows(session: Session) -> list[dict]:
+def version_rows(workspace: Workspace) -> list[dict]:
     """El DAG de versiones. Las ramas no elegidas se conservan y siguen alcanzables."""
-    versioning.install(session.conn)
+    versioning.install(workspace.conn)
     return [
         dict(row)
-        for row in session.conn.execute("SELECT * FROM versions ORDER BY created_at")
+        for row in workspace.conn.execute("SELECT * FROM versions ORDER BY created_at")
     ]
 
 
@@ -147,19 +147,19 @@ class Telemetry:
     ingest_failures: list[dict]
 
 
-def telemetry(session: Session) -> Telemetry:
+def telemetry(workspace: Workspace) -> Telemetry:
     """Unidades de trabajo y costo por etapa, clases de página en todo el corpus."""
-    ledger = session.ledger()
+    ledger = workspace.ledger()
     stages = [
         {"stage": row["stage"], **ledger.stage_report(row["stage"])}
-        for row in session.conn.execute(
+        for row in workspace.conn.execute(
             "SELECT DISTINCT stage FROM work_units ORDER BY stage"
         )
     ]
     # La razón sale del JSON en Python y no con `json_extract`: esa función es de SQLite y no
     # existe igual en Postgres, y agrupar acá cuesta lo mismo que agruparlo allá.
     tally: dict[tuple[str, str], int] = {}
-    for row in session.conn.execute("SELECT class, signals FROM page_classification"):
+    for row in workspace.conn.execute("SELECT class, signals FROM page_classification"):
         reason = (json.loads(row["signals"]) if row["signals"] else {}).get("reason") or ""
         tally[(row["class"], reason)] = tally.get((row["class"], reason), 0) + 1
     page_classes = [
@@ -167,36 +167,36 @@ def telemetry(session: Session) -> Telemetry:
         for (name, reason), count in sorted(tally.items(), key=lambda item: -item[1])
     ]
     failures = [
-        dict(row) for row in session.conn.execute(
+        dict(row) for row in workspace.conn.execute(
             "SELECT key, error FROM work_units WHERE status = 'failed' AND stage = ?", (STAGE,)
         )
     ]
     return Telemetry(stages=stages, page_classes=page_classes, ingest_failures=failures)
 
 
-def reports(session: Session, *, doc_id: str | None = None) -> list[Path]:
+def reports(workspace: Workspace, *, doc_id: str | None = None) -> list[Path]:
     """`DELIVERABLES-PENDING-PARSER-EVAL`: HTML autocontenido para evaluar el parseo a mano."""
     ids = [doc_id] if doc_id else [
-        row["id"] for row in session.conn.execute("SELECT id FROM documents ORDER BY id")
+        row["id"] for row in workspace.conn.execute("SELECT id FROM documents ORDER BY id")
     ]
     if not ids:
         raise StageError("nothing ingested yet")
-    return [build_report(session.config, session.conn, identifier) for identifier in ids]
+    return [build_report(workspace.config, workspace.conn, identifier) for identifier in ids]
 
 
-def chunks(session: Session, doc_id: str) -> list:
+def chunks(workspace: Workspace, doc_id: str) -> list:
     """Las unidades de extracción de un documento. Derivadas, nunca guardadas."""
     found = chunk_document(
-        load_block_objects(session.conn, doc_id),
-        session.config.chunking.target_chars,
-        session.config.chunking.max_chars,
+        load_block_objects(workspace.conn, doc_id),
+        workspace.config.chunking.target_chars,
+        workspace.config.chunking.max_chars,
     )
     if not found:
         raise StageError(f"no blocks for {doc_id}")
     return found
 
 
-def blocks(session: Session, doc_id: str, *, page: int | None = None) -> list[dict]:
+def blocks(workspace: Workspace, doc_id: str, *, page: int | None = None) -> list[dict]:
     """El almacén de bloques de un documento, para inspeccionar procedencia."""
     query = "SELECT * FROM blocks WHERE document_id = ?"
     params: list = [doc_id]
@@ -204,7 +204,7 @@ def blocks(session: Session, doc_id: str, *, page: int | None = None) -> list[di
         query += " AND page = ?"
         params.append(page)
     return [
-        dict(row) for row in session.conn.execute(query + " ORDER BY page, ordinal", params)
+        dict(row) for row in workspace.conn.execute(query + " ORDER BY page, ordinal", params)
     ]
 
 
@@ -249,7 +249,7 @@ class Delivery:
 
 
 def export(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     out: Path | None = None,
@@ -280,12 +280,12 @@ def export(
     if fmt not in _SUFFIX:
         raise StageError(f"format is {TRIG} or {TURTLE}, not {fmt!r}")
 
-    version_id = session.resolve_version(version)
-    tbox = session.graph(version_id)
+    version_id = workspace.resolve_version(version)
+    tbox = workspace.graph(version_id)
     warnings: list[str] = []
 
-    lineage = versioning.lineage(session.conn, version_id)
-    history = _history(session, lineage)
+    lineage = versioning.lineage(workspace.conn, version_id)
+    history = _history(workspace, lineage)
 
     dataset = Dataset()
     for triple in tbox:
@@ -296,11 +296,11 @@ def export(
     if include_abox:
         from .iterate import regenerate
 
-        path = session.abox_path(version_id)
+        path = workspace.abox_path(version_id)
         if refresh_abox:
             progress("regenerating the ABox before exporting it")
             try:
-                outcome = regenerate(session, version=version_id)
+                outcome = regenerate(workspace, version=version_id)
                 regenerated = outcome.wrote
             except StageError as exc:
                 warnings.append(f"ABox not refreshed: {exc}")
@@ -317,7 +317,7 @@ def export(
             )
             include_abox = False
 
-    target = Path(out) if out else session.ontology_dir() / f"{version_id}.enriched{_SUFFIX[fmt]}"
+    target = Path(out) if out else workspace.ontology_dir() / f"{version_id}.enriched{_SUFFIX[fmt]}"
     target.parent.mkdir(parents=True, exist_ok=True)
     if fmt == TRIG:
         target.write_text(dataset.serialize(format=TRIG), encoding="utf-8")
@@ -339,7 +339,7 @@ def export(
     # Lo que agregó el pipeline es lo que está en la cabeza y no estaba en la raíz. Contar los
     # IRIs bajo `base_iri` daría otra cosa: `PREP-NORMALIZE` acuña opacos para *toda* la
     # semilla, así que ese prefijo no distingue lo inducido de lo que ya venía.
-    root = _root_classes(session, lineage)
+    root = _root_classes(workspace, lineage)
     seed_classes = len(root)
 
     manifest = target.with_suffix(target.suffix + ".manifest.json")
@@ -371,7 +371,7 @@ def export(
     )
 
 
-def _history(session: Session, lineage: list[str]) -> list[Step]:
+def _history(workspace: Workspace, lineage: list[str]) -> list[Step]:
     """Qué aportó cada iteración, de la raíz a la cabeza.
 
     `lineage` viene de la cabeza hacia atrás; se da vuelta porque una historia se lee en el
@@ -379,11 +379,11 @@ def _history(session: Session, lineage: list[str]) -> list[Step]:
     """
     steps: list[Step] = []
     for version_id in reversed(lineage):
-        version, graph = versioning.load(session.conn, version_id)
+        version, graph = versioning.load(workspace.conn, version_id)
         if version.parent_id is None:
             steps.append(Step(version_id, None, version.note, len(graph), 0, 0))
             continue
-        parent_graph = session.graph(version.parent_id)
+        parent_graph = workspace.graph(version.parent_id)
         result = versioning.diff(parent_graph, graph)
         steps.append(Step(
             version_id, version.parent_id, version.note,
@@ -392,11 +392,11 @@ def _history(session: Session, lineage: list[str]) -> list[Step]:
     return steps
 
 
-def _root_classes(session: Session, lineage: list[str]) -> set:
+def _root_classes(workspace: Workspace, lineage: list[str]) -> set:
     """Las clases que traía la versión raíz, o sea la semilla normalizada."""
     if not lineage:
         return set()
-    return _named_classes(session.graph(lineage[-1]))
+    return _named_classes(workspace.graph(lineage[-1]))
 
 
 def _named_classes(graph: Graph) -> set:

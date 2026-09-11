@@ -45,7 +45,7 @@ from ..ingest import (
 )
 from ..store import Store
 from .deliver import Comparison, corpus_blocks, publish_diff
-from .session import Progress, Session, StageError, silent, table_exists
+from .workspace import Progress, StageError, Workspace, silent, table_exists
 
 # ─────────────────────────────  lecturas compartidas  ─────────────────────────────
 
@@ -72,12 +72,12 @@ def label_similarity(matcher, left, right) -> list[list[float]]:
     return [[dot(a, b) for b in known] for a in proposed]
 
 
-def _documents(session: Session, doc_id: str | None, include_held_out: bool) -> list[str]:
+def _documents(workspace: Workspace, doc_id: str | None, include_held_out: bool) -> list[str]:
     if doc_id:
         return [doc_id]
-    ids = process_documents(session.conn)
+    ids = process_documents(workspace.conn)
     if include_held_out:
-        ids += held_out_documents(session.conn)
+        ids += held_out_documents(workspace.conn)
     return ids
 
 
@@ -108,7 +108,7 @@ class Extraction:
 
 
 def extract(
-    session: Session,
+    workspace: Workspace,
     *,
     doc_id: str | None = None,
     include_held_out: bool = False,
@@ -119,10 +119,10 @@ def extract(
     Los documentos retenidos se saltean salvo que se los pida: son el conjunto de retención, y
     correr el proceso sobre ellos mediría al pipeline contra su propia entrada.
     """
-    config, conn = session.config, session.conn
-    model = session.model()
+    config, conn = workspace.config, workspace.conn
+    model = workspace.model()
     stage = llm.settings(config.llm, extraction.STAGE)
-    ledger = session.ledger()
+    ledger = workspace.ledger()
 
     if doc_id:
         ids, skipped = [doc_id], []
@@ -203,7 +203,7 @@ class Coreference:
 
 
 def corefer(
-    session: Session,
+    workspace: Workspace,
     *,
     doc_id: str | None = None,
     include_held_out: bool = False,
@@ -215,13 +215,13 @@ def corefer(
     revisar: un marcador que no existe o que se reclama dos veces se rechaza en vez de enlazar
     en silencio las menciones equivocadas.
     """
-    config, conn = session.config, session.conn
-    model = session.model()
+    config, conn = workspace.config, workspace.conn
+    model = workspace.model()
     stage = llm.settings(config.llm, coreference.STAGE)
-    ledger = session.ledger()
+    ledger = workspace.ledger()
 
     reported: list[DocumentCoreference] = []
-    for identifier in _documents(session, doc_id, include_held_out):
+    for identifier in _documents(workspace, doc_id, include_held_out):
         mentions = extraction.load(conn, identifier)
         if not mentions:
             continue
@@ -264,7 +264,7 @@ class Matching:
 
 
 def match(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     include_held_out: bool = False,
@@ -278,10 +278,10 @@ def match(
     from ..embeddings import CrossEncoderReranker, EncoderUnavailable, SentenceTransformerEncoder
     from ..matching import ASK, Matcher
 
-    config, conn = session.config, session.conn
+    config, conn = workspace.config, workspace.conn
     versioning.install(conn)
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     targets = typing_store.targets_from(graph, config.matching.match_against)
     if not targets:
@@ -289,7 +289,7 @@ def match(
 
     rows = [
         mention
-        for identifier in _documents(session, None, include_held_out)
+        for identifier in _documents(workspace, None, include_held_out)
         for mention in extraction.load(conn, identifier)
     ]
     if not rows:
@@ -369,16 +369,16 @@ class GreyQueue:
 
 
 def grey_pending(
-    session: Session, *, version: str | None = None, limit: int | None = None
+    workspace: Workspace, *, version: str | None = None, limit: int | None = None
 ) -> GreyQueue:
     """Los pares de zona gris sin contestar (`ITER-MATCH`).
 
     La política conservadora no los tipa, y nada río abajo los trata como tipados. Esperan acá
     en vez de decidirse por un umbral, que es el motivo entero de que la zona exista.
     """
-    version_id = session.resolve_version(version)
-    labels = versioning.label_index(session.graph(version_id))
-    rows = typing_store.pending(session.conn, version_id, limit or 0)
+    version_id = workspace.resolve_version(version)
+    labels = versioning.label_index(workspace.graph(version_id))
+    rows = typing_store.pending(workspace.conn, version_id, limit or 0)
     return GreyQueue(
         version_id=version_id,
         pairs=[
@@ -398,7 +398,7 @@ def grey_pending(
 
 
 def grey_answer(
-    session: Session,
+    workspace: Workspace,
     mention_id: str,
     *,
     version: str | None = None,
@@ -413,8 +413,8 @@ def grey_answer(
     sobreviven al próximo `match` — preguntar lo mismo en cada corrida es como se entrena a
     alguien a dejar de contestar.
     """
-    version_id = session.resolve_version(version)
-    row = session.conn.execute(
+    version_id = workspace.resolve_version(version)
+    row = workspace.conn.execute(
         "SELECT iri, score FROM mention_typing WHERE mention_id = ? AND version_id = ?",
         (mention_id, version_id),
     ).fetchone()
@@ -425,22 +425,22 @@ def grey_answer(
 
     chosen = None if none_of_these else to
     typing_store.answer(
-        session.conn, mention_id, chosen, offered=row["iri"], score=row["score"], why=comment
+        workspace.conn, mention_id, chosen, offered=row["iri"], score=row["score"], why=comment
     )
     return chosen
 
 
-def grey_labels(session: Session) -> list[dict]:
+def grey_labels(workspace: Workspace) -> list[dict]:
     """Las etiquetas aceptar/rechazar que estas respuestas acumularon (`ITER-TUNE`).
 
     Nadie las anota a propósito: son un subproducto de alguien haciendo su trabajo, y son la
     única señal de entrenamiento que este diseño produce para ajustar el re-ranker.
     """
-    return typing_store.labels(session.conn)
+    return typing_store.labels(workspace.conn)
 
 
-def grey_export(session: Session, path: Path) -> int:
-    rows = typing_store.labels(session.conn)
+def grey_export(workspace: Workspace, path: Path) -> int:
+    rows = typing_store.labels(workspace.conn)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8"
@@ -468,7 +468,7 @@ class Bridging:
 
 
 def bridge(
-    session: Session, *, version: str | None = None, progress: Progress = silent
+    workspace: Workspace, *, version: str | None = None, progress: Progress = silent
 ) -> Bridging:
     """`ITER-BRIDGE`: relacionar huérfanas con clases de la semilla por conocimiento del mundo.
 
@@ -480,9 +480,9 @@ def bridge(
     y contesta una pregunta atómica — un ejemplo de eso, un tipo de eso, o ninguna. Una clase
     que no se le ofreció es una respuesta rechazada, no un puente.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     found = orphans(conn, version_id)
     if not found:
@@ -492,7 +492,7 @@ def bridge(
     if not targets:
         raise StageError(f"{version_id} has no classes to bridge to")
 
-    matcher = session.matcher()
+    matcher = workspace.matcher()
     surfaces = [row["surface_text"] for row in found]
     items = bridging.candidates(
         found, targets,
@@ -511,7 +511,7 @@ def bridge(
     stage = llm.settings(config.llm, bridging.STAGE)
     progress(f"ITER-BRIDGE · {len(items)} phrases from {len(found)} orphan mentions")
     result = llm.run(
-        session.ledger(), session.model(), bridging.PROMPT, stage,
+        workspace.ledger(), workspace.model(), bridging.PROMPT, stage,
         [(item.id, bridging.payload(item)) for item in items],
         bridging.parse,
     )
@@ -556,7 +556,7 @@ class Induction:
 
 
 def induce(
-    session: Session, *, version: str | None = None, progress: Progress = silent
+    workspace: Workspace, *, version: str | None = None, progress: Progress = silent
 ) -> Induction:
     """`ITER-INDUCE`: volver clases propuestas a las menciones huérfanas.
 
@@ -564,9 +564,9 @@ def induce(
     existente más cercana como padre *candidato* para que `ITER-AXIOMATIZE` decida, no como
     subsunción asertada.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     found = orphans(conn, version_id)
     if not found:
@@ -584,7 +584,7 @@ def induce(
                 proposals=[], declined=0, duplicates={}, labels={},
             )
 
-    matcher = session.matcher()
+    matcher = workspace.matcher()
     surfaces = [row["surface_text"] for row in found]
     clusters = induction.cluster(
         [row["id"] for row in found], surfaces, matcher.vectors_for(surfaces),
@@ -609,7 +609,7 @@ def induce(
     stage = llm.settings(config.llm, induction.STAGE)
     progress(f"naming {len(clusters)} clusters from {len(found)} orphans")
     result = llm.run(
-        session.ledger(), session.model(), induction.PROMPT, stage,
+        workspace.ledger(), workspace.model(), induction.PROMPT, stage,
         [
             (item.id, induction.payload(
                 item, max_phrases=config.induction.max_phrases_in_prompt))
@@ -690,23 +690,23 @@ class Chain:
         return not self.blocked and self.structural.rejected
 
 
-def run_chain(session: Session, version_id: str, graph: Graph) -> Chain:
+def run_chain(workspace: Workspace, version_id: str, graph: Graph) -> Chain:
     """`ITER-VALIDATE-1-ELK`, `-2-HERMIT`, `-4-ONTOCLEAN`, `-5-PITFALLS`, `-7-STRUCTURE`.
 
     Una sola implementación: `axiomatize` y `branch` tenían dos copias de esto y era cuestión
     de tiempo que se separaran — una rama cambia *qué* axiomas se aplican, nunca si el
     razonador puede rechazarlos.
     """
-    reasoners = session.reasoners(
+    reasoners = workspace.reasoners(
         why="Applying without the reasoner would skip the filter that makes this safe."
     )
     ontology = reasoners.load(graph)
     return Chain(
         elk=reasoners.elk(
-            ontology, coverage_threshold=session.config.reasoner.elk_coverage_threshold
+            ontology, coverage_threshold=workspace.config.reasoner.elk_coverage_threshold
         ),
         hermit=reasoners.hermit(ontology),
-        ontoclean=ontoclean_verdict(session.conn, version_id, graph),
+        ontoclean=ontoclean_verdict(workspace.conn, version_id, graph),
         pitfalls=validation.pitfalls(graph),
         structural=structural.check(graph),
         missing_imports=list(reasoners.missing_imports),
@@ -736,19 +736,19 @@ def ontoclean_verdict(conn, version_id: str, graph: Graph) -> validation.Verdict
     )
 
 
-def shapes_verdict(session: Session, version_id: str) -> validation.Verdict:
+def shapes_verdict(workspace: Workspace, version_id: str) -> validation.Verdict:
     """`ITER-VALIDATE-3-SHACL`, sobre el ABox y no sobre la TBox.
 
     Las restricciones de forma son sobre los datos de instancia. Sin shapes escritas reporta
     que no corrió, que no es lo mismo que pasar.
     """
-    shapes_path = session.config.paths.work_dir / "shapes.ttl"
+    shapes_path = workspace.config.paths.work_dir / "shapes.ttl"
     shapes_graph = validation.load_shapes(shapes_path)
     if shapes_graph is None:
         return validation.Verdict(
             "SHACL", validation.SKIPPED, f"no shapes at {shapes_path.name}; nothing to check"
         )
-    abox = session.abox_path(version_id)
+    abox = workspace.abox_path(version_id)
     if not abox.exists():
         return validation.Verdict(
             "SHACL", validation.SKIPPED, "no ABox for this version; run regenerate"
@@ -774,46 +774,46 @@ class Validation:
     elk_only: bool = False
 
 
-def validate(session: Session, *, version: str | None = None) -> Validation:
+def validate(workspace: Workspace, *, version: str | None = None) -> Validation:
     """La cadena de filtros sobre una versión, más la detección de perfil de `PREP-NORMALIZE`.
 
     Si ELK ya rechazó, HermiT no corre: el hallazgo de ELK es real y el más caro no aporta.
     """
     from ..reasoning import REJECTED
 
-    versioning.install(session.conn)
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    versioning.install(workspace.conn)
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
-    reasoners = session.reasoners()
+    reasoners = workspace.reasoners()
     ontology = reasoners.load(graph)
     profile = reasoners.profile(ontology)
     elk = reasoners.elk(
-        ontology, coverage_threshold=session.config.reasoner.elk_coverage_threshold
+        ontology, coverage_threshold=workspace.config.reasoner.elk_coverage_threshold
     )
     if elk.verdict == REJECTED:
         chain = Chain(
             elk=elk, hermit=_NoHermit(),
-            ontoclean=ontoclean_verdict(session.conn, version_id, graph),
+            ontoclean=ontoclean_verdict(workspace.conn, version_id, graph),
             pitfalls=validation.pitfalls(graph), structural=structural.check(graph),
             missing_imports=list(reasoners.missing_imports),
         )
         return Validation(
             version_id=version_id, profile=profile, chain=chain,
-            shacl=shapes_verdict(session, version_id),
-            target_profile=session.config.owl_profile.target, elk_only=True,
+            shacl=shapes_verdict(workspace, version_id),
+            target_profile=workspace.config.owl_profile.target, elk_only=True,
         )
 
     chain = Chain(
         elk=elk, hermit=reasoners.hermit(ontology),
-        ontoclean=ontoclean_verdict(session.conn, version_id, graph),
+        ontoclean=ontoclean_verdict(workspace.conn, version_id, graph),
         pitfalls=validation.pitfalls(graph), structural=structural.check(graph),
         missing_imports=list(reasoners.missing_imports),
     )
     return Validation(
         version_id=version_id, profile=profile, chain=chain,
-        shacl=shapes_verdict(session, version_id),
-        target_profile=session.config.owl_profile.target,
+        shacl=shapes_verdict(workspace, version_id),
+        target_profile=workspace.config.owl_profile.target,
     )
 
 
@@ -851,7 +851,7 @@ class Application:
 
 
 def apply_axioms(
-    session: Session,
+    workspace: Workspace,
     version_id: str,
     graph: Graph,
     axioms: list,
@@ -868,10 +868,10 @@ def apply_axioms(
     la forma y el spec deja pasarlas explícitamente; el rechazo del razonador y el de OntoClean
     no se pasan por arriba de ninguna manera.
     """
-    conn = session.conn
+    conn = workspace.conn
     candidate = axiomatization.apply(graph, axioms)
     progress("validating the candidate ontology")
-    chain = run_chain(session, version_id, candidate)
+    chain = run_chain(workspace, version_id, candidate)
     result = Application(
         chain=chain, before=len(graph), after=len(candidate)
     )
@@ -899,7 +899,7 @@ def apply_axioms(
         conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
         branch_id=branch_id, note=note,
     )
-    result.diff = publish_diff(session, result.committed.id)
+    result.diff = publish_diff(workspace, result.committed.id)
     return result
 
 
@@ -921,7 +921,7 @@ class Axiomatization:
 
 
 def axiomatize(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     override_structural: bool = False,
@@ -932,9 +932,9 @@ def axiomatize(
     Al modelo se le hace una pregunta atómica por propuesta —un tipo de, un ejemplo de, o
     ninguna— y el código escribe el OWL.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     proposals = induction.load(conn, version_id)
     if not proposals:
@@ -959,7 +959,7 @@ def axiomatize(
     # ninguno.
     payloads = []
     shapes: dict[str, str] = {}
-    matcher = session.matcher()
+    matcher = workspace.matcher()
     has_history = bool(
         conn.execute("SELECT 1 FROM decisions LIMIT 1").fetchone()
         if table_exists(conn, "decisions") else None
@@ -1003,7 +1003,7 @@ def axiomatize(
     stage = llm.settings(config.llm, axiomatization.STAGE)
     progress(f"axiomatize · {len(proposals)} proposals")
     result = llm.run(
-        session.ledger(), session.model(), axiomatization.PROMPT, stage,
+        workspace.ledger(), workspace.model(), axiomatization.PROMPT, stage,
         payloads, axiomatization.parse,
     )
 
@@ -1041,7 +1041,7 @@ def axiomatize(
     if not assembly.axioms:
         return report
     report.application = apply_axioms(
-        session, version_id, graph, assembly.axioms,
+        workspace, version_id, graph, assembly.axioms,
         note=f"{len(assembly.minted)} induced classes, applied directly",
         override_structural=override_structural, progress=progress,
     )
@@ -1069,7 +1069,7 @@ class Branching:
 
 
 def survey_branches(
-    session: Session, *, version: str | None = None, progress: Progress = silent
+    workspace: Workspace, *, version: str | None = None, progress: Progress = silent
 ) -> Branching:
     """Encontrar los ejes de decisión en los axiomas propuestos, y ponérselos al usuario.
 
@@ -1083,9 +1083,9 @@ def survey_branches(
     """
     from ..reasoning import ReasonerUnavailable
 
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     axioms = axiomatization.load(conn, version_id)
     if not axioms:
@@ -1097,7 +1097,7 @@ def survey_branches(
 
     no_reasoner = ""
     try:
-        reasoners = session.reasoners()
+        reasoners = workspace.reasoners()
         progress("looking for logical axes")
         hermit = reasoners.hermit(reasoners.load(axiomatization.apply(graph, axioms)))
         conflict_sets, pre_existing = branching.conflict_sets(axioms, hermit.justifications)
@@ -1107,7 +1107,7 @@ def survey_branches(
         no_reasoner, conflict_sets, pre_existing = str(exc), [], []
 
     axes = branching.logical_axes(conflict_sets, axioms, labels)
-    similarity = session.text_similarity()
+    similarity = workspace.text_similarity()
     axes += branching.modelling_axes(
         situation,
         similarity=similarity,
@@ -1127,7 +1127,7 @@ def survey_branches(
     if plan.automatic:
         if config.branching.auto_apply_when_no_axis:
             report.application = apply_axioms(
-                session, version_id, graph, axioms,
+                workspace, version_id, graph, axioms,
                 note=f"{len(axioms)} axioms applied automatically: no decision axis",
                 progress=progress,
             )
@@ -1167,7 +1167,7 @@ class BranchChoice:
 
 
 def choose_branch(
-    session: Session,
+    workspace: Workspace,
     branch_id: str,
     *,
     version: str | None = None,
@@ -1182,9 +1182,9 @@ def choose_branch(
     registrada para un estado que nunca se aplicó diría que el usuario eligió algo que la
     ontología nunca contuvo.
     """
-    conn = session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    conn = workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
     invalid = list(invalid or [])
 
     axioms = axiomatization.load(conn, version_id)
@@ -1198,7 +1198,7 @@ def choose_branch(
 
     chosen = [by_id[axiom_id] for axiom_id in json.loads(row["add_axioms"]) if axiom_id in by_id]
     application = apply_axioms(
-        session, version_id, graph, chosen,
+        workspace, version_id, graph, chosen,
         note=f"branch {branch_id}: {why}" if why else f"branch {branch_id}",
         branch_id=branch_id, override_structural=override_structural, progress=progress,
     )
@@ -1282,7 +1282,7 @@ class Enrichment:
 
 
 def enrich(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     limit: int | None = None,
@@ -1299,9 +1299,9 @@ def enrich(
     mención de un documento contribuyente contra esa clase no es evidencia independiente de
     cobertura; `circular` es lo que las hace contables.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     targets = typing_store.targets_from(graph, "label")
     if not targets:
@@ -1339,7 +1339,7 @@ def enrich(
     stage = llm.settings(config.llm, enrichment.STAGE)
     progress(f"enrich · {len(payloads)} classes")
     result = llm.run(
-        session.ledger(), session.model(), enrichment.PROMPT, stage,
+        workspace.ledger(), workspace.model(), enrichment.PROMPT, stage,
         payloads, enrichment.parse,
     )
 
@@ -1365,7 +1365,7 @@ def enrich(
         conn, enriched, version_id=next_id, parent_id=version_id, iteration=1,
         note=f"glosses enriched from the corpus ({len(changed)} classes; same logical state)",
     )
-    report.diff = publish_diff(session, report.committed.id)
+    report.diff = publish_diff(workspace, report.committed.id)
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM mention_typing WHERE version_id = ? AND iri IS NULL",
         (version_id,),
@@ -1386,22 +1386,22 @@ class Circularity:
         return len(self.flagged) / self.typed if self.typed else 0.0
 
 
-def circular(session: Session, *, version: str | None = None) -> Circularity:
+def circular(workspace: Workspace, *, version: str | None = None) -> Circularity:
     """Matches cuyo propio documento ayudó a escribir la clase que matchearon.
 
     No son errores, y no se tiran. Son los que no deben contarse como evidencia independiente
     de cobertura: la clase se describió usando ese documento, así que el match es en parte el
     pipeline reconociendo su propia escritura.
     """
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
-    typed = session.conn.execute(
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
+    typed = workspace.conn.execute(
         "SELECT COUNT(*) AS n FROM mention_typing WHERE version_id = ? AND iri IS NOT NULL",
         (version_id,),
     ).fetchone()["n"]
     return Circularity(
         version_id=version_id,
-        flagged=enrichment.circular_matches(session.conn, version_id),
+        flagged=enrichment.circular_matches(workspace.conn, version_id),
         typed=typed, labels=versioning.label_index(graph),
     )
 
@@ -1422,7 +1422,7 @@ class Metaproperties:
 
 
 def metaproperties(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     limit: int | None = None,
@@ -1438,9 +1438,9 @@ def metaproperties(
     Las etiquetas cruzan versiones a propósito: una metapropiedad es un hecho sobre el
     concepto, no sobre el estado de la ontología.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
 
     targets = typing_store.targets_from(graph, "label")
     known = ontoclean.load(conn, version_id)
@@ -1468,7 +1468,7 @@ def metaproperties(
     stage = llm.settings(config.llm, ontoclean.STAGE)
     progress(f"metaproperties · {len(payloads)} classes")
     result = llm.run(
-        session.ledger(), session.model(), ontoclean.PROMPT, stage,
+        workspace.ledger(), workspace.model(), ontoclean.PROMPT, stage,
         payloads, ontoclean.parse,
     )
 
@@ -1504,16 +1504,16 @@ class Conflicts:
     notes: list[str] = field(default_factory=list)
 
 
-def survey_conflicts(session: Session, *, version: str | None = None) -> Conflicts:
+def survey_conflicts(workspace: Workspace, *, version: str | None = None) -> Conflicts:
     """Entidades que dos documentos tiparon distinto (`ITER-CONFLICTS`).
 
     El filtro de volumen es el punto: un conflicto sobre el que el razonador no se rompería se
     notariza sin preguntar, porque decidir caso por caso es la revisión manual que esto existe
     para evitar. Sólo los que hacen incompatible a una clase llegan a `review`, y serán pocos.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
     labels = versioning.label_index(graph)
 
     rules = mapping.rules_from_config(config.mapping, config.seed.base_iri)
@@ -1532,7 +1532,7 @@ def survey_conflicts(session: Session, *, version: str | None = None) -> Conflic
         groups, typings, accepted_zones=rules.type_from, above=conflicts.ancestors(graph),
     )
     incompatible, source, notes = _incompatibilities(
-        session, graph, conflicts.candidate_pairs(found)
+        workspace, graph, conflicts.candidate_pairs(found)
     )
     conflicts.classify(found, incompatible)
 
@@ -1552,7 +1552,7 @@ def survey_conflicts(session: Session, *, version: str | None = None) -> Conflic
     )
 
 
-def _incompatibilities(session: Session, graph: Graph, pairs):
+def _incompatibilities(workspace: Workspace, graph: Graph, pairs):
     """Lo que la TBox llama incompatible, del razonador cuando hay uno.
 
     La disjointness asertada-y-heredada es una cota inferior: dos clases pueden ser
@@ -1567,7 +1567,7 @@ def _incompatibilities(session: Session, graph: Graph, pairs):
     if not pairs:
         return asserted, "asserted disjointness", []
     try:
-        reasoners = session.reasoners()
+        reasoners = workspace.reasoners()
         return asserted | reasoners.incompatible_pairs(graph, pairs), "the reasoner", []
     except (StageError, ReasonerUnavailable) as exc:
         return asserted, "asserted disjointness", [f"no reasoner ({exc})"]
@@ -1576,7 +1576,7 @@ def _incompatibilities(session: Session, graph: Graph, pairs):
 
 
 def mark(
-    session: Session, mentions: list[str], how: str, *, comment: str = ""
+    workspace: Workspace, mentions: list[str], how: str, *, comment: str = ""
 ) -> int:
     """Marcar falsa una aserción. `refuted` y `misextracted` son señales opuestas.
 
@@ -1585,22 +1585,22 @@ def mark(
     `ITER-EXTRACT`, también sale del ABox, y va al conjunto de evaluación.
     """
     try:
-        return conflicts.mark(session.conn, mentions, how, comment)
+        return conflicts.mark(workspace.conn, mentions, how, comment)
     except ValueError as exc:
         raise StageError(str(exc)) from exc
 
 
-def export_misextractions(session: Session, path: Path) -> Path:
+def export_misextractions(workspace: Workspace, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(conflicts.export_misextractions(session.conn) + "\n", encoding="utf-8")
+    path.write_text(conflicts.export_misextractions(workspace.conn) + "\n", encoding="utf-8")
     return path
 
 
 # ─────────────────────────────  propiedades funcionales  ─────────────────────────────
 
 
-def _abox(session: Session, version_id: str) -> Graph:
-    path = session.abox_path(version_id)
+def _abox(workspace: Workspace, version_id: str) -> Graph:
+    path = workspace.abox_path(version_id)
     if not path.exists():
         raise StageError(
             f"no ABox for {version_id}; run regenerate first — this reads the instance data, "
@@ -1622,7 +1622,7 @@ class FunctionalCandidates:
 
 
 def survey_functional(
-    session: Session, *, version: str | None = None
+    workspace: Workspace, *, version: str | None = None
 ) -> FunctionalCandidates:
     """Revisar el ABox buscando candidatas a propiedad funcional, y preguntar.
 
@@ -1630,18 +1630,18 @@ def survey_functional(
     ABox es inválido de principio bajo mundo abierto: que cada entidad tenga un solo valor
     prueba que no se vio contraejemplo, no que no exista.
     """
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
-    abox = _abox(session, version_id)
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
+    abox = _abox(workspace, version_id)
 
     supports = functional.survey(abox)
     labels = versioning.label_index(graph)
     items = functional.findings(
         supports, labels,
-        min_individuals=session.config.mapping.functional_min_individuals,
+        min_individuals=workspace.config.mapping.functional_min_individuals,
     )
     sync = review.sync(
-        session.conn, items, version_id=version_id, kinds=[functional.FUNCTIONAL_CANDIDATE]
+        workspace.conn, items, version_id=version_id, kinds=[functional.FUNCTIONAL_CANDIDATE]
     )
     return FunctionalCandidates(
         version_id=version_id, supports=supports, items=items, review_added=sync.added,
@@ -1660,7 +1660,7 @@ class FunctionalDeclaration:
 
 
 def declare_functional(
-    session: Session,
+    workspace: Workspace,
     property_iri: str,
     *,
     version: str | None = None,
@@ -1672,9 +1672,9 @@ def declare_functional(
     funda dos entidades distintas — y no levanta ninguna inconsistencia al hacerlo. Esto
     muestra exactamente qué individuos se fundirían antes de commitear nada.
     """
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
-    abox = _abox(session, version_id)
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
+    abox = _abox(workspace, version_id)
 
     candidate = functional.declare(graph, property_iri)
     combined = Graph()
@@ -1683,7 +1683,7 @@ def declare_functional(
     for triple in abox:
         combined.add(triple)
 
-    reasoners = session.reasoners(
+    reasoners = workspace.reasoners(
         why="The whole point of this command is to show what the reasoner would merge."
     )
     before = reasoners.merged_individuals(_without_declaration(combined, property_iri))
@@ -1697,12 +1697,12 @@ def declare_functional(
     if not commit:
         return result
 
-    next_id = f"v{session.conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    next_id = f"v{workspace.conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
     result.committed = versioning.commit(
-        session.conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
+        workspace.conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
         note=f"{result.name} declared functional (user decision, ITER-APPLY)",
     )
-    result.diff = publish_diff(session, result.committed.id)
+    result.diff = publish_diff(workspace, result.committed.id)
     return result
 
 
@@ -1736,7 +1736,7 @@ class Regeneration:
 
 
 def regenerate(
-    session: Session, *, version: str | None = None, force: bool = False
+    workspace: Workspace, *, version: str | None = None, force: bool = False
 ) -> Regeneration:
     """Recalcular el ABox desde la capa de menciones (`mapping_rules_plan.md`).
 
@@ -1745,8 +1745,8 @@ def regenerate(
     de nuevo. Puro y de sólo lectura sobre la capa de menciones, que es el invariante que esta
     etapa podría romper sin querer.
     """
-    config, conn = session.config, session.conn
-    version_id = session.resolve_version(version)
+    config, conn = workspace.config, workspace.conn
+    version_id = workspace.resolve_version(version)
     # Las marcas de falsedad viajan como excepciones por caso, así que una refutación llega al
     # hash de las reglas.
     rules = mapping.rules_from_config(config.mapping, config.seed.base_iri).with_exceptions(
@@ -1759,15 +1759,15 @@ def regenerate(
     changed = versioning.record_rules(conn, version_id, rules.rules_hash())
     # Idempotente sobre (estado, reglas) — pero también sobre el artefacto: una versión ya
     # sellada cuyo archivo no está no tiene nada que saltear, tiene un ABox que falta.
-    if not changed and not force and session.abox_path(version_id).exists():
+    if not changed and not force and workspace.abox_path(version_id).exists():
         return Regeneration(
-            version_id=version_id, wrote=False, target=session.abox_path(version_id),
+            version_id=version_id, wrote=False, target=workspace.abox_path(version_id),
             rules_hash=rules.rules_hash(), mentions=len(rows), already=True,
         )
 
-    tbox = session.graph(version_id)
+    tbox = workspace.graph(version_id)
     result = mapping.regenerate(rows, typings, rules, conflicts.ancestors(tbox))
-    target = session.abox_path(version_id)
+    target = workspace.abox_path(version_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(result.dataset.serialize(format="trig"), encoding="utf-8")
     return Regeneration(

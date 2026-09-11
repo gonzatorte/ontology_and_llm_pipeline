@@ -21,7 +21,7 @@ from rich.console import Console
 
 from . import orchestration, render, versioning
 from .providers import load_env_file
-from .services import Session, StageError, deliver, evaluate, iterate, prep
+from .services import StageError, Workspace, deliver, evaluate, iterate, prep
 
 app = typer.Typer(add_completion=False, help="LLM-assisted ontology enrichment pipeline.")
 console = Console()
@@ -175,8 +175,8 @@ def main(env_file: Path | None = EnvFileOption) -> None:
         console.print(f"[dim]loaded {', '.join(names)} from {env_file}[/]")
 
 
-def _session(config_path: Path) -> Session:
-    return Session.open(config_path)
+def _workspace(config_path: Path) -> Workspace:
+    return Workspace.open(config_path)
 
 
 # ─────────────────────────────  PREP  ─────────────────────────────
@@ -189,10 +189,10 @@ def ingest_cmd(
     document: list[Path] | None = DocumentOption,
 ) -> None:
     """PREP-CLASSIFY+PREP-PARSE: classify pages, parse, populate blocks and the Markdown."""
-    session = _session(config_path)
+    workspace = _workspace(config_path)
     with console.status("ingesting") as status:
         result = prep.ingest(
-            session, documents=document, limit=limit, progress=status.update
+            workspace, documents=document, limit=limit, progress=status.update
         )
     render.ingestion(console, result)
 
@@ -200,31 +200,31 @@ def ingest_cmd(
 @app.command()
 def report(config_path: Path = ConfigOption, doc_id: str | None = DocIdOption) -> None:
     """DELIVERABLES-PENDING-PARSER-EVAL: self-contained HTML for manual parser evaluation."""
-    for target in deliver.reports(_session(config_path), doc_id=doc_id):
+    for target in deliver.reports(_workspace(config_path), doc_id=doc_id):
         console.print(f"[green]wrote[/] {target}")
 
 
 @app.command("normalize-seed")
 def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
     """PREP-NORMALIZE: opaque IRIs, derived labels, typo detection, gloss contexts."""
-    session = _session(config_path)
-    result = prep.normalize(session)
+    workspace = _workspace(config_path)
+    result = prep.normalize(workspace)
     render.normalization(console, result)
     if result.committed is not None:
-        published = deliver.publish_diff(session, result.committed.id)
+        published = deliver.publish_diff(workspace, result.committed.id)
         if published is not None:
             render.comparison(console, published)
 
-    if session.config.llm.provider == "none":
+    if workspace.config.llm.provider == "none":
         console.print(
             f"[yellow]glosses skipped[/]: {result.pending_glosses} need generation and "
             "llm.provider is 'none'. Set a provider in the config to run it."
         )
         return
     with console.status("glosses") as status:
-        bootstrap = prep.generate_glosses(session, result, progress=status.update)
+        bootstrap = prep.generate_glosses(workspace, result, progress=status.update)
     render.glosses(console, bootstrap)
-    published = deliver.publish_diff(session, bootstrap.committed.id)
+    published = deliver.publish_diff(workspace, bootstrap.committed.id)
     if published is not None:
         render.comparison(console, published)
 
@@ -232,7 +232,7 @@ def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
 @app.command()
 def status(config_path: Path = ConfigOption) -> None:
     """Telemetry: work units and cost per stage, page classes across the corpus."""
-    render.telemetry(console, deliver.telemetry(_session(config_path)))
+    render.telemetry(console, deliver.telemetry(_workspace(config_path)))
 
 
 @app.command("alignment")
@@ -249,7 +249,7 @@ def alignment_cmd(
     Donde sí decide es con `--term`.
     """
     render.alignment(
-        console, prep.alignment(_session(config_path), version=version, terms=list(terms)),
+        console, prep.alignment(_workspace(config_path), version=version, terms=list(terms)),
         limit=limit,
     )
 
@@ -266,7 +266,7 @@ def extract_cmd(
     """ITER-EXTRACT: extract candidate mentions from every chunk."""
     with console.status("ITER-EXTRACT") as status:
         result = iterate.extract(
-            _session(config_path), doc_id=doc_id, include_held_out=include_held_out,
+            _workspace(config_path), doc_id=doc_id, include_held_out=include_held_out,
             progress=status.update,
         )
     render.extraction(console, result)
@@ -281,7 +281,7 @@ def coref_cmd(
     """ITER-COREFER: intra-document coreference over the mentions ITER-EXTRACT extracted."""
     with console.status("ITER-COREFER") as status:
         result = iterate.corefer(
-            _session(config_path), doc_id=doc_id, include_held_out=include_held_out,
+            _workspace(config_path), doc_id=doc_id, include_held_out=include_held_out,
             progress=status.update,
         )
     render.coreference(console, result)
@@ -296,7 +296,7 @@ def match_cmd(
     """ITER-MATCH: type the mentions against an ontology version, then resolve entities."""
     with console.status("ITER-MATCH") as status:
         result = iterate.match(
-            _session(config_path), version=version, include_held_out=include_held_out,
+            _workspace(config_path), version=version, include_held_out=include_held_out,
             progress=status.update,
         )
     render.matching(console, result)
@@ -314,7 +314,7 @@ def grey_list(
     as_json: bool = JsonOption,
 ) -> None:
     """Grey-zone pairs still unanswered (ITER-MATCH)."""
-    queue = iterate.grey_pending(_session(config_path), version=version, limit=limit)
+    queue = iterate.grey_pending(_workspace(config_path), version=version, limit=limit)
     if as_json:
         print(json.dumps([vars(pair) for pair in queue.pairs], ensure_ascii=False))
         return
@@ -336,7 +336,7 @@ def grey_answer(
     reaches induction, which is where a genuinely new concept belongs.
     """
     chosen = iterate.grey_answer(
-        _session(config_path), mention_id, version=version, to=to,
+        _workspace(config_path), mention_id, version=version, to=to,
         none_of_these=none_of_these, comment=comment,
     )
     console.print(
@@ -351,8 +351,8 @@ def grey_labels(
     export: Path | None = ExportLabelsOption,
 ) -> None:
     """The accept/reject labels these answers have accumulated (ITER-TUNE)."""
-    session = _session(config_path)
-    rows = iterate.grey_labels(session)
+    workspace = _workspace(config_path)
+    rows = iterate.grey_labels(workspace)
     accepted = sum(1 for row in rows if row["accepted"])
     console.print(
         f"[bold]{len(rows)}[/] labels · {accepted} accepted, {len(rows) - accepted} rejected"
@@ -363,7 +363,7 @@ def grey_labels(
         )
         return
     if export is not None:
-        iterate.grey_export(session, export)
+        iterate.grey_export(workspace, export)
         console.print(f"[green]wrote[/] {export}")
 
 
@@ -374,7 +374,7 @@ def bridge_cmd(
 ) -> None:
     """ITER-BRIDGE: relate orphans to seed classes by world knowledge."""
     with console.status("ITER-BRIDGE") as status:
-        result = iterate.bridge(_session(config_path), version=version, progress=status.update)
+        result = iterate.bridge(_workspace(config_path), version=version, progress=status.update)
     render.bridging(console, result)
 
 
@@ -385,7 +385,7 @@ def induce_cmd(
 ) -> None:
     """ITER-INDUCE: turn orphan mentions into proposed classes."""
     with console.status("ITER-INDUCE") as status:
-        result = iterate.induce(_session(config_path), version=version, progress=status.update)
+        result = iterate.induce(_workspace(config_path), version=version, progress=status.update)
     render.induction(console, result)
 
 
@@ -398,7 +398,7 @@ def axiomatize_cmd(
     """Turn proposed classes into axioms, validate them, and commit a new version."""
     with console.status("ITER-AXIOMATIZE") as status:
         result = iterate.axiomatize(
-            _session(config_path), version=version, override_structural=apply_changes,
+            _workspace(config_path), version=version, override_structural=apply_changes,
             progress=status.update,
         )
     render.axiomatization(console, result)
@@ -417,17 +417,17 @@ def branch_cmd(
 
     Nothing here asks a model for alternatives — the spec's one prohibition for this stage.
     """
-    session = _session(config_path)
+    workspace = _workspace(config_path)
     if choose is not None:
         with console.status("applying the branch") as status:
             result = iterate.choose_branch(
-                session, choose, version=version, why=why, invalid=list(invalid),
+                workspace, choose, version=version, why=why, invalid=list(invalid),
                 override_structural=apply_changes, progress=status.update,
             )
         render.branch_choice(console, result)
         return
     with console.status("ITER-BRANCH") as status:
-        survey = iterate.survey_branches(session, version=version, progress=status.update)
+        survey = iterate.survey_branches(workspace, version=version, progress=status.update)
     render.branches(console, survey)
     if not survey.automatic:
         console.print("Choose one with `onto-pipeline branch --choose <branch> --why '...'`.")
@@ -443,7 +443,7 @@ def enrich_cmd(
     """Improve the glosses from definitional passages in the corpus, and harvest synonyms."""
     with console.status("ITER-AXIOMATIZE-ENRICH") as status:
         result = iterate.enrich(
-            _session(config_path), version=version, limit=limit, dry_run=dry_run,
+            _workspace(config_path), version=version, limit=limit, dry_run=dry_run,
             progress=status.update,
         )
     render.enrichment(console, result, limit=limit)
@@ -457,7 +457,7 @@ def circular_cmd(
 ) -> None:
     """Matches whose own document helped write the class they matched (PREP-NORMALIZE)."""
     render.circularity(
-        console, iterate.circular(_session(config_path), version=version), limit=limit
+        console, iterate.circular(_workspace(config_path), version=version), limit=limit
     )
 
 
@@ -471,7 +471,7 @@ def metaproperties_cmd(
     """Label each class for OntoClean, so ITER-VALIDATE-4-ONTOCLEAN has something to check."""
     with console.status("metaproperties") as status:
         result = iterate.metaproperties(
-            _session(config_path), version=version, limit=limit, refresh=refresh,
+            _workspace(config_path), version=version, limit=limit, refresh=refresh,
             progress=status.update,
         )
     render.metaproperties(console, result)
@@ -485,7 +485,7 @@ def conflicts_cmd(
 ) -> None:
     """Entities two documents typed differently (ITER-CONFLICTS)."""
     render.conflicts(
-        console, iterate.survey_conflicts(_session(config_path), version=version), limit=limit
+        console, iterate.survey_conflicts(_workspace(config_path), version=version), limit=limit
     )
 
 
@@ -498,14 +498,14 @@ def mark_cmd(
     export: Path | None = ExportOption,
 ) -> None:
     """Mark an assertion false. `refuted` and `misextracted` are opposite signals."""
-    session = _session(config_path)
-    marked = iterate.mark(session, list(mentions), mark, comment=comment)
+    workspace = _workspace(config_path)
+    marked = iterate.mark(workspace, list(mentions), mark, comment=comment)
     console.print(f"[green]marked[/] {marked} mention(s) as {mark}")
     console.print(
         "[dim]The mapping rules changed, so the ABox is stale: run `regenerate` to apply it.[/]"
     )
     if export is not None:
-        console.print(f"[green]wrote[/] {iterate.export_misextractions(session, export)}")
+        console.print(f"[green]wrote[/] {iterate.export_misextractions(workspace, export)}")
 
 
 @app.command("functional")
@@ -521,15 +521,15 @@ def functional_cmd(
     Nothing here declares a property functional on its own: detecting functionality from the
     ABox is invalid in principle under the open-world assumption.
     """
-    session = _session(config_path)
+    workspace = _workspace(config_path)
     if declare is not None:
-        result = iterate.declare_functional(session, declare, version=version, commit=yes)
+        result = iterate.declare_functional(workspace, declare, version=version, commit=yes)
         render.functional_declaration(console, result)
         if not yes:
             console.print("Nothing committed. `--yes` commits the declaration.")
         return
     render.functional_candidates(
-        console, iterate.survey_functional(session, version=version), limit=limit
+        console, iterate.survey_functional(workspace, version=version), limit=limit
     )
     console.print(
         "See what one would merge before answering: "
@@ -549,7 +549,7 @@ def validate(
     """
     with console.status("ITER-VALIDATE") as status:
         status.update("running the reasoners")
-        result = iterate.validate(_session(config_path), version=version)
+        result = iterate.validate(_workspace(config_path), version=version)
     render.validation(console, result)
 
 
@@ -561,7 +561,7 @@ def regenerate_cmd(
 ) -> None:
     """Recompute the ABox from the mention layer (mapping_rules_plan.md)."""
     render.regeneration(
-        console, iterate.regenerate(_session(config_path), version=version, force=force)
+        console, iterate.regenerate(_workspace(config_path), version=version, force=force)
     )
 
 
@@ -577,7 +577,7 @@ def stop_cmd(
 ) -> None:
     """Should this stop? The four criteria of EVAL-STOPPING, with their roles."""
     render.stopping(
-        console, evaluate.assess(_session(config_path), version=version, iteration=iteration),
+        console, evaluate.assess(_workspace(config_path), version=version, iteration=iteration),
         curve=curve,
     )
 
@@ -595,7 +595,7 @@ def tune_cmd(
     """Ajusta el cross-encoder con las anotaciones de un par (ITER-TUNE)."""
     with console.status("ITER-TUNE") as status:
         result = evaluate.tune(
-            _session(config_path), name, train_fraction=train_fraction,
+            _workspace(config_path), name, train_fraction=train_fraction,
             negatives=negatives, method=method, eval_on=eval_on, out=out,
             progress=status.update,
         )
@@ -620,7 +620,7 @@ def calibrate_cmd(
     """
     with console.status("calibrating") as status:
         result = evaluate.calibrate(
-            _session(config_path), name, match_against=list(match_against),
+            _workspace(config_path), name, match_against=list(match_against),
             cross_encoder=cross_encoder, holdout=holdout, keep_excluded=keep_excluded,
             context=context, limit=limit, progress=status.update,
         )
@@ -631,7 +631,7 @@ def calibrate_cmd(
 def annotate_cmd(config_path: Path = ConfigOption, doc_id: str | None = DocIdOption) -> None:
     """Build the annotation tool for the held-out documents (EVAL-PIPELINE)."""
     render.annotation_tool(
-        console, evaluate.build_annotation_tool(_session(config_path), doc_id=doc_id)
+        console, evaluate.build_annotation_tool(_workspace(config_path), doc_id=doc_id)
     )
 
 
@@ -643,14 +643,14 @@ def hold_out(
 ) -> None:
     """Mark documents as the retention set: parsed, but never fed to the process."""
     render.retention(
-        console, evaluate.hold_out(_session(config_path), list(doc_id), release=release)
+        console, evaluate.hold_out(_workspace(config_path), list(doc_id), release=release)
     )
 
 
 @app.command("export-annotations")
 def export_annotations(path: Path, config_path: Path = ConfigOption) -> None:
     """DELIVERABLES-PENDING-BRAT-EXPORTER: retention-set JSONL to BRAT/INCEpTION."""
-    render.brat_export(console, evaluate.export_annotations(_session(config_path), path))
+    render.brat_export(console, evaluate.export_annotations(_workspace(config_path), path))
 
 
 review_app = typer.Typer(help="Findings from PREP-NORMALIZE that are waiting for a decision.")
@@ -665,13 +665,13 @@ def review_list(
     as_json: bool = JsonOption,
 ) -> None:
     """What needs a decision. Nothing is applied here; the decision is recorded."""
-    session = _session(config_path)
-    items = evaluate.review_items(session, status=status, kind=kind)
+    workspace = _workspace(config_path)
+    items = evaluate.review_items(workspace, status=status, kind=kind)
     if as_json:
         # Plain stdout, not the console: rich colours its JSON, which is unparseable.
         print(json.dumps(items, ensure_ascii=False))
         return
-    render.review_list(console, items, evaluate.review_counts(session))
+    render.review_list(console, items, evaluate.review_counts(workspace))
 
 
 @review_app.command("resolve")
@@ -682,7 +682,7 @@ def review_resolve(
     comment: str = CommentOption,
 ) -> None:
     """Record a decision on one finding: accept or reject."""
-    evaluate.resolve_review(_session(config_path), item_id, decision, comment=comment)
+    evaluate.resolve_review(_workspace(config_path), item_id, decision, comment=comment)
     console.print(f"[green]{decision}[/] {item_id}")
 
 
@@ -693,7 +693,7 @@ app.add_typer(cq_app, name="cq")
 @cq_app.command("import")
 def cq_import(path: Path, config_path: Path = ConfigOption) -> None:
     """PREP-CQ-USER: load questions written by the user, each paired with its SPARQL."""
-    stored = prep.import_questions(_session(config_path), path)
+    stored = prep.import_questions(_workspace(config_path), path)
     console.print(f"[green]stored[/] {stored} competency questions")
 
 
@@ -710,7 +710,7 @@ def cq_propose(
     """
     with console.status("PREP-CQ-GENERATED") as status:
         result = prep.propose_questions(
-            _session(config_path), version=version, per_stratum=per_stratum, seed=seed,
+            _workspace(config_path), version=version, per_stratum=per_stratum, seed=seed,
             progress=status.update,
         )
     render.proposed_questions(console, result)
@@ -725,7 +725,7 @@ def cq_list(
 ) -> None:
     """The questions in the store, by status."""
     render.questions(
-        console, prep.list_questions(_session(config_path), status=status),
+        console, prep.list_questions(_workspace(config_path), status=status),
         status=status, limit=limit,
     )
 
@@ -737,7 +737,7 @@ def cq_accept(
     discard: bool = DiscardOption,
 ) -> None:
     """Accept (or `--discard`) proposed questions."""
-    decision, changed = prep.decide_questions(_session(config_path), ids, discard=discard)
+    decision, changed = prep.decide_questions(_workspace(config_path), ids, discard=discard)
     console.print(f"[green]{decision}[/] {changed} question(s)")
 
 
@@ -749,12 +749,12 @@ def cq_eval(
     infer: bool = InferOption,
 ) -> None:
     """Run every accepted CQ against an ontology version and record the pass rate."""
-    session = _session(config_path)
+    workspace = _workspace(config_path)
     with console.status("cq eval"):
         result = evaluate.evaluate_questions(
-            session, version=version, iteration=iteration, infer=infer
+            workspace, version=version, iteration=iteration, infer=infer
         )
-    render.question_run(console, result, target=session.config.cq.target_pass_rate)
+    render.question_run(console, result, target=workspace.config.cq.target_pass_rate)
 
 
 # ─────────────────────────────  DELIVERABLES  ─────────────────────────────
@@ -769,7 +769,7 @@ def diff_cmd(
 ) -> None:
     """Semantic diff between two ontology versions (ITER-APPLY)."""
     render.comparison(
-        console, deliver.compare(_session(config_path), version=version, against=against),
+        console, deliver.compare(_workspace(config_path), version=version, against=against),
         limit=limit,
     )
 
@@ -777,7 +777,7 @@ def diff_cmd(
 @app.command()
 def versions(config_path: Path = ConfigOption) -> None:
     """The version DAG. Branches that were not chosen are kept and stay reachable."""
-    render.versions(console, deliver.version_rows(_session(config_path)))
+    render.versions(console, deliver.version_rows(_workspace(config_path)))
 
 
 @app.command("export")
@@ -802,7 +802,7 @@ def export_cmd(
     """
     with console.status("export") as status:
         result = deliver.export(
-            _session(config_path), version=version, out=out, fmt=fmt,
+            _workspace(config_path), version=version, out=out, fmt=fmt,
             include_abox=not tbox_only, refresh_abox=refresh_abox, progress=status.update,
         )
     render.delivery(console, result)
@@ -811,7 +811,7 @@ def export_cmd(
 @app.command()
 def chunks(doc_id: str, config_path: Path = ConfigOption) -> None:
     """Show ITER-EXTRACT's extraction units for one document. Derived, never stored."""
-    render.chunks(console, deliver.chunks(_session(config_path), doc_id))
+    render.chunks(console, deliver.chunks(_workspace(config_path), doc_id))
 
 
 @app.command()
@@ -821,7 +821,7 @@ def blocks(
     page: int | None = PageOption,
 ) -> None:
     """Dump the block store for one document as JSON (provenance inspection)."""
-    print(json.dumps(deliver.blocks(_session(config_path), doc_id, page=page),
+    print(json.dumps(deliver.blocks(_workspace(config_path), doc_id, page=page),
                      ensure_ascii=False))
 
 
@@ -845,16 +845,16 @@ def next_cmd(
     no corre nada y sale con error. El wizard es la otra respuesta a la misma pregunta: en vez
     de frenar ante la decisión, te la hace.
     """
-    session = _session(config_path)
-    versioning.install(session.conn)
-    version_id = session.latest_version() if version is None else version
+    workspace = _workspace(config_path)
+    versioning.install(workspace.conn)
+    version_id = workspace.latest_version() if version is None else version
     if version_id is None:
         # Sin versión todavía no es un error acá: es el estado normal de un almacén recién
         # creado, y éste es justamente el comando que tiene que decir qué hacer primero.
         version_id = "(sin versión todavía)"
 
     plan = orchestration.survey(
-        session.conn, version_id, has_provider=session.has_provider()
+        workspace.conn, version_id, has_provider=workspace.has_provider()
     )
     render.plan(console, plan, version_id)
 

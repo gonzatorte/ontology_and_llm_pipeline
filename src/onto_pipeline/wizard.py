@@ -32,7 +32,7 @@ from rich.table import Table
 from . import orchestration, render
 from .config import Config
 from .providers import load_env_file
-from .services import Session, StageError, deliver, evaluate, iterate, prep
+from .services import StageError, Workspace, deliver, evaluate, iterate, prep
 
 ABORT = "q"      # «dejar de preguntar». No «a», que choca con «aceptar»
 SKIP = "s"
@@ -92,7 +92,7 @@ def _open(
     corpus: Path | None,
     seed_ontology: Path | None,
     env_file: Path | None,
-) -> Session:
+) -> Workspace:
     """Confirmar la configuración, y pedir el par (corpus, semilla) de esta corrida.
 
     El par se pregunta **siempre**, aunque el archivo de configuración lo tenga: qué corpus y
@@ -132,26 +132,26 @@ def _open(
     seed_ontology = seed_ontology or _path(
         console, "Ontología semilla de esta corrida", config.paths.seed_ontology
     )
-    session = Session.open(config_path, corpus_root=corpus, seed_ontology=seed_ontology)
+    workspace = Workspace.open(config_path, corpus_root=corpus, seed_ontology=seed_ontology)
 
     if env_file is not None:
         names = load_env_file(env_file)
         console.print(f"[dim]cargadas {', '.join(names)} de {env_file}[/]")
-    return session
+    return workspace
 
 
-def _provider(console: Console, session: Session) -> bool:
+def _provider(console: Console, workspace: Workspace) -> bool:
     """Conseguir la credencial si hace falta, o decir qué se pierde sin ella."""
-    if session.has_provider():
+    if workspace.has_provider():
         return True
-    if session.config.llm.provider == "none":
+    if workspace.config.llm.provider == "none":
         console.print(
             "[yellow]`llm.provider` es 'none'[/]: las etapas que llaman al modelo no pueden "
             "correr con esta configuración."
         )
         return False
     console.print(
-        f"[yellow]falta la credencial[/] ({session.config.llm.api_key_env} no está en el "
+        f"[yellow]falta la credencial[/] ({workspace.config.llm.api_key_env} no está en el "
         "entorno). Esta etapa llama al modelo."
     )
     if not _confirm(console, "¿Cargo un archivo de entorno?"):
@@ -159,7 +159,7 @@ def _provider(console: Console, session: Session) -> bool:
     path = _path(console, "Archivo de entorno", Path("opencode.env"))
     names = load_env_file(path)
     console.print(f"[dim]cargadas {', '.join(names)} de {path}[/]")
-    return session.has_provider()
+    return workspace.has_provider()
 
 
 # ─────────────────────────────  las etapas que se corren solas  ─────────────────
@@ -171,68 +171,68 @@ class Stage:
 
     name: str
     what: str                      # qué hace, en una línea, para quien no leyó el spec
-    run: Callable[[Console, Session], None]
+    run: Callable[[Console, Workspace], None]
     model: bool = False            # ¿llama al modelo? entonces se pregunta antes
 
 
-def _ingest(console: Console, session: Session) -> None:
+def _ingest(console: Console, workspace: Workspace) -> None:
     with console.status("parseando") as status:
-        render.ingestion(console, prep.ingest(session, progress=status.update))
+        render.ingestion(console, prep.ingest(workspace, progress=status.update))
 
 
-def _extract(console: Console, session: Session) -> None:
+def _extract(console: Console, workspace: Workspace) -> None:
     with console.status("extrayendo") as status:
-        render.extraction(console, iterate.extract(session, progress=status.update))
+        render.extraction(console, iterate.extract(workspace, progress=status.update))
 
 
-def _corefer(console: Console, session: Session) -> None:
+def _corefer(console: Console, workspace: Workspace) -> None:
     with console.status("correferencia") as status:
-        render.coreference(console, iterate.corefer(session, progress=status.update))
+        render.coreference(console, iterate.corefer(workspace, progress=status.update))
 
 
-def _match(console: Console, session: Session) -> None:
+def _match(console: Console, workspace: Workspace) -> None:
     with console.status("tipando") as status:
-        render.matching(console, iterate.match(session, progress=status.update))
+        render.matching(console, iterate.match(workspace, progress=status.update))
 
 
-def _bridge(console: Console, session: Session) -> None:
+def _bridge(console: Console, workspace: Workspace) -> None:
     with console.status("puenteando") as status:
-        render.bridging(console, iterate.bridge(session, progress=status.update))
+        render.bridging(console, iterate.bridge(workspace, progress=status.update))
 
 
-def _induce(console: Console, session: Session) -> None:
+def _induce(console: Console, workspace: Workspace) -> None:
     with console.status("induciendo") as status:
-        render.induction(console, iterate.induce(session, progress=status.update))
+        render.induction(console, iterate.induce(workspace, progress=status.update))
 
 
-def _axiomatize(console: Console, session: Session) -> None:
+def _axiomatize(console: Console, workspace: Workspace) -> None:
     with console.status("axiomatizando") as status:
-        render.axiomatization(console, iterate.axiomatize(session, progress=status.update))
+        render.axiomatization(console, iterate.axiomatize(workspace, progress=status.update))
 
 
-def _regenerate(console: Console, session: Session) -> None:
-    render.regeneration(console, iterate.regenerate(session))
+def _regenerate(console: Console, workspace: Workspace) -> None:
+    render.regeneration(console, iterate.regenerate(workspace))
 
 
-def _branch(console: Console, session: Session) -> None:
+def _branch(console: Console, workspace: Workspace) -> None:
     """La misma función que atiende el punto de decisión.
 
     Cuando no hay eje, `branch` es una etapa que corre sola y aplica todo — el camino habitual
     de `ITER-BRANCH`. Cuando lo hay, es una pregunta. Quién de las dos cosas es no se sabe
     hasta correr el survey, así que hay una sola implementación y decide ella.
     """
-    _decide_branch(console, session)
+    _decide_branch(console, workspace)
 
 
-def _questions(console: Console, session: Session) -> None:
+def _questions(console: Console, workspace: Workspace) -> None:
     render.question_run(
-        console, evaluate.evaluate_questions(session),
-        target=session.config.cq.target_pass_rate,
+        console, evaluate.evaluate_questions(workspace),
+        target=workspace.config.cq.target_pass_rate,
     )
 
 
-def _stop(console: Console, session: Session) -> None:
-    render.stopping(console, evaluate.assess(session))
+def _stop(console: Console, workspace: Workspace) -> None:
+    render.stopping(console, evaluate.assess(workspace))
 
 
 STAGES = {
@@ -286,13 +286,13 @@ STAGES = {
 # ─────────────────────────────  los puntos de decisión  ─────────────────────────
 
 
-def _decide_grey(console: Console, session: Session) -> None:
+def _decide_grey(console: Console, workspace: Workspace) -> None:
     """La zona gris, un par por vez.
 
     «Ninguna» es una respuesta de verdad y a menudo la correcta: la mención se vuelve huérfana
     y llega a la inducción, que es donde un concepto genuinamente nuevo pertenece.
     """
-    queue = iterate.grey_pending(session)
+    queue = iterate.grey_pending(workspace)
     if not queue.pairs:
         return
     console.print(Panel.fit(
@@ -324,27 +324,27 @@ def _decide_grey(console: Console, session: Session) -> None:
         if choice == SKIP or not choice:
             continue
         if choice == NONE:
-            iterate.grey_answer(session, pair.mention_id, none_of_these=True)
+            iterate.grey_answer(workspace, pair.mention_id, none_of_these=True)
             answered += 1
             continue
         if choice.isdigit() and 1 <= int(choice) <= len(options):
-            iterate.grey_answer(session, pair.mention_id, to=options[int(choice) - 1][1])
+            iterate.grey_answer(workspace, pair.mention_id, to=options[int(choice) - 1][1])
             answered += 1
             continue
         console.print("[yellow]no entendí; la salteo[/]")
 
-    remaining = len(iterate.grey_pending(session).pairs)
+    remaining = len(iterate.grey_pending(workspace).pairs)
     console.print(
         f"\n[green]{answered} contestadas[/], {remaining} siguen esperando. "
         "Las respuestas se aplican en el próximo `match`."
     )
 
 
-def _decide_branch(console: Console, session: Session) -> None:
+def _decide_branch(console: Console, workspace: Workspace) -> None:
     """La rama. A un modelo nunca se le piden alternativas acá: los ejes salen del razonador
     y de un catálogo enumerado (`ITER-BRANCH`)."""
     with console.status("buscando ejes de decisión") as status:
-        survey = iterate.survey_branches(session, progress=status.update)
+        survey = iterate.survey_branches(workspace, progress=status.update)
     render.branches(console, survey)
     if survey.automatic:
         return
@@ -375,16 +375,16 @@ def _decide_branch(console: Console, session: Session) -> None:
     )
     with console.status("aplicando la rama") as status:
         result = iterate.choose_branch(
-            session, choice, why=why,
+            workspace, choice, why=why,
             invalid=[item.strip() for item in invalid.split(",") if item.strip()],
             progress=status.update,
         )
     render.branch_choice(console, result)
 
 
-def _decide_review(console: Console, session: Session) -> None:
+def _decide_review(console: Console, workspace: Workspace) -> None:
     """Lo que espera decisión: erratas de la semilla, conflictos, propiedades funcionales."""
-    items = evaluate.review_items(session)
+    items = evaluate.review_items(workspace)
     if not items:
         return
     console.print(Panel.fit(
@@ -404,10 +404,10 @@ def _decide_review(console: Console, session: Session) -> None:
             break
         if choice.startswith("a"):
             comment = _ask(console, "¿Por qué? (opcional)", default="")
-            evaluate.resolve_review(session, item["id"], "accepted", comment=comment)
+            evaluate.resolve_review(workspace, item["id"], "accepted", comment=comment)
         elif choice.startswith("r"):
             comment = _ask(console, "¿Por qué? (opcional)", default="")
-            evaluate.resolve_review(session, item["id"], "rejected", comment=comment)
+            evaluate.resolve_review(workspace, item["id"], "rejected", comment=comment)
 
 
 DECISIONS = {
@@ -420,13 +420,13 @@ DECISIONS = {
 # ─────────────────────────────  la semilla  ─────────────────────────────
 
 
-def _normalize_seed(console: Console, session: Session) -> bool:
+def _normalize_seed(console: Console, workspace: Workspace) -> bool:
     """`PREP-NORMALIZE`, que no está en el survey porque pasa una sola vez y antes que todo.
 
     Sin versión no hay contra qué tipar, así que el wizard la trata como precondición y no
     como etapa opcional.
     """
-    existing = session.latest_version()
+    existing = workspace.latest_version()
     if existing is not None:
         console.print(f"[dim]la ontología ya está normalizada · versión {existing}[/]")
         return True
@@ -441,10 +441,10 @@ def _normalize_seed(console: Console, session: Session) -> bool:
         return False
 
     with console.status("normalizando la semilla"):
-        result = prep.normalize(session)
+        result = prep.normalize(workspace)
     render.normalization(console, result)
     if result.committed is not None:
-        published = deliver.publish_diff(session, result.committed.id)
+        published = deliver.publish_diff(workspace, result.committed.id)
         if published is not None:
             render.comparison(console, published)
 
@@ -455,7 +455,7 @@ def _normalize_seed(console: Console, session: Session) -> bool:
         "lo que compara el matcher, así que escribirlas es lo que evita que el corpus parezca "
         "hablar de otra cosa."
     )
-    if not _provider(console, session):
+    if not _provider(console, workspace):
         console.print("[yellow]sin proveedor[/]: se siguen sin glosas, con peor matching.")
         return True
     if not _confirm(
@@ -463,7 +463,7 @@ def _normalize_seed(console: Console, session: Session) -> bool:
     ):
         return True
     with console.status("escribiendo glosas") as status:
-        bootstrap = prep.generate_glosses(session, result, progress=status.update)
+        bootstrap = prep.generate_glosses(workspace, result, progress=status.update)
     render.glosses(console, bootstrap)
     return True
 
@@ -471,7 +471,7 @@ def _normalize_seed(console: Console, session: Session) -> bool:
 # ─────────────────────────────  una pasada  ─────────────────────────────
 
 
-def _run_stage(console: Console, session: Session, step, stage: Stage) -> None:
+def _run_stage(console: Console, workspace: Workspace, step, stage: Stage) -> None:
     console.print(Panel.fit(
         f"[bold]{stage.name}[/] · {stage.what}\n[dim]{step.detail}[/]",
         border_style="cyan",
@@ -481,26 +481,26 @@ def _run_stage(console: Console, session: Session, step, stage: Stage) -> None:
             "[yellow]Esta etapa llama al modelo[/]: tarda y cuesta. `status` muestra después "
             "cuántas unidades de trabajo y cuántos tokens se gastaron."
         )
-        if not _provider(console, session):
+        if not _provider(console, workspace):
             console.print("[yellow]no se puede correr sin credencial; la salteo[/]")
             return
     # El nombre de la etapa `stop?` ya trae su signo; pegarle otro da «¿Corro stop??».
     if not _confirm(console, f"¿Corro {stage.name.rstrip('?')}?"):
         return
     try:
-        stage.run(console, session)
+        stage.run(console, workspace)
     except StageError as exc:
         # Un `StageError` es algo que el usuario tiene que arreglar, no un bug: se muestra y el
         # wizard sigue vivo, que es la diferencia con el CLI, que sale.
         console.print(f"[red]{exc}[/]")
 
 
-def _pass(console: Console, session: Session) -> None:
+def _pass(console: Console, workspace: Workspace) -> None:
     """Un recorrido por el plan, en el orden del spec: decidir lo que espera, correr lo que se
     puede, y decir por qué no lo demás."""
-    version_id = session.latest_version() or "(sin versión todavía)"
+    version_id = workspace.latest_version() or "(sin versión todavía)"
     plan = orchestration.survey(
-        session.conn, version_id, has_provider=session.has_provider()
+        workspace.conn, version_id, has_provider=workspace.has_provider()
     )
     render.plan(console, plan, version_id)
 
@@ -513,20 +513,20 @@ def _pass(console: Console, session: Session) -> None:
         if step.state == orchestration.WAITING:
             handler = DECISIONS.get(step.name)
             if handler is not None:
-                handler(console, session)
+                handler(console, workspace)
             continue
         stage = STAGES.get(step.name)
         if stage is None:
             console.print(f"[dim]{step.name}: {step.detail} · `{step.command}`[/]")
             continue
-        _run_stage(console, session, step, stage)
+        _run_stage(console, workspace, step, stage)
 
 
 # ─────────────────────────────  la entrega  ─────────────────────────────
 
 
-def _deliver(console: Console, session: Session) -> None:
-    version_id = session.latest_version()
+def _deliver(console: Console, workspace: Workspace) -> None:
+    version_id = workspace.latest_version()
     if version_id is None:
         console.print("[yellow]no hay ninguna versión que entregar todavía[/]")
         return
@@ -546,7 +546,7 @@ def _deliver(console: Console, session: Session) -> None:
     out = _ask(console, "¿A qué archivo? (vacío = junto a las demás)", default="").strip()
     with console.status("exportando") as status:
         result = deliver.export(
-            session, version=version_id, out=Path(out) if out else None,
+            workspace, version=version_id, out=Path(out) if out else None,
             fmt=fmt if fmt in (deliver.TRIG, deliver.TURTLE) else deliver.TRIG,
             progress=status.update,
         )
@@ -566,11 +566,11 @@ def run(
 ) -> None:
     """El wizard entero: configurar, preparar, iterar, entregar."""
     try:
-        session = _open(console, config_path, corpus, seed_ontology, env_file)
-        if not _normalize_seed(console, session):
+        workspace = _open(console, config_path, corpus, seed_ontology, env_file)
+        if not _normalize_seed(console, workspace):
             return
         while True:
-            _pass(console, session)
+            _pass(console, workspace)
             console.print()
             if not _confirm(
                 console,
@@ -579,7 +579,7 @@ def run(
                 default=False,
             ):
                 break
-        _deliver(console, session)
+        _deliver(console, workspace)
         console.print(
             "\n[dim]`onto-pipeline next` dice dónde quedó esto, y cada etapa tiene su comando "
             "suelto si querés correrla a mano.[/]"

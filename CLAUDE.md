@@ -197,8 +197,8 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 ```
 src/onto_pipeline/
   services/         **los cuerpos de las etapas, sin interfaz.** Una etapa, una función; recibe
-                    una Session, devuelve un resultado tipado, y no importa typer ni rich
-    session.py      config + almacén + versión + modelo; StageError
+                    un Workspace, devuelve un resultado tipado, y no importa typer ni rich
+    workspace.py    config + almacén + versión + modelo; StageError
     prep.py         PREP: ingesta, semilla, glosas, alineación, CQ
     iterate.py      ITER: menciones, tipado, puentes, clases, axiomas, ramas, validación
     evaluate.py     EVAL: parada, CQ, retención, calibración, ajuste

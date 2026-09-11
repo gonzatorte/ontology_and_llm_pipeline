@@ -7,7 +7,7 @@ estaban en la misma función, y eso hacía imposible correr una etapa desde otro
 
 **El contrato.**
 
-1. Toda función recibe una `Session` (config + almacén) y devuelve un resultado tipado.
+1. Toda función recibe un `Workspace` (config + almacén) y devuelve un resultado tipado.
 2. Ninguna imprime, y **nada acá importa `typer` ni `rich`**. Hay un test que lo fija.
 3. Lo que el usuario tiene que arreglar viaja como `StageError`, no como `typer.BadParameter`.
 4. El progreso de una etapa larga sale por `progress(...)`, que por defecto no hace nada.
@@ -20,15 +20,15 @@ Quien muestra los resultados es `render`; quien los pide, `cli` o `wizard`.
 from __future__ import annotations
 
 from . import deliver, evaluate, iterate, prep
-from .session import (
+from .workspace import (
     Progress,
     ProviderMissing,
-    Session,
     StageError,
+    Workspace,
     silent,
 )
 
 __all__ = [
-    "Progress", "ProviderMissing", "Session", "StageError", "silent",
+    "Progress", "ProviderMissing", "Workspace", "StageError", "silent",
     "deliver", "evaluate", "iterate", "prep",
 ]

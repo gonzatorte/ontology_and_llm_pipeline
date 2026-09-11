@@ -32,7 +32,7 @@ from ..ingest import (
     process_documents,
     set_held_out,
 )
-from .session import Progress, Session, StageError, silent
+from .workspace import Progress, StageError, Workspace, silent
 
 # ─────────────────────────────  EVAL-STOPPING  ─────────────────────────────
 
@@ -48,7 +48,7 @@ class Stopping:
 
 
 def assess(
-    session: Session, *, version: str | None = None, iteration: int = 0
+    workspace: Workspace, *, version: str | None = None, iteration: int = 0
 ) -> Stopping:
     """¿Esto tiene que parar? Los cuatro criterios de `EVAL-STOPPING`, con sus roles.
 
@@ -60,12 +60,12 @@ def assess(
     La cobertura de menciones está deliberadamente ausente: un sistema optimiza lo que se mide,
     y una clase paraguas maximiza cobertura destruyendo el valor conceptual.
     """
-    config = session.config
-    version_id = session.resolve_version(version)
+    config = workspace.config
+    version_id = workspace.resolve_version(version)
     return Stopping(
         version_id=version_id,
         assessment=stopping.assess(
-            session.conn, version_id,
+            workspace.conn, version_id,
             target_pass_rate=config.cq.target_pass_rate,
             novelty_window=config.stopping.novelty_window,
             novelty_threshold=config.stopping.novelty_threshold,
@@ -90,7 +90,7 @@ class QuestionRun:
 
 
 def evaluate_questions(
-    session: Session,
+    workspace: Workspace,
     *,
     version: str | None = None,
     iteration: int = 0,
@@ -101,14 +101,14 @@ def evaluate_questions(
     Consulta el grafo con entailments por defecto: una pregunta inferencial pregunta qué aporta
     el razonador, y SPARQL sobre las tripletas asertadas no puede verlo.
     """
-    conn = session.conn
+    conn = workspace.conn
     questions = cq.load(conn)
     if not questions:
         raise StageError("no accepted competency questions")
 
     versioning.install(conn)
-    version_id = session.resolve_version(version)
-    graph = session.graph(version_id)
+    version_id = workspace.resolve_version(version)
+    graph = workspace.graph(version_id)
     asserted = len(graph)
     note = ""
 
@@ -116,7 +116,7 @@ def evaluate_questions(
         from ..reasoning import InconsistentOntology, ReasonerUnavailable
 
         try:
-            graph = session.reasoners().inferred_graph(graph)
+            graph = workspace.reasoners().inferred_graph(graph)
         except (StageError, ReasonerUnavailable) as exc:
             note = (
                 f"reasoning unavailable ({exc}). Inferential questions will under-report."
@@ -146,17 +146,17 @@ class Retention:
     held_out: list[str]
 
 
-def hold_out(session: Session, doc_ids: list[str], *, release: bool = False) -> Retention:
+def hold_out(workspace: Workspace, doc_ids: list[str], *, release: bool = False) -> Retention:
     """Marcar documentos como conjunto de retención: parseados, nunca dados al proceso.
 
     Tienen que estar parseados —los offsets de anotación indexan el Markdown que produce
     `PREP-PARSE`— pero no pueden llegar a `ITER-EXTRACT`, o la evaluación mide al pipeline
     contra su propia entrada.
     """
-    changed = set_held_out(session.conn, list(doc_ids), held_out=not release)
+    changed = set_held_out(workspace.conn, list(doc_ids), held_out=not release)
     return Retention(
         changed=changed, requested=len(doc_ids),
-        process=process_documents(session.conn), held_out=held_out_documents(session.conn),
+        process=process_documents(workspace.conn), held_out=held_out_documents(workspace.conn),
     )
 
 
@@ -168,13 +168,13 @@ class AnnotationTool:
     glossed: int
 
 
-def build_annotation_tool(session: Session, *, doc_id: str | None = None) -> AnnotationTool:
+def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) -> AnnotationTool:
     """Armar la herramienta de anotación para los documentos retenidos (`EVAL-PIPELINE`).
 
     Los offsets indexan el Markdown del parser, así que la herramienta lo embebe tal cual; el
     corpus nunca sale de la máquina.
     """
-    config, conn = session.config, session.conn
+    config, conn = workspace.config, workspace.conn
     ids = [doc_id] if doc_id else held_out_documents(conn)
     if not ids:
         raise StageError(
@@ -221,10 +221,10 @@ class BratExport:
     documents: list[ExportedDocument]
 
 
-def export_annotations(session: Session, path: Path) -> BratExport:
+def export_annotations(workspace: Workspace, path: Path) -> BratExport:
     """`DELIVERABLES-PENDING-BRAT-EXPORTER`: JSONL del conjunto de retención a BRAT/INCEpTION,
     validado contra el Markdown en disco."""
-    config, conn = session.config, session.conn
+    config, conn = workspace.config, workspace.conn
     out_dir = config.paths.work_dir / "brat"
 
     documents: list[ExportedDocument] = []
@@ -252,24 +252,24 @@ def export_annotations(session: Session, path: Path) -> BratExport:
 
 
 def review_items(
-    session: Session, *, status: str = "open", kind: str | None = None
+    workspace: Workspace, *, status: str = "open", kind: str | None = None
 ) -> list[dict]:
     """Lo que necesita una decisión. Nada se aplica acá; la decisión se registra."""
     return review.load(
-        session.conn, status=None if status == "any" else status, kind=kind
+        workspace.conn, status=None if status == "any" else status, kind=kind
     )
 
 
-def review_counts(session: Session) -> dict:
-    return review.counts(session.conn)
+def review_counts(workspace: Workspace) -> dict:
+    return review.counts(workspace.conn)
 
 
 def resolve_review(
-    session: Session, item_id: str, decision: str, *, comment: str = ""
+    workspace: Workspace, item_id: str, decision: str, *, comment: str = ""
 ) -> None:
     """Registrar una decisión sobre un hallazgo: aceptar o rechazar."""
     try:
-        found = review.resolve(session.conn, item_id, decision, comment)
+        found = review.resolve(workspace.conn, item_id, decision, comment)
     except ValueError as exc:
         raise StageError(str(exc)) from exc
     if not found:
@@ -289,7 +289,7 @@ class Sweep:
 
 
 def calibrate(
-    session: Session,
+    workspace: Workspace,
     name: str,
     *,
     match_against: list[str] | None = None,
@@ -308,7 +308,7 @@ def calibrate(
     """
     from ..embeddings import CrossEncoderReranker, EncoderUnavailable, SentenceTransformerEncoder
 
-    config = session.config
+    config = workspace.config
     directory = config.paths.use_cases_root / name
     if not directory.is_dir():
         raise StageError(
@@ -414,7 +414,7 @@ class Tuning:
 
 
 def tune(
-    session: Session,
+    workspace: Workspace,
     name: str,
     *,
     train_fraction: float | None = None,
@@ -432,8 +432,8 @@ def tune(
     La partición es **por documento**. Separar menciones al azar deja las del mismo paper de
     los dos lados, que comparten vocabulario y tema, y eso mide memoria.
     """
-    config = session.config
-    matcher = matching.Matcher(session.encoder())
+    config = workspace.config
+    matcher = matching.Matcher(workspace.encoder())
 
     def retrieve(use_case, documents, top_k: int):
         mentions = [

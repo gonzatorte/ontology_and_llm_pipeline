@@ -2,7 +2,7 @@
 
 Esta capa existe porque hay **dos** interfaces sobre el mismo pipeline —el CLI de banderas y
 el `wizard` línea por línea— y una etapa no puede pertenecer a ninguna de las dos. Una función
-de servicio recibe una `Session`, devuelve un resultado tipado, y no imprime: quien la llamó
+de servicio recibe un `Workspace`, devuelve un resultado tipado, y no imprime: quien la llamó
 decide cómo mostrarlo. La regla que lo mantiene honesto es que **nada acá importa `typer` ni
 `rich`**; hay un test que lo fija.
 
@@ -51,19 +51,24 @@ class ProviderMissing(StageError):
 
 
 @dataclass
-class Session:
-    """El par (configuración, almacén) que toda etapa recibe.
+class Workspace:
+    """El ámbito de trabajo: la configuración y el acceso al almacén.
 
-    Se abre una vez por corrida y se pasa a mano. La alternativa —que cada función haga
-    `Config.load` y `connect`— es lo que hacía el CLI, y significa que una interfaz que quiera
-    correr cinco etapas sobre la misma configuración no puede.
+    Se abre una vez y se pasa a mano. La alternativa —que cada función haga `Config.load` y
+    abra el almacén— es lo que hacía el CLI, y significa que una interfaz que quiera correr
+    cinco etapas sobre la misma configuración no puede.
+
+    **Se llamaba `Session`, y ese nombre era de otra cosa.** Una *sesión de usuario* es una
+    corrida sobre un caso de uso, con su estado y su historial; esto es cómo se llega a la
+    configuración y al almacén, que es lo mismo para todas. Mezclar las dos es la mezcla que el
+    corte de `cli.py` acaba de deshacer.
     """
 
     config: Config
     conn: Store
     config_path: Path | None = None
-    # Sobreescrituras de `paths` pedidas por la interfaz, no por el archivo: el par (corpus,
-    # semilla) es un parámetro de la corrida y no una decisión de configuración.
+    # Sobreescrituras de `paths` pedidas por la interfaz, no por el archivo: el par
+    # (corpus, ontología) es un parámetro de la corrida y no una decisión de configuración.
     overrides: dict[str, Path] = field(default_factory=dict)
 
     @classmethod
@@ -74,7 +79,7 @@ class Session:
         corpus_root: Path | None = None,
         seed_ontology: Path | None = None,
         work_dir: Path | None = None,
-    ) -> Session:
+    ) -> Workspace:
         config = Config.load(config_path)
         overrides: dict[str, Path] = {}
         for name, value in (
@@ -93,7 +98,7 @@ class Session:
         )
 
     @classmethod
-    def of(cls, config: Config, conn: Store) -> Session:
+    def of(cls, config: Config, conn: Store) -> Workspace:
         """Para los tests y para quien ya tiene las dos cosas abiertas."""
         return cls(config=config, conn=conn)
 

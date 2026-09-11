@@ -15,7 +15,7 @@ from rich.console import Console
 from onto_pipeline import orchestration, wizard
 from onto_pipeline.config import Config
 from onto_pipeline.db import connect
-from onto_pipeline.services import Session, StageError
+from onto_pipeline.services import StageError, Workspace
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def console() -> Console:
     return Console(record=True, width=100)
 
 
-def _session(tmp_path: Path) -> Session:
+def _workspace(tmp_path: Path) -> Workspace:
     config = Config.model_validate({
         "paths": {
             "corpus_root": tmp_path / "corpus",
@@ -36,7 +36,7 @@ def _session(tmp_path: Path) -> Session:
 
     typing_store.install(conn)
     review.install(conn)
-    return Session.of(config, conn)
+    return Workspace.of(config, conn)
 
 
 def _plan(*steps) -> orchestration.Plan:
@@ -59,14 +59,14 @@ def test_a_pending_decision_is_asked_and_never_answered_by_default(tmp_path, con
     """
     asked: list[str] = []
     monkeypatch.setattr(
-        wizard, "DECISIONS", {"grey zone": lambda _console, _session: asked.append("grey zone")}
+        wizard, "DECISIONS", {"grey zone": lambda _console, _workspace: asked.append("grey zone")}
     )
     monkeypatch.setattr(wizard, "STAGES", {})
     monkeypatch.setattr(
         orchestration, "survey",
         lambda *_args, **_kwargs: _plan(_step("grey zone", orchestration.WAITING, decision=True)),
     )
-    wizard._pass(console, _session(tmp_path))
+    wizard._pass(console, _workspace(tmp_path))
     assert asked == ["grey zone"]
 
 
@@ -82,7 +82,7 @@ def test_a_blocked_stage_is_explained_and_not_attempted(tmp_path, console, monke
         orchestration, "survey",
         lambda *_args, **_kwargs: _plan(_step("match", orchestration.BLOCKED)),
     )
-    wizard._pass(console, _session(tmp_path))
+    wizard._pass(console, _workspace(tmp_path))
     assert ran == []
     assert "bloqueada" in console.export_text()
 
@@ -94,12 +94,12 @@ def test_a_stage_that_calls_the_model_is_never_run_without_a_yes(tmp_path, conso
     """Una corrida de horas arrancada por un Enter distraído es exactamente lo que no puede
     pasar en esta máquina. La etapa dice que llama al modelo, y espera."""
     ran: list[str] = []
-    session = _session(tmp_path)
+    workspace = _workspace(tmp_path)
     monkeypatch.setattr(wizard, "_provider", lambda *_args: True)
     monkeypatch.setattr(wizard, "_confirm", lambda *_args, **_kwargs: False)
     stage = wizard.Stage("extract", "pide sintagmas", lambda *_: ran.append("extract"),
                          model=True)
-    wizard._run_stage(console, session, _step("extract", orchestration.READY), stage)
+    wizard._run_stage(console, workspace, _step("extract", orchestration.READY), stage)
     assert ran == []
     assert "llama al modelo" in console.export_text()
 
@@ -113,19 +113,19 @@ def test_a_model_stage_without_a_credential_is_skipped_rather_than_failed(
     monkeypatch.setattr(wizard, "_provider", lambda *_args: False)
     stage = wizard.Stage("extract", "pide sintagmas", lambda *_: ran.append("extract"),
                          model=True)
-    wizard._run_stage(console, _session(tmp_path), _step("extract", orchestration.READY), stage)
+    wizard._run_stage(console, _workspace(tmp_path), _step("extract", orchestration.READY), stage)
     assert ran == []
 
 
 def test_a_stage_error_leaves_the_wizard_alive(tmp_path, console, monkeypatch):
     """La diferencia con el CLI, que sale con un código: acá hay alguien esperando la próxima
     pregunta, y matarle la sesión por una precondición que falta le cuesta todo el contexto."""
-    def explode(_console, _session):
+    def explode(_console, _workspace):
         raise StageError("no mentions; run extract first")
 
     monkeypatch.setattr(wizard, "_confirm", lambda *_args, **_kwargs: True)
     stage = wizard.Stage("match", "tipa", explode)
-    wizard._run_stage(console, _session(tmp_path), _step("match", orchestration.READY), stage)
+    wizard._run_stage(console, _workspace(tmp_path), _step("match", orchestration.READY), stage)
     assert "no mentions" in console.export_text()
 
 
@@ -153,7 +153,7 @@ def test_skipping_a_grey_pair_records_nothing(tmp_path, console, monkeypatch):
         lambda *args, **kwargs: answered.append((args, kwargs)),
     )
     monkeypatch.setattr(wizard, "_ask", lambda *_args, **_kwargs: wizard.SKIP)
-    wizard._decide_grey(console, _session(tmp_path))
+    wizard._decide_grey(console, _workspace(tmp_path))
     assert answered == []
 
 
@@ -175,9 +175,9 @@ def test_none_of_these_is_recorded_as_the_answer_it_is(tmp_path, console, monkey
         ),
     )
     monkeypatch.setattr(
-        iterate, "grey_answer", lambda _session, _mention, **kwargs: answered.append(kwargs)
+        iterate, "grey_answer", lambda _workspace, _mention, **kwargs: answered.append(kwargs)
     )
     answers = iter([wizard.NONE])
     monkeypatch.setattr(wizard, "_ask", lambda *_args, **_kwargs: next(answers))
-    wizard._decide_grey(console, _session(tmp_path))
+    wizard._decide_grey(console, _workspace(tmp_path))
     assert answered == [{"none_of_these": True}]
