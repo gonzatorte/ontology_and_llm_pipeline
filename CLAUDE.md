@@ -4,7 +4,7 @@ Guía para Claude Code trabajando en este directorio. La documentación completa
 archivos que indexa este documento; acá va sólo lo que hace falta para no romper nada ni
 redescubrir lo ya decidido.
 
-**Este directorio es su propio repositorio git** (`master`), independiente de `../repo/`. El
+**Este directorio es su propio repositorio git** (`main`), independiente de `../repo/`. El
 CLAUDE.md del workspace padre dice que "only `repo/` is a git repository"; eso quedó
 desactualizado y no aplica acá.
 
@@ -12,9 +12,9 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología inicial, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~19.100 líneas en 56 módulos, 589 tests. **Dos interfaces sobre el mismo pipeline**:
-un CLI de ~40 comandos y `wizard`, que recorre el mismo plan preguntando en cada punto de
-decisión. Las dos llaman a `services/`.
+con `uv`, ~19.100 líneas en 56 módulos, 597 tests, uno de ellos de punta a punta. **Dos
+interfaces sobre el mismo pipeline**: un CLI de ~40 comandos y `wizard`, que recorre el mismo plan
+preguntando en cada punto de decisión. Las dos llaman a `services/`.
 
 El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentación y los
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
@@ -61,7 +61,7 @@ antes de ver datos.
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 574 tests, ~5 s, sin red ni Docker
+uv run pytest -q                       # 597 tests, ~6 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
 uv run onto-pipeline --help
@@ -240,7 +240,7 @@ src/onto_pipeline/
   store.py                                                       el almacén sin dialecto: sqlite | postgres
   db.py language.py terms.py report.py                           esquema y utilidades
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
-tests/                un archivo por módulo; sin red, sin Docker, sin JVM
+tests/                un archivo por módulo, más `test_end_to_end.py`; sin red ni Docker
 lib/                  jars del razonador (gitignored, los baja fetch-jars.sh)
 data/                 almacén SQLite, artefactos derivados (gitignored)
 ```

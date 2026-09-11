@@ -4,7 +4,7 @@
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 589 tests, ~5 s, sin red ni Docker
+uv run pytest -q                       # 597 tests, ~6 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars, Java 11+)
 ```
@@ -98,6 +98,12 @@ Commitear después de cada hito, no una tanda al final.
 
 Los nombres son frases y el docstring dice qué decisión de diseño fija el test. Un test que sólo
 verifica mecánica está fuera de tono con el resto. Hay un archivo por módulo.
+
+**Y uno de punta a punta**, `tests/test_end_to_end.py`: corpus y ontología inicial adentro,
+ontología enriquecida afuera. Sustituye sólo el modelo y el encoder —lo que cuesta plata o
+red— y deja real todo lo demás, razonador incluido, así que se saltea sin los jars. Existe porque
+los tests de módulo no miran la **composición**, y ahí vivían los bugs más caros: su primera
+corrida encontró un historial que perdía eventos. Si agregás una etapa al camino feliz, va ahí.
 
 ## Antes de proponer un cambio
 
