@@ -278,6 +278,8 @@ database:
   dsn: ""                  # postgresql://usuario@host/base
 
 paths:
+  # Respaldo: sobre qué corre el pipeline lo dice el caso de uso de la sesión, y estas dos sólo
+  # se usan si la sesión no lo resuelve. Ver Sesiones de usuario, en Uso.
   corpus_root: ../use_cases/qualitative/corpus
   initial_ontology: ../use_cases/qualitative/ontology.rdf
   work_dir: ../data
@@ -402,6 +404,12 @@ datos: menciones, versiones, decisiones y artefactos en disco.
 **Dos sesiones pueden correr sobre el mismo caso de uso**, y esa es la comparación que el
 proyecto existe para poder hacer: el mismo corpus con otra configuración. El caso de uso es
 material de entrada, inmutable y compartido.
+
+**Sobre qué corre lo dice la sesión, no el config.** El `Workspace` resuelve el corpus y la
+ontología inicial desde el directorio del caso de uso —`corpus` y `ontology.*`, que pueden ser
+symlinks—. `paths.corpus_root` y `paths.initial_ontology` quedan como respaldo para un almacén
+sin sesiones. Si `paths` mandara, dos sesiones sobre casos de uso distintos leerían el mismo
+corpus.
 
 **Lo caro se comparte; la contabilidad no.** Las respuestas del modelo se cachean por contenido,
 así que la segunda sesión sobre el mismo corpus **no vuelve a pagar** una etapa que la primera ya

@@ -48,6 +48,26 @@ mueve el punto de operación con el tamaño del inventario**. Con 428, 3.418 y ~
 puede medir esa curva en vez de suponerla — hoy hay dos puntos y un salto entre ellos, que no es
 una forma (`FINDINGS-MEASURED-SIZE-CURVE`).
 
+## La convención de nombres: `corpus` y `ontology.*`
+
+**Sobre qué corre una sesión lo dice su caso de uso**, no el archivo de configuración: si
+`paths` mandara, dos sesiones sobre casos de uso distintos leerían el mismo corpus. El
+`Workspace` busca dos cosas dentro del directorio y las usa:
+
+```
+corpus        el corpus del pipeline (directorio)
+ontology.*    la ontología inicial (un archivo: .rdf, .owl, .ttl…)
+```
+
+Las dos pueden ser **symlinks** a lo que ya esté adentro del caso de uso o afuera del repo —así
+están las tres—, y quedan gitignoreadas como el resto de los datos. Si faltan, se cae a lo que
+diga `paths` en el config, y `ingest` dirá que no encuentra el corpus: la falla correcta, en vez
+de una corrida silenciosa sobre otra cosa.
+
+Ojo con una distinción de `craft-cl`: el pipeline necesita `ontology/cl-base.owl` —rdflib no
+parsea OBO— mientras que el banco de calibración lee los `.obo` con su propio lector. Por eso el
+symlink apunta al `.owl` y el `use_case.yml` sigue nombrando los `.obo`.
+
 ## Cómo se agrega un caso de uso
 
 Un caso de uso es un directorio con un `use_case.yml` y su `PROCEDENCIA.md`. Ver

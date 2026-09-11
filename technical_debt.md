@@ -530,18 +530,19 @@ por accidente:
   aplicarla a la zona gris es trabajo conocido, y es lo que además destraba `ITER-TUNE`, que
   está bloqueado por falta de pares contestados y no por falta de código.
 
-### DEBT-RUN-PARAMETERS — Sobre qué corre el pipeline es un parámetro, y vive en la configuración
+### DEBT-RUN-PARAMETERS — Sobre qué corre el pipeline es un parámetro — RESUELTA
 
-`paths.corpus_root` y `paths.initial_ontology` están en `config/default.yaml`, junto a los
-umbrales. No son la misma clase de cosa: un umbral es una decisión sobre **cómo** se comporta
-el pipeline y el par (corpus, ontología inicial) es **sobre qué** corre. Correr el mismo pipeline sobre
-dos casos de uso hoy pide dos archivos de configuración que difieren en dos líneas.
-
-Como paliativo, `wizard` pregunta el par siempre —aunque el archivo lo tenga— y
-`Session.open()` acepta sobreescrituras. Eso resuelve el síntoma, no la forma: la superficie
-correcta probablemente sea un `--use-case`, con el corpus de trabajo descrito igual que los
-publicados (un directorio con su `use_case.yml`, ver `use_cases/README.md`). Queda para discutir antes de
-tocarlo, porque cambia `CONFIG` del spec.
+> **Cerrada el 2026-09-11.** Lo era, y ahora lo es: una **sesión de usuario** corre sobre un
+> **caso de uso**, y el caso de uso *es* el par (ontología inicial, corpus). El `Workspace`
+> resuelve las dos rutas desde el directorio del caso de uso —`corpus` y `ontology.*`, que
+> pueden ser symlinks— en vez de leerlas de `paths`.
+>
+> `paths.corpus_root` y `paths.initial_ontology` siguen en el config como **respaldo**, para un
+> almacén sin sesiones todavía. Cuando hay sesión, manda la sesión.
+>
+> Lo que no se hizo, y era la otra idea que había: un `--use-case` suelto sin sesión. No hace
+> falta — `session new --use-case <nombre>` es eso mismo y además deja registro de que la
+> corrida existió.
 
 ### DEBT-OPEN-WORLD — Mundo abierto: lo que falta
 

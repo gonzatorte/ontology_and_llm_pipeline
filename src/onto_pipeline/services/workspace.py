@@ -105,7 +105,39 @@ class Workspace:
             config=config, conn=conn, config_path=Path(config_path), overrides=overrides,
         )
         workspace.session_id = session_id or current_session(config.paths.work_dir) or ""
+        workspace._adopt_use_case()
         return workspace
+
+    def _adopt_use_case(self) -> None:
+        """Sobre qué corre esto lo dice la sesión, no el archivo de configuración.
+
+        Una sesión corre sobre un caso de uso, y el caso de uso **es** el par (ontología
+        inicial, corpus). Si `paths` siguiera mandando, dos sesiones sobre casos de uso
+        distintos leerían el mismo corpus — que es precisamente la confusión que separarlos vino
+        a deshacer.
+
+        La convención es un `corpus/` y un `ontology.*` dentro del directorio del caso de uso;
+        pueden ser symlinks a material que vive afuera, que es lo que hace `use_cases/README.md`.
+        Sin ellos se cae a lo que diga `paths`, y `ingest` dirá que no encuentra el corpus —
+        que es la falla correcta y no una corrida silenciosa sobre otra cosa.
+        """
+        from .. import sessions
+
+        if not self.session_id or not sessions_table(self.conn):
+            return
+        try:
+            session = sessions.load(self.conn, self.session_id)
+        except sessions.UnknownSession:
+            return
+        directory = self.config.paths.use_cases_root / session.use_case
+        corpus = directory / "corpus"
+        if corpus.exists():
+            self.config.paths.corpus_root = corpus.resolve()
+        ontology = next(
+            (item for item in sorted(directory.glob("ontology.*")) if item.exists()), None
+        )
+        if ontology is not None:
+            self.config.paths.initial_ontology = ontology.resolve()
 
     @classmethod
     def of(cls, config: Config, conn: Store, *, session_id: str = "") -> Workspace:
@@ -280,6 +312,11 @@ class Workspace:
 # La sesión actual vive en un archivo del almacén y no en el config, que se versiona: cuál
 # sesión está activa es estado de esta máquina, no una decisión del proyecto.
 _CURRENT = "current_session"
+
+
+def sessions_table(conn: Store) -> bool:
+    """Si el almacén ya tiene la tabla. Un almacén recién creado no la tiene y eso no es error."""
+    return conn.table_exists("user_sessions")
 
 
 def current_session(work_dir: Path) -> str:
