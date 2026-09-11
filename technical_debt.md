@@ -525,6 +525,9 @@ por accidente:
 - **Las CQ.** `cq propose` y `cq import` no están en el plan del survey, así que el wizard no
   llega a ofrecerlas. Aceptar una CQ propuesta es el cuarto punto de decisión del spec y hoy se
   contesta sólo por `cq accept`.
+- **Cerrar una sesión.** El wizard la elige o la crea, pero no ofrece cerrarla ni volver a
+  preparación: eso se hace con `session close` y `session reopen`. La segunda tiene una pregunta
+  con números detrás, que es justo la clase de cosa que el wizard hace mejor que una bandera.
 - **La cola larga.** 131 pares de zona gris de a uno es mejor que por CLI y sigue siendo
   tedioso. El anotador de navegador del conjunto de retención ya demuestra que la forma existe;
   aplicarla a la zona gris es trabajo conocido, y es lo que además destraba `ITER-TUNE`, que

@@ -167,11 +167,6 @@ StaleAboxOption = typer.Option(
     True, "--refresh-abox/--no-refresh-abox",
     help="Regenerar el ABox antes de exportar. Es puro: no llama al modelo ni al razonador.",
 )
-InitialOntologyOption = typer.Option(
-    None, "--seed-ontology",
-    help="Ontología inicial de esta corrida.",
-)
-
 
 # La sesión elegida con `--session`, que es una opción global y va antes del subcomando. Un
 # `state` de módulo y no un parámetro por comando: son cuarenta comandos y la alternativa es
