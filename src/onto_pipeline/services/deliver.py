@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -19,12 +18,13 @@ from .. import versioning
 from ..chunking import chunk_document
 from ..ingest import STAGE, load_block_objects
 from ..report import build_report
+from ..store import Store
 from .session import Progress, Session, StageError, silent
 
 # ─────────────────────────────  lecturas compartidas  ─────────────────────────────
 
 
-def corpus_blocks(conn: sqlite3.Connection) -> list[dict]:
+def corpus_blocks(conn: Store) -> list[dict]:
     """Los bloques de cuerpo de todo documento que el proceso puede leer.
 
     Los documentos retenidos quedan afuera acá como en todos lados: una glosa escrita desde el
@@ -156,11 +156,15 @@ def telemetry(session: Session) -> Telemetry:
             "SELECT DISTINCT stage FROM work_units ORDER BY stage"
         )
     ]
+    # La razón sale del JSON en Python y no con `json_extract`: esa función es de SQLite y no
+    # existe igual en Postgres, y agrupar acá cuesta lo mismo que agruparlo allá.
+    tally: dict[tuple[str, str], int] = {}
+    for row in session.conn.execute("SELECT class, signals FROM page_classification"):
+        reason = (json.loads(row["signals"]) if row["signals"] else {}).get("reason") or ""
+        tally[(row["class"], reason)] = tally.get((row["class"], reason), 0) + 1
     page_classes = [
-        dict(row) for row in session.conn.execute(
-            "SELECT class, COUNT(*) AS n, json_extract(signals, '$.reason') AS reason "
-            "FROM page_classification GROUP BY class, reason ORDER BY n DESC"
-        )
+        {"class": name, "reason": reason, "n": count}
+        for (name, reason), count in sorted(tally.items(), key=lambda item: -item[1])
     ]
     failures = [
         dict(row) for row in session.conn.execute(

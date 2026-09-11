@@ -33,9 +33,11 @@ algo que decide el usuario, imprime cuál y sale sin correr nada.
 
 from __future__ import annotations
 
-import sqlite3
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+
+from .store import Store
 
 READY = "ready"
 WAITING = "waiting on you"
@@ -70,15 +72,24 @@ class Plan:
         )
 
 
-def _count(conn: sqlite3.Connection, query: str, params: tuple = ()) -> int:
-    try:
-        row = conn.execute(query, params).fetchone()
-    except sqlite3.OperationalError:
-        return 0        # the table belongs to a stage that has never run
+_TABLE = re.compile(r"\bFROM\s+([a-z_]+)")
+
+
+def _count(conn: Store, query: str, params: tuple = ()) -> int:
+    """Cuenta, y devuelve 0 si la tabla es de una etapa que nunca corrió.
+
+    Se **pregunta** si la tabla está en vez de intentar y atajar el error: en Postgres una
+    sentencia que falla aborta la transacción entera, así que el `except` que servía en SQLite
+    dejaba la conexión inutilizable para las once consultas que siguen.
+    """
+    table = _TABLE.search(query)
+    if table and not conn.table_exists(table.group(1)):
+        return 0
+    row = conn.execute(query, params).fetchone()
     return int(row[0]) if row else 0
 
 
-def survey(conn: sqlite3.Connection, version_id: str, *, has_provider: bool) -> Plan:
+def survey(conn: Store, version_id: str, *, has_provider: bool) -> Plan:
     """The state of every stage against one ontology version."""
     documents = _count(conn, "SELECT COUNT(*) FROM documents WHERE held_out = 0")
     blocks = _count(conn, "SELECT COUNT(*) FROM blocks")

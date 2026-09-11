@@ -26,10 +26,10 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from dataclasses import dataclass, field
 
 from .llm import Prompt
+from .store import Store
 
 STAGE = "iter_corefer"
 
@@ -140,7 +140,7 @@ def resolve(marked: Marked, groups: list[list[str]]) -> Grouping:
     return result
 
 
-def persist(conn: sqlite3.Connection, assignments: dict[str, str]) -> None:
+def persist(conn: Store, assignments: dict[str, str]) -> None:
     conn.executemany(
         "UPDATE mentions SET coref_group = ? WHERE id = ?",
         [(group, mention_id) for mention_id, group in assignments.items()],

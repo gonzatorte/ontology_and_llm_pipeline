@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-import sqlite3
 from pathlib import Path
 
 from . import parse
@@ -26,6 +25,7 @@ from .parse import (
     is_table_caption,
     parse_document,
 )
+from .store import Store
 from .telemetry import Ledger, StageResult, UnitResult
 
 STAGE = "A1_A2_ingest"
@@ -48,7 +48,7 @@ def discover(corpus_root: Path) -> list[Path]:
 
 def ingest(
     config: Config,
-    conn: sqlite3.Connection,
+    conn: Store,
     paths: list[Path],
     ledger: Ledger | None = None,
 ) -> StageResult:
@@ -129,7 +129,7 @@ def _write_markdown(config: Config, parsed: ParsedDocument) -> None:
     target.write_text(parsed.markdown, encoding="utf-8")
 
 
-def _persist(conn: sqlite3.Connection, parsed: ParsedDocument) -> None:
+def _persist(conn: Store, parsed: ParsedDocument) -> None:
     conn.execute(
         "INSERT INTO documents (id, path, content_hash, n_pages, parser_used, parser_version, "
         "markdown_hash) VALUES (?, ?, ?, ?, ?, ?, ?) "
@@ -182,14 +182,14 @@ def _persist(conn: sqlite3.Connection, parsed: ParsedDocument) -> None:
     conn.commit()
 
 
-def load_blocks(conn: sqlite3.Connection, doc_id: str) -> list[dict]:
+def load_blocks(conn: Store, doc_id: str) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM blocks WHERE document_id = ? ORDER BY page, ordinal", (doc_id,)
     ).fetchall()
     return [dict(row) for row in rows]
 
 
-def load_page_classes(conn: sqlite3.Connection, doc_id: str) -> list[dict]:
+def load_page_classes(conn: Store, doc_id: str) -> list[dict]:
     rows = conn.execute(
         "SELECT page, class, signals FROM page_classification WHERE document_id = ? ORDER BY page",
         (doc_id,),
@@ -198,12 +198,12 @@ def load_page_classes(conn: sqlite3.Connection, doc_id: str) -> list[dict]:
             for r in rows]
 
 
-def load_document(conn: sqlite3.Connection, doc_id: str) -> dict | None:
+def load_document(conn: Store, doc_id: str) -> dict | None:
     row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
     return dict(row) if row else None
 
 
-def load_block_objects(conn: sqlite3.Connection, doc_id: str) -> list[Block]:
+def load_block_objects(conn: Store, doc_id: str) -> list[Block]:
     """Blocks as parsed, for the derived stages (chunking) that work on them directly."""
     return [
         Block(
@@ -226,7 +226,7 @@ def load_block_objects(conn: sqlite3.Connection, doc_id: str) -> list[Block]:
     ]
 
 
-def set_held_out(conn: sqlite3.Connection, doc_ids: list[str], held_out: bool = True) -> int:
+def set_held_out(conn: Store, doc_ids: list[str], held_out: bool = True) -> int:
     """Mark documents as the retention set (EVAL-PIPELINE)."""
     cursor = conn.executemany(
         "UPDATE documents SET held_out = ? WHERE id = ?",
@@ -236,7 +236,7 @@ def set_held_out(conn: sqlite3.Connection, doc_ids: list[str], held_out: bool = 
     return cursor.rowcount
 
 
-def process_documents(conn: sqlite3.Connection) -> list[str]:
+def process_documents(conn: Store) -> list[str]:
     """The documents the process may consume. Held-out ones are parsed but never fed to it:
     evaluating the pipeline against documents it learned from measures nothing."""
     return [
@@ -247,7 +247,7 @@ def process_documents(conn: sqlite3.Connection) -> list[str]:
     ]
 
 
-def held_out_documents(conn: sqlite3.Connection) -> list[str]:
+def held_out_documents(conn: Store) -> list[str]:
     return [
         row["id"]
         for row in conn.execute(
@@ -262,7 +262,7 @@ RELOAD_SAMPLE = "sample"
 
 
 def select_for_reload(
-    conn: sqlite3.Connection,
+    conn: Store,
     candidates: list[str],
     *,
     strategy: str,

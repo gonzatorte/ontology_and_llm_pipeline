@@ -176,7 +176,7 @@ def test_recording_the_rules_twice_reports_nothing_changed(tmp_path):
 
 def test_the_rules_column_is_added_to_a_store_that_predates_it(tmp_path):
     conn = connect(tmp_path)
-    conn.executescript(
+    conn.script(
         "DROP TABLE IF EXISTS versions;"
         "CREATE TABLE versions (id TEXT PRIMARY KEY, parent_id TEXT, iteration INTEGER,"
         " branch_id TEXT, state_hash TEXT NOT NULL, turtle TEXT NOT NULL, note TEXT,"
@@ -184,8 +184,7 @@ def test_the_rules_column_is_added_to_a_store_that_predates_it(tmp_path):
     )
     versioning.install(conn)
 
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
-    assert "rules_hash" in columns
+    assert "rules_hash" in conn.columns("versions")
 
 
 def test_load_inputs_never_writes_to_the_mention_layer(tmp_path):

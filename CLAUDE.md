@@ -61,7 +61,7 @@ antes de ver datos.
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 546 tests, ~5 s, sin red ni Docker
+uv run pytest -q                       # 574 tests, ~5 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
 uv run onto-pipeline --help
@@ -100,7 +100,12 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
    CLI de banderas y `wizard`— y el cuerpo de una etapa no puede pertenecer a ninguna de las
    dos. El contrato está en `services/__init__.py`; un test lo fija leyendo los imports. Etapa
    nueva: va en `services/`, se muestra en `render.py`, y las dos interfaces la llaman.
-10. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno y `wizard` lo
+10. **Ningún módulo sabe contra qué motor corre el almacén.** El SQL se escribe con `?` y las
+    filas se leen por nombre; lo que difiere entre SQLite y Postgres vive en `store.py` y en
+    ningún otro lado. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
+    `SUM(booleano)`, el JSON se lee en Python y no con `json_extract`. `tests/test_store.py`
+    corre el mismo contrato contra los dos.
+11. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno y `wizard` lo
     pregunta; las dos cosas son la misma regla. Correr lo que viene después de una decisión que
     nadie tomó es tomarla por default, que es lo que `BRANCH-ONLY-REVIEW` nombra.
 
@@ -220,7 +225,8 @@ src/onto_pipeline/
   use_cases.py                                                   cargar un caso de uso
   calibration.py                                                 el banco: barrer umbrales sobre uno
   llm.py providers.py telemetry.py                               proveedor, caché y costos
-  db.py language.py terms.py report.py                           almacén y utilidades
+  store.py                                                       el almacén sin dialecto: sqlite | postgres
+  db.py language.py terms.py report.py                           esquema y utilidades
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
 tests/                un archivo por módulo; sin red, sin Docker, sin JVM
 lib/                  jars del razonador (gitignored, los baja fetch-jars.sh)

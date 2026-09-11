@@ -19,7 +19,6 @@ PREP-CQ-USER import are deterministic and are here.
 from __future__ import annotations
 
 import json
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +26,8 @@ from typing import Any
 
 from rdflib import Graph
 from rdflib.plugins.sparql import prepareQuery
+
+from .store import Store
 
 GENERATED = "generated"
 USER = "user"
@@ -116,8 +117,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -133,7 +134,7 @@ def validate(question: CompetencyQuestion) -> None:
         raise ValueError(f"{question.id}: a generated CQ needs a citation")
 
 
-def add(conn: sqlite3.Connection, questions: list[CompetencyQuestion]) -> int:
+def add(conn: Store, questions: list[CompetencyQuestion]) -> int:
     install(conn)
     for question in questions:
         validate(question)
@@ -161,7 +162,7 @@ def add(conn: sqlite3.Connection, questions: list[CompetencyQuestion]) -> int:
     return len(questions)
 
 
-def load(conn: sqlite3.Connection, *, status: str = ACCEPTED) -> list[CompetencyQuestion]:
+def load(conn: Store, *, status: str = ACCEPTED) -> list[CompetencyQuestion]:
     install(conn)
     return [
         CompetencyQuestion(
@@ -180,7 +181,7 @@ def load(conn: sqlite3.Connection, *, status: str = ACCEPTED) -> list[Competency
     ]
 
 
-def decide(conn: sqlite3.Connection, ids: list[str], status: str) -> int:
+def decide(conn: Store, ids: list[str], status: str) -> int:
     """Accept or discard proposed questions. The third action, reformulating, is an edit and
     goes through `import` like any question the user writes."""
     if status not in (ACCEPTED, DISCARDED):
@@ -228,7 +229,7 @@ def evaluate(
     return evaluation
 
 
-def record(conn: sqlite3.Connection, evaluation: Evaluation) -> None:
+def record(conn: Store, evaluation: Evaluation) -> None:
     install(conn)
     rows = (
         [(cq_id, evaluation.iteration, 1, evaluation.n_rows.get(cq_id), None, _now())

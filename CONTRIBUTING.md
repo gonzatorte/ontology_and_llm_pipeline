@@ -4,13 +4,39 @@
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 564 tests, ~5 s, sin red ni Docker
+uv run pytest -q                       # 574 tests, ~5 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars, Java 11+)
 ```
 
-Los tests no necesitan red, ni Docker, ni JVM, ni credencial: uno solo mira el corpus de
-`use_cases/craft-cl` y se saltea con un mensaje si no está bajado.
+Los tests no necesitan red, ni Docker, ni JVM, ni credencial, ni servidor de base: los que
+dependen de algo de eso se saltean con un mensaje que dice qué falta.
+
+## El almacén: SQLite o Postgres
+
+Ningún módulo sabe contra qué motor corre. El SQL se escribe con `?` y las filas se leen por
+nombre; `store.py` traduce lo poco que difiere entre los dos —el marcador de parámetro, las filas
+como mapping, `executescript`, y las dos consultas de introspección—. Todo lo demás se escribe
+portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no `SUM(booleano)`, y el JSON se lee en Python.
+
+`sqlite` es el default y alcanza para una sesión de usuario por vez. `postgres` es lo que admite
+**dos escribiendo a la vez**:
+
+```yaml
+database:
+  backend: postgres
+  dsn: postgresql://usuario@host/base
+```
+
+```bash
+uv sync --extra postgres
+ONTO_PIPELINE_TEST_DSN=postgresql://usuario@host/base uv run pytest -q tests/test_store.py
+```
+
+`tests/test_store.py` corre **el mismo contrato contra los dos** motores, parametrizado: sin
+`ONTO_PIPELINE_TEST_DSN` los casos de Postgres se saltean y la suite sigue sin necesitar
+servidor. Si tocás `store.py`, es el archivo que tiene que seguir pasando en verde con la
+variable puesta.
 
 **Lo que hace falta para correr el pipeline, no para desarrollarlo:** una credencial de proveedor
 en un archivo de entorno (`cp example.env opencode.env`, ver `README.md`) y los jars del

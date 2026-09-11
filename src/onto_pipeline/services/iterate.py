@@ -9,7 +9,6 @@ entre dos comandos, el wizard entre una pregunta y su respuesta.
 from __future__ import annotations
 
 import json
-import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,13 +43,14 @@ from ..ingest import (
     process_documents,
     select_for_reload,
 )
+from ..store import Store
 from .deliver import Comparison, corpus_blocks, publish_diff
 from .session import Progress, Session, StageError, silent, table_exists
 
 # ─────────────────────────────  lecturas compartidas  ─────────────────────────────
 
 
-def orphans(conn: sqlite3.Connection, version_id: str) -> list[dict]:
+def orphans(conn: Store, version_id: str) -> list[dict]:
     """Las menciones que ninguna clase tipó contra esta versión."""
     return [
         dict(row)

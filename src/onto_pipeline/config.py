@@ -21,6 +21,31 @@ class Paths(BaseModel):
     use_cases_root: Path = Path("../use_cases")
 
 
+class Database(BaseModel):
+    """Contra qué motor corre el almacén.
+
+    `sqlite` es el default y alcanza para una sesión de usuario por vez: da un escritor y muchos
+    lectores. `postgres` es lo que admite **dos sesiones escribiendo a la vez**, que es para lo
+    que existe la opción. Los módulos no saben cuál está activo — eso vive en `store.py`.
+    """
+
+    backend: str = "sqlite"
+    # Sólo para postgres. Nunca lleva la contraseña en claro si se puede evitar: acepta la forma
+    # `postgresql://usuario@host/base` y que el resto salga de `~/.pgpass` o del entorno.
+    dsn: str = ""
+
+    @field_validator("backend")
+    @classmethod
+    def _implemented(cls, value: str) -> str:
+        from .store import BACKENDS
+
+        if value not in BACKENDS:
+            raise ValueError(
+                f"database.backend es {' | '.join(sorted(BACKENDS))}, no {value!r}"
+            )
+        return value
+
+
 class OwlProfile(BaseModel):
     detected: str = "auto"
     target: str = "OWL_DL_no_cardinality"
@@ -282,6 +307,7 @@ class Execution(BaseModel):
 
 class Config(BaseModel):
     paths: Paths
+    database: Database = Database()
     owl_profile: OwlProfile = OwlProfile()
     reasoner: Reasoner = Reasoner()
     upper_ontology: str = "none"

@@ -13,7 +13,6 @@ state that keeps them out of the functional-property support count (6.8).
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -21,6 +20,7 @@ from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF, SKOS
 
 from .matching import AUTO, DISCARDED, GREY, Decision, Mention, Target
+from .store import Store
 
 POSSIBLE_DUPLICATE = "possible_duplicate_unresolved"
 
@@ -77,8 +77,8 @@ class OrphanSplit:
         return self.orphan / self.total if self.total else 0.0
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -121,7 +121,7 @@ def mentions_from(rows: list[dict]) -> list[Mention]:
     ]
 
 
-def persist_typings(conn: sqlite3.Connection, version_id: str, typings) -> OrphanSplit:
+def persist_typings(conn: Store, version_id: str, typings) -> OrphanSplit:
     """Store one run's typings, with the grey-zone answers already applied.
 
     Applied here rather than left to a consumer: a decision the user made has to survive the
@@ -156,7 +156,7 @@ def persist_typings(conn: sqlite3.Connection, version_id: str, typings) -> Orpha
 
 
 def answer(
-    conn: sqlite3.Connection, mention_id: str, iri: str | None, *,
+    conn: Store, mention_id: str, iri: str | None, *,
     offered: str | None = None, score: float | None = None, why: str = "",
 ) -> None:
     """Record one grey-zone answer. `iri=None` is "none of these", which is a real answer."""
@@ -170,7 +170,7 @@ def answer(
     conn.commit()
 
 
-def decisions(conn: sqlite3.Connection) -> dict[str, str | None]:
+def decisions(conn: Store) -> dict[str, str | None]:
     install(conn)
     return {
         row["mention_id"]: row["iri"]
@@ -178,7 +178,7 @@ def decisions(conn: sqlite3.Connection) -> dict[str, str | None]:
     }
 
 
-def labels(conn: sqlite3.Connection) -> list[dict]:
+def labels(conn: Store) -> list[dict]:
     """The accept/reject labels, as the re-ranker would need them (ITER-TUNE).
 
     A row per answer: the mention's text, the class that was offered, its score, and whether
@@ -196,7 +196,7 @@ def labels(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
-def pending(conn: sqlite3.Connection, version_id: str, limit: int = 0) -> list[dict]:
+def pending(conn: Store, version_id: str, limit: int = 0) -> list[dict]:
     """Grey-zone typings nobody has answered yet, best score first."""
     install(conn)
     query = (
@@ -235,7 +235,7 @@ def entities_from(decisions: list[Decision]) -> dict[str, str]:
 
 
 def persist_entities(
-    conn: sqlite3.Connection, entities: dict[str, str], unresolved: set[str]
+    conn: Store, entities: dict[str, str], unresolved: set[str]
 ) -> None:
     conn.executemany(
         "UPDATE mentions SET candidate_entity = ? WHERE id = ?",

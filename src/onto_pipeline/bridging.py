@@ -39,7 +39,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -47,6 +46,7 @@ from typing import Any
 
 from .llm import Prompt
 from .matching import Target, dot, normalize
+from .store import Store
 
 STAGE = "iter_bridge"
 
@@ -158,8 +158,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -259,7 +259,7 @@ def bridges_from(candidate: Candidate, answer: dict[str, Any]) -> Bridge | None:
     )
 
 
-def persist(conn: sqlite3.Connection, version_id: str, bridges: Sequence[Bridge]) -> None:
+def persist(conn: Store, version_id: str, bridges: Sequence[Bridge]) -> None:
     install(conn)
     conn.execute("DELETE FROM bridges WHERE version_id = ?", (version_id,))
     conn.executemany(
@@ -280,7 +280,7 @@ def persist(conn: sqlite3.Connection, version_id: str, bridges: Sequence[Bridge]
     conn.commit()
 
 
-def bridged_mentions(conn: sqlite3.Connection, version_id: str) -> set[str]:
+def bridged_mentions(conn: Store, version_id: str) -> set[str]:
     """Mentions a bridge already accounts for.
 
     Induction has to skip them, and that is the whole point of the stage sitting where it does:
@@ -298,7 +298,7 @@ def bridged_mentions(conn: sqlite3.Connection, version_id: str) -> set[str]:
     }
 
 
-def load(conn: sqlite3.Connection, version_id: str) -> list[dict]:
+def load(conn: Store, version_id: str) -> list[dict]:
     install(conn)
     return [
         dict(row)

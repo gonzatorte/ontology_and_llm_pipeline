@@ -40,7 +40,6 @@ the claim is false.
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -49,6 +48,7 @@ from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDFS
 
 from . import review
+from .store import Store
 
 FACTUAL_CONFLICT = "factual_conflict"
 CONFLICT_PATTERN = "conflict_pattern"
@@ -100,8 +100,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -326,7 +326,7 @@ def findings(
 
 
 def mark(
-    conn: sqlite3.Connection, mention_ids: Sequence[str], kind: str, why: str = ""
+    conn: Store, mention_ids: Sequence[str], kind: str, why: str = ""
 ) -> int:
     """Record a falsity mark. `refuted` and `misextracted` are opposite signals (6.4)."""
     if kind not in MARKS:
@@ -341,7 +341,7 @@ def mark(
     return len(mention_ids)
 
 
-def marks(conn: sqlite3.Connection, kind: str | None = None) -> dict[str, str]:
+def marks(conn: Store, kind: str | None = None) -> dict[str, str]:
     install(conn)
     query = "SELECT mention_id, mark FROM assertion_marks"
     params: tuple = ()
@@ -351,7 +351,7 @@ def marks(conn: sqlite3.Connection, kind: str | None = None) -> dict[str, str]:
     return {row["mention_id"]: row["mark"] for row in conn.execute(query, params)}
 
 
-def as_exceptions(conn: sqlite3.Connection) -> dict[str, str]:
+def as_exceptions(conn: Store) -> dict[str, str]:
     """Marks as mapping-rule exceptions, so they travel into the rules hash.
 
     This is what makes a refutation take effect. Regeneration is idempotent over
@@ -361,7 +361,7 @@ def as_exceptions(conn: sqlite3.Connection) -> dict[str, str]:
     return {f"mention:{mention_id}": mark for mention_id, mark in sorted(marks(conn).items())}
 
 
-def misextractions(conn: sqlite3.Connection) -> list[dict]:
+def misextractions(conn: Store) -> list[dict]:
     """The extraction errors, for the evaluation set.
 
     Free labels: nobody annotated them on purpose, they are what a reader noticed while
@@ -381,7 +381,7 @@ def misextractions(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
-def export_misextractions(conn: sqlite3.Connection) -> str:
+def export_misextractions(conn: Store) -> str:
     """JSONL, the same shape the retention set uses, so both feed one evaluation."""
     return "\n".join(
         json.dumps({

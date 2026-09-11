@@ -14,6 +14,14 @@ paths:
   # un caso de uso se usa para medir el sistema y no al revés. Ver use_cases/README.md.
   use_cases_root: ../use_cases
 
+# ─── Almacén ─────────────────────────────────────────────
+# `sqlite` alcanza para una sesión de usuario por vez. Para correr dos en paralelo hace falta
+# `postgres`: SQLite da un escritor y muchos lectores, y dos sesiones escribiendo es justo lo que
+# no admite. Los módulos no saben cuál está activo (ver `store.py`).
+database:
+  backend: sqlite          # sqlite | postgres
+  dsn: ""                  # postgresql://usuario@host/base — sólo para postgres
+
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:
   detected: auto          # computed in PREP-NORMALIZE-PROFILE

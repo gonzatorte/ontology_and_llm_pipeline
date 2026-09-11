@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -42,6 +41,7 @@ from rdflib import Graph, URIRef
 from rdflib.namespace import RDFS
 
 from .llm import Prompt
+from .store import Store
 
 STAGE = "iter_validate_ontoclean"
 
@@ -162,8 +162,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -218,7 +218,7 @@ def check(graph: Graph, labels: dict[str, Labels]) -> tuple[list[Violation], int
     return violations, checked, skipped
 
 
-def persist(conn: sqlite3.Connection, version_id: str, labels: Sequence[Labels]) -> None:
+def persist(conn: Store, version_id: str, labels: Sequence[Labels]) -> None:
     install(conn)
     conn.executemany(
         "INSERT OR REPLACE INTO metaproperties (version_id, iri, rigidity, identity, unity, "
@@ -232,7 +232,7 @@ def persist(conn: sqlite3.Connection, version_id: str, labels: Sequence[Labels])
     conn.commit()
 
 
-def load(conn: sqlite3.Connection, version_id: str) -> dict[str, Labels]:
+def load(conn: Store, version_id: str) -> dict[str, Labels]:
     """The labels for a version, falling back to any earlier version's.
 
     A metaproperty is a fact about the concept, not about the state of the ontology: a class

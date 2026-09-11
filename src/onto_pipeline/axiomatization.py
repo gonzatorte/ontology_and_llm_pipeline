@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -43,6 +42,7 @@ from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, SKOS
 
 from .llm import Prompt
+from .store import Store
 
 STAGE = "iter_axiomatize"
 
@@ -146,8 +146,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -343,7 +343,7 @@ def apply(graph: Graph, axioms: list[Axiom]) -> Graph:
     return extended
 
 
-def load(conn: sqlite3.Connection, version_id: str) -> list[Axiom]:
+def load(conn: Store, version_id: str) -> list[Axiom]:
     """The axioms proposed against a version, as they were assembled.
 
     Branching reads them back rather than re-running the model: the judgements cost money and
@@ -365,7 +365,7 @@ def load(conn: sqlite3.Connection, version_id: str) -> list[Axiom]:
     ]
 
 
-def persist(conn: sqlite3.Connection, version_id: str, axioms: list[Axiom]) -> None:
+def persist(conn: Store, version_id: str, axioms: list[Axiom]) -> None:
     install(conn)
     conn.execute("DELETE FROM proposed_axioms WHERE version_id = ?", (version_id,))
     conn.executemany(

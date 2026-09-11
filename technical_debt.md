@@ -17,16 +17,42 @@ mirando ninguno de los tres.
 
 ## Mejoras estructurales
 
-### DEBT-DATA-ACCESS-LAYER — Capa de acceso a datos
+### DEBT-DATA-ACCESS-LAYER — Capa de acceso a datos — RESUELTA
 
-Hoy el SQL crudo está repartido en 8 módulos y `sqlite3` se importa en cada uno. Funciona, pero
-tiene dos costos: migrar a otro motor sería un barrido manual por todos ellos (~13 lugares con
-SQL específico de SQLite: `executescript`, `IFNULL`, `SUM(status = 'done')`, `json_extract`,
-`sqlite3.Row`), y los tests que tocan persistencia necesitan una base real.
+> **Cerrada el 2026-09-10.** La necesidad apareció: dos sesiones de usuario en paralelo, y SQLite
+> da un escritor y muchos lectores. Se hizo lo que esta entrada decía que había que hacer —
+> escribir la capa, no migrar a mano.
+>
+> `store.py` cubre lo único que no se escribe portable: el marcador de parámetro (`?` contra
+> `%s`, traducido respetando los literales), las filas como mapping, `executescript`, y las dos
+> consultas de introspección (`table_exists`, `columns`). Todo lo demás **se reescribió portable**
+> en vez de traducirse: `COALESCE` por `IFNULL`, `CASE WHEN` por `SUM(booleano)`, y el JSON de
+> `page_classification` se lee en Python en vez de con `json_extract`.
+>
+> El motor se elige en `database.backend` del config. **Los tests siguen en SQLite**, sin red ni
+> servidor, y `tests/test_store.py` corre el mismo contrato contra los dos backends,
+> parametrizado: los casos de Postgres se saltean sin `ONTO_PIPELINE_TEST_DSN`.
+>
+> Lo que quedó sin probar contra un servidor de verdad está anotado en `DEBT-POSTGRES-UNTESTED`.
 
-Una capa fina de acceso a datos resuelve las dos cosas a la vez. **No es urgente**: SQLite
-alcanza de sobra para este workload y `BUILD-OUT-OF-SCOPE` deja Fuseki fuera de v1 explícitamente. Pero si
-alguna vez aparece la necesidad de Postgres, la inversión que rinde es ésta, no la migración.
+### DEBT-POSTGRES-UNTESTED — El backend de Postgres no corrió contra un servidor
+
+`store.open_postgres` y la traducción de `?` a `%s` están escritas y tienen test, pero **los
+casos de Postgres de `tests/test_store.py` nunca se ejecutaron**: en la máquina donde se escribió
+no hay servidor corriendo. Lo verificado es la mitad de SQLite y que la falla sin servidor sea
+clara.
+
+Lo que falta es una corrida con `ONTO_PIPELINE_TEST_DSN` apuntando a un Postgres real. Tres cosas
+son las candidatas a romperse primero, y ninguna la ve SQLite:
+
+- **Las claves foráneas.** El esquema declara **una sola** (`versions.parent_id`) y SQLite las
+  ignora salvo que se le pidan — `open_sqlite` ahora las pide, justamente para que la diferencia
+  no aparezca recién allá.
+- **Una sentencia que falla aborta la transacción entera.** En SQLite no, y hay código que
+  contaba con eso; `orchestration._count` ya se reescribió para preguntar en vez de atajar, pero
+  puede haber más.
+- **Los tipos.** SQLite acepta cualquier cosa en cualquier columna; Postgres no. Un `INTEGER` que
+  recibe un `bool` de Python, o un `TEXT` que recibe un `Path`, pasa acá y falla allá.
 
 ### DEBT-PARALLEL-EXTRACTION — Paralelizar las llamadas de `ITER-EXTRACT`
 

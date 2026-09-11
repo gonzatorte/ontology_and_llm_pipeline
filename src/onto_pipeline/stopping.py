@@ -29,9 +29,10 @@ between a problem in the pipeline and a problem in the data.
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+
+from .store import Store
 
 PRIMARY = "primary"
 SECONDARY = "secondary"
@@ -82,7 +83,7 @@ class Assessment:
 # ─────────────────────────  the measurements  ─────────────────────────
 
 
-def install(conn: sqlite3.Connection) -> None:
+def install(conn: Store) -> None:
     """Create the tables this reads if the store predates them.
 
     It owns none of them — it only measures. Without this, a store where the CQs were never
@@ -96,7 +97,7 @@ def install(conn: sqlite3.Connection) -> None:
     typing_store.install(conn)
 
 
-def pass_rate_history(conn: sqlite3.Connection) -> list[float]:
+def pass_rate_history(conn: Store) -> list[float]:
     """Fraction of competency questions answered, one entry per iteration, oldest first."""
     install(conn)
     rows = conn.execute(
@@ -106,7 +107,7 @@ def pass_rate_history(conn: sqlite3.Connection) -> list[float]:
     return [float(row["rate"]) for row in rows]
 
 
-def concepts_by_document(conn: sqlite3.Connection, version_id: str) -> dict[str, set[str]]:
+def concepts_by_document(conn: Store, version_id: str) -> dict[str, set[str]]:
     """What concepts each document turned out to be about.
 
     A concept is a class one of its mentions was typed to, or an induced proposal one of its
@@ -136,7 +137,7 @@ def concepts_by_document(conn: sqlite3.Connection, version_id: str) -> dict[str,
     return found
 
 
-def processing_order(conn: sqlite3.Connection) -> list[str]:
+def processing_order(conn: Store) -> list[str]:
     """Documents in the order they entered the process, which is insertion order.
 
     The curve is a function of that order and of nothing else, so it has to be the real one:
@@ -177,7 +178,7 @@ def tail_slope(curve: Sequence[Point], window: int) -> float | None:
 
 
 def assess(
-    conn: sqlite3.Connection,
+    conn: Store,
     version_id: str,
     *,
     target_pass_rate: float,

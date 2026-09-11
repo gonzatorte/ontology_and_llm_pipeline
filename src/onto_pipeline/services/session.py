@@ -13,7 +13,6 @@ código de salida. Que la etapa no sepa cuál de las dos cosas va a pasar es jus
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,7 +21,8 @@ from rdflib import Graph
 
 from .. import versioning
 from ..config import Config
-from ..db import connect
+from ..db import open_configured
+from ..store import Store
 from ..telemetry import Ledger
 
 # Qué está pasando ahora, para una barra de progreso o un spinner. No es logging: es la única
@@ -60,7 +60,7 @@ class Session:
     """
 
     config: Config
-    conn: sqlite3.Connection
+    conn: Store
     config_path: Path | None = None
     # Sobreescrituras de `paths` pedidas por la interfaz, no por el archivo: el par (corpus,
     # semilla) es un parámetro de la corrida y no una decisión de configuración.
@@ -87,12 +87,13 @@ class Session:
                 setattr(config.paths, name, resolved)
                 overrides[name] = resolved
         return cls(
-            config=config, conn=connect(config.paths.work_dir),
+            config=config,
+            conn=open_configured(config.database, config.paths.work_dir),
             config_path=Path(config_path), overrides=overrides,
         )
 
     @classmethod
-    def of(cls, config: Config, conn: sqlite3.Connection) -> Session:
+    def of(cls, config: Config, conn: Store) -> Session:
         """Para los tests y para quien ya tiene las dos cosas abiertas."""
         return cls(config=config, conn=conn)
 
@@ -219,7 +220,7 @@ class Session:
             raise StageError(f"{exc}. {why}".strip()) from exc
 
 
-def table_exists(conn: sqlite3.Connection, name: str) -> bool:
+def table_exists(conn: Store, name: str) -> bool:
     return bool(
         conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
@@ -227,6 +228,6 @@ def table_exists(conn: sqlite3.Connection, name: str) -> bool:
     )
 
 
-def count(conn: sqlite3.Connection, query: str, params: tuple = ()) -> int:
+def count(conn: Store, query: str, params: tuple = ()) -> int:
     row = conn.execute(query, params).fetchone()
     return int(row[0]) if row else 0

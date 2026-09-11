@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -22,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .config import Execution
+from .store import Store
 
 
 class StageAborted(RuntimeError):
@@ -84,7 +84,7 @@ def input_hash(payload: Any) -> str:
 
 
 class Ledger:
-    def __init__(self, conn: sqlite3.Connection, execution: Execution, sleep=time.sleep) -> None:
+    def __init__(self, conn: Store, execution: Execution, sleep=time.sleep) -> None:
         self.conn = conn
         self.execution = execution
         self._sleep = sleep
@@ -92,7 +92,7 @@ class Ledger:
     def barrier(self, stage: str, iteration: int | None = None) -> None:
         row = self.conn.execute(
             "SELECT COUNT(*) AS n FROM work_units "
-            "WHERE stage = ? AND IFNULL(iteration, -1) = IFNULL(?, -1) "
+            "WHERE stage = ? AND COALESCE(iteration, -1) = COALESCE(?, -1) "
             "AND status IN ('pending', 'running')",
             (stage, iteration),
         ).fetchone()
@@ -212,8 +212,10 @@ class Ledger:
     def stage_report(self, stage: str) -> dict[str, Any]:
         row = self.conn.execute(
             "SELECT COUNT(*) AS units, "
-            "SUM(status = 'done') AS done, SUM(status = 'failed') AS failed, "
-            "SUM(IFNULL(in_tokens, 0)) AS in_tokens, SUM(IFNULL(out_tokens, 0)) AS out_tokens "
+            "SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done, "
+            "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, "
+            "SUM(COALESCE(in_tokens, 0)) AS in_tokens, "
+            "SUM(COALESCE(out_tokens, 0)) AS out_tokens "
             "FROM work_units WHERE stage = ?",
             (stage,),
         ).fetchone()

@@ -18,13 +18,14 @@ oscillation is exactly a cycle and is detected exactly and cheaply.
 from __future__ import annotations
 
 import hashlib
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from rdflib import BNode, Graph
 from rdflib.compare import to_canonical_graph
 from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS, SKOS, XSD
+
+from .store import Store
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS versions (
@@ -77,14 +78,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     # `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so a column added after the
     # fact needs this. `rules_hash` records which mapping rules produced a version's ABox:
     # without it the same TBox under different rules gives different ABoxes and nothing says
     # so (mapping_rules_plan.md).
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
-    if "rules_hash" not in columns:
+    if "rules_hash" not in conn.columns("versions"):
         conn.execute("ALTER TABLE versions ADD COLUMN rules_hash TEXT")
     conn.commit()
 
@@ -261,7 +261,7 @@ def label_index(*graphs: Graph) -> dict[str, str]:
 
 
 def diff_with_parent(
-    conn: sqlite3.Connection, version_id: str
+    conn: Store, version_id: str
 ) -> tuple[Version, Diff] | None:
     """What a version changed against the state it came from.
 
@@ -279,7 +279,7 @@ def diff_with_parent(
 
 
 def commit(
-    conn: sqlite3.Connection,
+    conn: Store,
     graph: Graph,
     *,
     version_id: str,
@@ -309,7 +309,7 @@ def commit(
     return version
 
 
-def load(conn: sqlite3.Connection, version_id: str) -> tuple[Version, Graph]:
+def load(conn: Store, version_id: str) -> tuple[Version, Graph]:
     install(conn)
     row = conn.execute("SELECT * FROM versions WHERE id = ?", (version_id,)).fetchone()
     if row is None:
@@ -321,7 +321,7 @@ def load(conn: sqlite3.Connection, version_id: str) -> tuple[Version, Graph]:
     return version, Graph().parse(data=row["turtle"], format="turtle")
 
 
-def record_rules(conn: sqlite3.Connection, version_id: str, rules_hash: str) -> bool:
+def record_rules(conn: Store, version_id: str, rules_hash: str) -> bool:
     """Stamp a version with the mapping rules its ABox was regenerated under.
 
     Returns whether this changed anything: a version already stamped with the same hash has
@@ -343,7 +343,7 @@ def record_rules(conn: sqlite3.Connection, version_id: str, rules_hash: str) -> 
     return True
 
 
-def find_by_hash(conn: sqlite3.Connection, hash_value: str) -> Version | None:
+def find_by_hash(conn: Store, hash_value: str) -> Version | None:
     """Loop detection: if the resulting state's hash is already in the DAG, the branch is a
     return to an existing version, not a novelty. Returning is allowed — but explicitly."""
     install(conn)
@@ -360,7 +360,7 @@ def find_by_hash(conn: sqlite3.Connection, hash_value: str) -> Version | None:
 
 
 def nearest_state(
-    conn: sqlite3.Connection, graph: Graph, threshold: float
+    conn: Store, graph: Graph, threshold: float
 ) -> tuple[Version, float] | None:
     """The case the exact hash misses: the branch returns *almost* to an earlier state — same
     modelling commitment, different IRIs. Jaccard distance over the normalized axiom sets.
@@ -381,7 +381,7 @@ def nearest_state(
     return best
 
 
-def lineage(conn: sqlite3.Connection, version_id: str) -> list[str]:
+def lineage(conn: Store, version_id: str) -> list[str]:
     """Path back to the root. The DAG keeps unchosen branches, so this is one path, not the
     whole history."""
     install(conn)

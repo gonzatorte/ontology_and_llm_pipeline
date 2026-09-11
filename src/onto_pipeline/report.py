@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import html
 import json
-import sqlite3
 from pathlib import Path
 
 import pymupdf
@@ -21,6 +20,7 @@ import pymupdf
 from .config import Config
 from .ingest import load_blocks, load_document, load_page_classes, markdown_path
 from .parse import CAPTION, TABLE, is_table_caption
+from .store import Store
 
 _KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
 _KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
@@ -62,7 +62,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: #8881; padding:
 """
 
 
-def build_report(config: Config, conn: sqlite3.Connection, doc_id: str, dpi: int = 100) -> Path:
+def build_report(config: Config, conn: Store, doc_id: str, dpi: int = 100) -> Path:
     document = load_document(conn, doc_id)
     if document is None:
         raise KeyError(f"document {doc_id} has not been ingested")

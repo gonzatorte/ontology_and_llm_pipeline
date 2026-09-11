@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -41,6 +40,7 @@ from rdflib import Dataset, Graph, Literal, URIRef
 from rdflib.namespace import OWL, PROV, RDF, RDFS, XSD
 
 from . import typing_store
+from .store import Store
 from .typing_store import POSSIBLE_DUPLICATE
 
 AUTO = "auto"
@@ -315,7 +315,7 @@ def _settle(
 
 
 def load_inputs(
-    conn: sqlite3.Connection, version_id: str
+    conn: Store, version_id: str
 ) -> tuple[list[MentionRow], dict[str, tuple[str | None, str]]]:
     """Read-only over the mention layer, by contract: regeneration never writes to it.
 

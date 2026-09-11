@@ -37,12 +37,12 @@ import hashlib
 import itertools
 import json
 import re
-import sqlite3
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
 from .axiomatization import Axiom
+from .store import Store
 
 KIND_LOGICAL = "logical"
 KIND_MODELLING = "modelling"
@@ -697,10 +697,10 @@ def _name(axiom_id: str, axioms: Sequence[Axiom], labels: dict[str, str]) -> str
     return axiom_id
 
 
-def install(conn: sqlite3.Connection) -> None:
+def install(conn: Store) -> None:
     """`branches` es de este módulo; `decisions` la crea `db.connect`, porque es el registro
     de ITER-FEEDBACK y no una tabla de la etapa de ramas."""
-    conn.executescript(SCHEMA)
+    conn.script(SCHEMA)
     conn.commit()
 
 
@@ -721,7 +721,7 @@ def axes_record(decision: Decision, branch: Branch) -> list[dict]:
 
 
 def persist(
-    conn: sqlite3.Connection, version_id: str, decisions: Sequence[Decision], *, iteration: int = 0
+    conn: Store, version_id: str, decisions: Sequence[Decision], *, iteration: int = 0
 ) -> None:
     install(conn)
     # A decision already settled is not re-opened by proposing again: branch ids are
@@ -757,7 +757,7 @@ def persist(
     conn.commit()
 
 
-def load(conn: sqlite3.Connection, version_id: str) -> list[dict]:
+def load(conn: Store, version_id: str) -> list[dict]:
     install(conn)
     return [
         dict(row) for row in conn.execute(
@@ -767,14 +767,14 @@ def load(conn: sqlite3.Connection, version_id: str) -> list[dict]:
     ]
 
 
-def find(conn: sqlite3.Connection, branch_id: str) -> dict | None:
+def find(conn: Store, branch_id: str) -> dict | None:
     install(conn)
     row = conn.execute("SELECT * FROM branches WHERE id = ?", (branch_id,)).fetchone()
     return dict(row) if row else None
 
 
 def settle(
-    conn: sqlite3.Connection, branch_id: str, *, note: str = "",
+    conn: Store, branch_id: str, *, note: str = "",
     invalid: Sequence[str] = (), state_hash: str = "",
     normal_forms: dict[str, str] | None = None,
 ) -> dict:
@@ -824,7 +824,7 @@ def settle(
     return dict(row)
 
 
-def _record(conn: sqlite3.Connection, branch: dict, status: str, state_hash: str) -> None:
+def _record(conn: Store, branch: dict, status: str, state_hash: str) -> None:
     """Una fila por (rama, eje) en `decisions`, el esquema GRADED-FEEDBACK.
 
     Una fila por eje y no por rama: el historial se consulta por categoría —"¿qué se decidió
@@ -850,7 +850,7 @@ def _record(conn: sqlite3.Connection, branch: dict, status: str, state_hash: str
         )
 
 
-def already_rejected(conn: sqlite3.Connection, normal: str) -> dict | None:
+def already_rejected(conn: Store, normal: str) -> dict | None:
     """La decisión anterior sobre **esta misma** propuesta, si la hubo.
 
     Compara por forma normal: el mismo compromiso vuelve en otra iteración con IRIs distintos, y
@@ -869,7 +869,7 @@ def already_rejected(conn: sqlite3.Connection, normal: str) -> dict | None:
 
 
 def precedents_like(
-    conn: sqlite3.Connection, normal: str, similarity, *, limit: int = 5,
+    conn: Store, normal: str, similarity, *, limit: int = 5,
     minimum: float = 0.5,
 ) -> list[dict]:
     """Las decisiones anteriores más parecidas a esta propuesta.
@@ -899,7 +899,7 @@ def precedents_like(
 
 
 def precedents(
-    conn: sqlite3.Connection, category: str, *, limit: int = 5
+    conn: Store, category: str, *, limit: int = 5
 ) -> list[dict]:
     """Las decisiones anteriores sobre esta categoría, la más reciente primero.
 
@@ -918,7 +918,7 @@ def precedents(
     ]
 
 
-def history(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
+def history(conn: Store) -> dict[tuple[str, str], int]:
     """How often each (axis, option) was chosen before, minus how often it was rejected.
 
     Feeds `historical_affinity`, and is empty by construction in the first iteration — the

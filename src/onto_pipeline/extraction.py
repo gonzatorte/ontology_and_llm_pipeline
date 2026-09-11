@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
 from .chunking import Chunk
 from .llm import Prompt
+from .store import Store
 
 STAGE = "iter_extract"
 
@@ -189,7 +189,7 @@ def locate(
     return Located(mentions=mentions, unlocatable=unlocatable, rejected=rejected)
 
 
-def persist(conn: sqlite3.Connection, document_id: str, mentions: list[Mention]) -> None:
+def persist(conn: Store, document_id: str, mentions: list[Mention]) -> None:
     """The mention layer is immutable except by extension, so a re-run replaces this
     document's rows rather than accumulating duplicates."""
     conn.execute("DELETE FROM mentions WHERE document_id = ?", (document_id,))
@@ -208,7 +208,7 @@ def persist(conn: sqlite3.Connection, document_id: str, mentions: list[Mention])
     conn.commit()
 
 
-def load(conn: sqlite3.Connection, document_id: str) -> list[dict]:
+def load(conn: Store, document_id: str) -> list[dict]:
     return [
         dict(row)
         for row in conn.execute(

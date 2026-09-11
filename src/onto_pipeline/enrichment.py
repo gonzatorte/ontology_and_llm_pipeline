@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -41,6 +40,7 @@ from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import SKOS
 
 from .llm import Prompt
+from .store import Store
 
 STAGE = "iter_axiomatize_enrich"
 
@@ -323,13 +323,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
 def persist(
-    conn: sqlite3.Connection, version_id: str, enrichments: list[Enrichment],
+    conn: Store, version_id: str, enrichments: list[Enrichment],
     passages: dict[str, list[Passage]] | None = None,
 ) -> None:
     install(conn)
@@ -353,7 +353,7 @@ def persist(
     conn.commit()
 
 
-def contributors(conn: sqlite3.Connection, iri: str) -> list[str]:
+def contributors(conn: Store, iri: str) -> list[str]:
     install(conn)
     return [
         row["document_id"] for row in conn.execute(
@@ -364,7 +364,7 @@ def contributors(conn: sqlite3.Connection, iri: str) -> list[str]:
     ]
 
 
-def circular_matches(conn: sqlite3.Connection, version_id: str) -> list[dict]:
+def circular_matches(conn: Store, version_id: str) -> list[dict]:
     """Typed mentions whose own document helped write the class they were typed to.
 
     Deliberately not filtered by the version that recorded the contribution: once a document

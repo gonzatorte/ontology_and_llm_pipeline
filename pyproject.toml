@@ -30,6 +30,12 @@ matching = [
     # LoRA, para ajustar un re-ranker que no entra entero en memoria.
     "peft>=0.13",
 ]
+# Dos sesiones de usuario escribiendo a la vez. SQLite da un escritor y muchos lectores, que
+# alcanza para una sesión por vez; para dos hace falta esto. Opcional porque la suite entera
+# corre contra SQLite y no necesita servidor.
+postgres = [
+    "psycopg[binary]>=3.2",
+]
 # B5 filter 3. Optional because the filter reports SKIPPED without shapes anyway, and shapes
 # are written by hand: OWL says what must be true, SHACL what must be stated, and under the
 # open-world assumption generating one from the other turns every silence into a violation.

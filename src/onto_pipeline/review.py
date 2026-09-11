@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+from .store import Store
 
 DIVERGENT_LABEL = "divergent_label"
 PENDING_SEMANTIC_CHECK = "pending_semantic_check"
@@ -84,13 +85,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def install(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+def install(conn: Store) -> None:
+    conn.script(SCHEMA)
     conn.commit()
 
 
 def sync(
-    conn: sqlite3.Connection, findings: list[Finding], *, version_id: str, kinds: list[str]
+    conn: Store, findings: list[Finding], *, version_id: str, kinds: list[str]
 ) -> SyncReport:
     """Record this run's findings, leaving decisions already made untouched.
 
@@ -142,7 +143,7 @@ def sync(
 
 
 def resolve(
-    conn: sqlite3.Connection, item_id: str, status: str, comment: str = ""
+    conn: Store, item_id: str, status: str, comment: str = ""
 ) -> bool:
     if status not in RESOLVED:
         raise ValueError(f"a review item is accepted or rejected, not {status!r}")
@@ -156,7 +157,7 @@ def resolve(
 
 
 def load(
-    conn: sqlite3.Connection, *, status: str | None = OPEN, kind: str | None = None
+    conn: Store, *, status: str | None = OPEN, kind: str | None = None
 ) -> list[dict]:
     install(conn)
     query = "SELECT * FROM review_items WHERE 1=1"
@@ -173,7 +174,7 @@ def load(
     ]
 
 
-def counts(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
+def counts(conn: Store) -> dict[tuple[str, str], int]:
     install(conn)
     return {
         (row["kind"], row["status"]): row["n"]
