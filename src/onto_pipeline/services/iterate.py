@@ -1250,6 +1250,10 @@ def choose_branch(
         }, session_id=session,
     )
     choice.settled = True
+    workspace.note(
+        "decision", f"rama {branch_id}" + (f": {why}" if why else ""),
+        {"branch": branch_id, "invalid": invalid},
+    )
     return choice
 
 

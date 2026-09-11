@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -108,6 +109,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _instant() -> str:
+    """Con microsegundos: dos eventos del mismo segundo tienen que quedar en orden."""
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
 def install(conn: Store) -> None:
     conn.script(SCHEMA)
     conn.commit()
@@ -190,9 +196,12 @@ def record(
     contestar «¿por qué la ontología quedó así?» seis meses después.
     """
     install(conn)
-    at = _now()
+    at = _instant()
+    # El id no puede derivarse del instante: con precisión de segundo y `ON CONFLICT DO NOTHING`,
+    # dos eventos del mismo tipo en el mismo segundo —aplicar axiomas y exportar— colisionaban y
+    # el segundo **se descartaba sin error**. Un historial append-only que pierde entradas.
     event = Event(
-        id=f"{session_id}:{at}:{kind}", session_id=session_id, at=at, kind=kind,
+        id=f"{session_id}:{uuid.uuid4().hex}", session_id=session_id, at=at, kind=kind,
         summary=summary, payload=payload or {},
     )
     conn.execute(

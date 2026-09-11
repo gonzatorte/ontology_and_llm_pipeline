@@ -163,3 +163,18 @@ def test_one_session_does_not_see_the_history_of_another(conn):
 
     assert len(sessions.history(conn, first.id)) == 2
     assert len(sessions.history(conn, second.id)) == 1
+
+
+def test_two_events_in_the_same_second_are_both_kept(conn):
+    """El historial es append-only, y append-only quiere decir que no se pierde nada.
+
+    El id se derivaba del instante con precisión de segundo y la inserción era `ON CONFLICT DO
+    NOTHING`: aplicar axiomas y exportar, que corren en el mismo segundo, dejaban **un** evento.
+    Lo encontró el test de punta a punta; ningún test de módulo registraba dos cosas tan juntas.
+    """
+    session = sessions.create(conn, use_case="craft-cl")
+    sessions.record(conn, session.id, sessions.STAGE, "versión v1")
+    sessions.record(conn, session.id, sessions.STAGE, "exportada v1")
+
+    stages = [e.summary for e in sessions.history(conn, session.id) if e.kind == sessions.STAGE]
+    assert sorted(stages) == ["exportada v1", "versión v1"]

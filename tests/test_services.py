@@ -74,8 +74,15 @@ def _config(tmp_path: Path):
 
 
 def _workspace(tmp_path: Path) -> Workspace:
+    """Con la sesión creada de verdad y no sólo nombrada: el historial tiene clave foránea contra
+    `user_sessions`, y anotar para una sesión que no existe tiene que fallar."""
+    from onto_pipeline import sessions
+
     config = _config(tmp_path)
-    return Workspace.of(config, connect(config.paths.work_dir), session_id=SESSION)
+    conn = connect(config.paths.work_dir)
+    created = sessions.create(conn, use_case="test")
+    assert created.id == SESSION
+    return Workspace.of(config, conn, session_id=created.id)
 
 
 # ─────────────────────────  resolución de versión  ─────────────────────────

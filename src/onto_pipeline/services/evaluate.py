@@ -281,6 +281,7 @@ def resolve_review(
         raise StageError(str(exc)) from exc
     if not found:
         raise StageError(f"no review item {item_id!r}")
+    workspace.note("decision", f"revisión: {item_id} → {decision}", {"item": item_id})
 
 
 # ─────────────────────────────  calibración  ─────────────────────────────

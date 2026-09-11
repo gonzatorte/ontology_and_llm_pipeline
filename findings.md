@@ -721,6 +721,14 @@ que están en `CLAUDE.md` porque son operativas: preferir herramientas que abort
 no está, y **un worktree por sesión**, que convierte esta falla silenciosa en un conflicto de
 merge, que es ruidoso.
 
+**La sexta la encontró el test de punta a punta, el primer día que existió.** El historial de
+una sesión es append-only, y el id de cada evento se armaba con el instante —con precisión de
+segundo— y el tipo, insertando con `ON CONFLICT DO NOTHING`. Aplicar axiomas y exportar corren en
+el mismo segundo y son del mismo tipo: el segundo evento **se descartaba sin error**, y el
+historial decía que la ontología se había versionado pero nunca exportado. Ningún test de módulo
+registraba dos eventos tan juntos; el de punta a punta sí, porque corre las etapas una detrás de
+otra como lo hace alguien. El id ahora no depende del instante.
+
 Y de más atrás en el proyecto, la misma clase: propiedades de anotación SKOS sin declarar
 —que sacaban la ontología de OWL 2 DL y hacían que ELK se salteara, **sin error**, con la
 cobertura EL cayendo de 84% a 0%— y una clave de caché que omitía el modelo, de modo que cambiar

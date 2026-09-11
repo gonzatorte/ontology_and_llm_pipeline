@@ -378,6 +378,10 @@ def export(
         encoding="utf-8",
     )
 
+    workspace.note(
+        "stage", f"exportada {version_id} a {target.name}",
+        {"version": version_id, "path": str(target)},
+    )
     return Delivery(
         version_id=version_id, path=target, manifest_path=manifest, fmt=fmt,
         history=history, tbox_triples=len(tbox), abox_quads=abox_quads,
