@@ -11,7 +11,11 @@ from .store import Store, open_sqlite, open_store
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mentions (
-  id                TEXT PRIMARY KEY,
+  id                TEXT NOT NULL,
+  -- La sesión de usuario que la extrajo. El id de mención deriva del de documento, que deriva
+  -- del path relativo al corpus: dos sesiones sobre el mismo corpus generan los mismos ids, así
+  -- que sin esta columna la segunda le borra las menciones a la primera.
+  session_id        TEXT NOT NULL,
   document_id       TEXT NOT NULL,
   page              INTEGER NOT NULL,
   bbox              TEXT,
@@ -23,11 +27,13 @@ CREATE TABLE IF NOT EXISTS mentions (
   language_source   TEXT,
   coref_group       TEXT,
   candidate_entity  TEXT,
-  status            TEXT NOT NULL
+  status            TEXT NOT NULL,
+  PRIMARY KEY (session_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS documents (
-  id            TEXT PRIMARY KEY,
+  id            TEXT NOT NULL,
+  session_id    TEXT NOT NULL,
   path          TEXT, content_hash TEXT,
   n_pages       INTEGER, parser_used TEXT, parser_version TEXT,
   markdown_hash TEXT,
@@ -35,21 +41,24 @@ CREATE TABLE IF NOT EXISTS documents (
   -- the Markdown PREP-PARSE
   -- produces, but never fed to the process. Without this flag the held-out documents leak
   -- into ITER-EXTRACT and the evaluation measures the pipeline against its own training material.
-  held_out      INTEGER NOT NULL DEFAULT 0
+  held_out      INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (session_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS page_classification (
+  session_id  TEXT NOT NULL,
   document_id TEXT, page INTEGER,
   class       TEXT,
   signals     TEXT,
-  PRIMARY KEY (document_id, page)
+  PRIMARY KEY (session_id, document_id, page)
 );
 
 -- PREP-PARSE output. Mentions (ITER-EXTRACT) are anchored on these spans; the
 -- spec's mention row carries
 -- page/bbox/block_type/language, which have to come from somewhere.
 CREATE TABLE IF NOT EXISTS blocks (
-  id             TEXT PRIMARY KEY,
+  id             TEXT NOT NULL,
+  session_id     TEXT NOT NULL,
   document_id    TEXT NOT NULL,
   page           INTEGER NOT NULL,
   ordinal        INTEGER NOT NULL,
@@ -61,12 +70,19 @@ CREATE TABLE IF NOT EXISTS blocks (
   language       TEXT,
   language_source TEXT,
   is_boilerplate INTEGER NOT NULL DEFAULT 0,
-  asset_path     TEXT
+  asset_path     TEXT,
+  PRIMARY KEY (session_id, id)
 );
-CREATE INDEX IF NOT EXISTS idx_blocks_doc ON blocks(document_id, page, ordinal);
+CREATE INDEX IF NOT EXISTS idx_blocks_doc ON blocks(session_id, document_id, page, ordinal);
 
+-- Caché, checkpoint y telemetría a la vez. La clave `key` es content-addressed —cubre etapa,
+-- versión del prompt, modelo, effort, temperatura y hash del input— así que **el resultado se
+-- comparte entre sesiones** y nadie paga dos veces por la misma pregunta. Lo que **no** se
+-- comparte es la contabilidad: el barrier pregunta si quedan unidades propias corriendo, y con
+-- una fila por (sesión, clave) una sesión interrumpida no bloquea a las demás.
 CREATE TABLE IF NOT EXISTS work_units (
-  key            TEXT PRIMARY KEY,
+  key            TEXT NOT NULL,
+  session_id     TEXT NOT NULL,
   stage          TEXT NOT NULL,
   iteration      INTEGER,
   status         TEXT NOT NULL,
@@ -76,12 +92,17 @@ CREATE TABLE IF NOT EXISTS work_units (
   error          TEXT,
   in_tokens      INTEGER,
   out_tokens     INTEGER,
-  created_at     TEXT, completed_at TEXT
+  created_at     TEXT, completed_at TEXT,
+  PRIMARY KEY (session_id, key)
 );
-CREATE INDEX IF NOT EXISTS idx_wu_stage ON work_units(stage, iteration, status);
+CREATE INDEX IF NOT EXISTS idx_wu_stage ON work_units(session_id, stage, iteration, status);
+CREATE INDEX IF NOT EXISTS idx_wu_key ON work_units(key, status);
 
 CREATE TABLE IF NOT EXISTS decisions (
-  id                TEXT PRIMARY KEY,
+  id                TEXT NOT NULL,
+  -- Sin esto, `precedents_like` mete las decisiones de una sesión en el prompt de otra: el
+  -- historial de `ITER-FEEDBACK` de alguien decidiendo en la corrida ajena.
+  session_id        TEXT NOT NULL,
   iteration         INTEGER,
   branch_id         TEXT,
   status            TEXT,
@@ -89,7 +110,8 @@ CREATE TABLE IF NOT EXISTS decisions (
   comment           TEXT,
   normalized_axioms TEXT,
   ontology_state    TEXT,
-  created_at        TEXT
+  created_at        TEXT,
+  PRIMARY KEY (session_id, id)
 );
 """
 

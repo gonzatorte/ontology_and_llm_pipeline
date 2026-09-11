@@ -29,7 +29,11 @@ from .store import Store
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS versions (
+  -- El id es `<sesión>:v<N>`, **único globalmente**, y eso no es cosmético: media docena de
+  -- tablas cuelgan de `version_id` y nada más. Si el ordinal fuera sólo por sesión, `v3` sería
+  -- ambiguo y todas ellas necesitarían su propia columna de sesión; calificándolo acá, heredan.
   id           TEXT PRIMARY KEY,
+  session_id   TEXT NOT NULL,
   parent_id    TEXT,
   iteration    INTEGER,
   branch_id    TEXT,
@@ -40,7 +44,7 @@ CREATE TABLE IF NOT EXISTS versions (
   rules_hash   TEXT,             -- which mapping rules produced this version's ABox
   FOREIGN KEY (parent_id) REFERENCES versions(id)
 );
-CREATE INDEX IF NOT EXISTS idx_versions_hash ON versions(state_hash);
+CREATE INDEX IF NOT EXISTS idx_versions_hash ON versions(session_id, state_hash);
 """
 
 # Annotation predicates carry naming, not logic. A rename must not read as a new state.
@@ -260,9 +264,7 @@ def label_index(*graphs: Graph) -> dict[str, str]:
     return index
 
 
-def diff_with_parent(
-    conn: Store, version_id: str
-) -> tuple[Version, Diff] | None:
+def diff_with_parent(conn: Store, version_id: str) -> tuple[Version, Diff] | None:
     """What a version changed against the state it came from.
 
     A new ontology is published whole, not as a delta — every version stores its full Turtle.
@@ -278,10 +280,26 @@ def diff_with_parent(
     return parent, diff(parent_graph, graph)
 
 
+def next_version_id(conn: Store, session_id: str) -> str:
+    """El id de la versión siguiente: `<sesión>:v<N>`, con N contado dentro de la sesión.
+
+    Calificado con la sesión porque es **único globalmente**, y de eso dependen las seis tablas
+    que cuelgan de `version_id` sin llevar sesión propia. Contado dentro de la sesión porque el
+    contador global hacía que dos corridas generaran `v3` las dos, y la segunda chocaba contra
+    la clave primaria.
+    """
+    install(conn)
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM versions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    return f"{session_id}:v{int(row['n']) if row else 0}"
+
+
 def commit(
     conn: Store,
     graph: Graph,
     *,
+    session_id: str,
     version_id: str,
     parent_id: str | None = None,
     iteration: int = 0,
@@ -298,10 +316,10 @@ def commit(
         note=note,
     )
     conn.execute(
-        "INSERT INTO versions (id, parent_id, iteration, branch_id, state_hash, turtle, note, "
-        "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO versions (id, session_id, parent_id, iteration, branch_id, state_hash, "
+        "turtle, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            version.id, parent_id, iteration, branch_id, version.state_hash,
+            version.id, session_id, parent_id, iteration, branch_id, version.state_hash,
             graph.serialize(format="turtle"), note, _now(),
         ),
     )
@@ -311,7 +329,9 @@ def commit(
 
 def load(conn: Store, version_id: str) -> tuple[Version, Graph]:
     install(conn)
-    row = conn.execute("SELECT * FROM versions WHERE id = ?", (version_id,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM versions WHERE id = ?", (version_id,)
+    ).fetchone()
     if row is None:
         raise KeyError(f"no version {version_id!r}")
     version = Version(
@@ -343,13 +363,13 @@ def record_rules(conn: Store, version_id: str, rules_hash: str) -> bool:
     return True
 
 
-def find_by_hash(conn: Store, hash_value: str) -> Version | None:
+def find_by_hash(conn: Store, hash_value: str, *, session_id: str) -> Version | None:
     """Loop detection: if the resulting state's hash is already in the DAG, the branch is a
     return to an existing version, not a novelty. Returning is allowed — but explicitly."""
     install(conn)
     row = conn.execute(
-        "SELECT * FROM versions WHERE state_hash = ? ORDER BY created_at LIMIT 1",
-        (hash_value,),
+        "SELECT * FROM versions WHERE session_id = ? AND state_hash = ? "
+        "ORDER BY created_at LIMIT 1", (session_id, hash_value),
     ).fetchone()
     if row is None:
         return None
@@ -360,7 +380,7 @@ def find_by_hash(conn: Store, hash_value: str) -> Version | None:
 
 
 def nearest_state(
-    conn: Store, graph: Graph, threshold: float
+    conn: Store, graph: Graph, threshold: float, *, session_id: str
 ) -> tuple[Version, float] | None:
     """The case the exact hash misses: the branch returns *almost* to an earlier state — same
     modelling commitment, different IRIs. Jaccard distance over the normalized axiom sets.
@@ -368,7 +388,7 @@ def nearest_state(
     install(conn)
     axioms = logical_axioms(graph)
     best: tuple[Version, float] | None = None
-    for row in conn.execute("SELECT * FROM versions"):
+    for row in conn.execute("SELECT * FROM versions WHERE session_id = ?", (session_id,)):
         other = logical_axioms(Graph().parse(data=row["turtle"], format="turtle"))
         union = axioms | other
         distance = 1.0 - (len(axioms & other) / len(union)) if union else 0.0

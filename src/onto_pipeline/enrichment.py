@@ -364,7 +364,7 @@ def contributors(conn: Store, iri: str) -> list[str]:
     ]
 
 
-def circular_matches(conn: Store, version_id: str) -> list[dict]:
+def circular_matches(conn: Store, version_id: str, *, session_id: str) -> list[dict]:
     """Typed mentions whose own document helped write the class they were typed to.
 
     Deliberately not filtered by the version that recorded the contribution: once a document
@@ -377,10 +377,10 @@ def circular_matches(conn: Store, version_id: str) -> list[dict]:
         dict(row) for row in conn.execute(
             "SELECT t.mention_id, t.iri, m.document_id, m.surface_text, t.score, t.zone "
             "FROM mention_typing t "
-            "JOIN mentions m ON m.id = t.mention_id "
+            "JOIN mentions m ON m.id = t.mention_id AND m.session_id = ? "
             "JOIN gloss_contributions g ON g.iri = t.iri AND g.document_id = m.document_id "
             "WHERE t.version_id = ? AND t.iri IS NOT NULL "
             "GROUP BY t.mention_id ORDER BY t.score DESC",
-            (version_id,),
+            (session_id, version_id),
         )
     ]

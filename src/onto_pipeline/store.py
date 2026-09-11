@@ -61,12 +61,22 @@ def to_postgres(sql: str) -> str:
 def statements(script: str) -> list[str]:
     """Las sentencias de un script, para los motores que no tienen `executescript`.
 
-    Parte por `;` respetando los literales, porque el esquema tiene comentarios y textos con
-    punto y coma adentro. Descarta lo que quede vacío.
+    Parte por `;` respetando dos cosas, y las dos costaron: los **literales**, porque el esquema
+    tiene textos con punto y coma adentro, y los **comentarios `--`**, porque una sola apóstrofe
+    en una prosa como «the spec's mention row» desbalancea las comillas y se traga todos los `;`
+    que vienen después — el esquema entero terminaba siendo una sentencia.
     """
-    parts, buffer, quoted = [], [], False
-    for char in script:
-        if char == "'":
+    parts, buffer = [], []
+    quoted = comment = False
+    for index, char in enumerate(script):
+        if comment:
+            buffer.append(char)
+            if char == "\n":
+                comment = False
+            continue
+        if not quoted and char == "-" and script[index - 1: index] == "-":
+            comment = True
+        elif char == "'":
             quoted = not quoted
         if char == ";" and not quoted:
             parts.append("".join(buffer))

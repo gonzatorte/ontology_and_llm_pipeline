@@ -6,6 +6,8 @@ from rdflib import Graph
 from onto_pipeline import versioning
 from onto_pipeline.db import connect
 
+SESSION = "test-1"
+
 BASE = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -67,32 +69,35 @@ def test_diff_separates_axioms_from_renames():
 
 def test_returning_to_an_earlier_state_is_detected_as_a_return(conn):
     """A -> B -> A is exactly a cycle in the DAG. Going back is allowed, but explicitly."""
-    versioning.commit(conn, graph(BASE), version_id="v1")
-    versioning.commit(conn, graph(EXTENDED), version_id="v2", parent_id="v1", iteration=1)
+    versioning.commit(conn, graph(BASE), version_id="v1", session_id=SESSION)
+    versioning.commit(conn, graph(EXTENDED), version_id="v2", parent_id="v1", iteration=1,
+        session_id=SESSION)
 
     returning = graph(BASE)
-    found = versioning.find_by_hash(conn, versioning.state_hash(returning))
+    found = versioning.find_by_hash(conn, versioning.state_hash(returning), session_id=SESSION)
     assert found is not None and found.id == "v1"
 
 
 def test_a_genuinely_new_state_is_not_reported_as_a_return(conn):
-    versioning.commit(conn, graph(BASE), version_id="v1")
-    assert versioning.find_by_hash(conn, versioning.state_hash(graph(EXTENDED))) is None
+    versioning.commit(conn, graph(BASE), version_id="v1", session_id=SESSION)
+    assert versioning.find_by_hash(conn, versioning.state_hash(graph(EXTENDED)),
+        session_id=SESSION) is None
 
 
 def test_an_almost_identical_state_is_caught_by_distance(conn):
     """What the exact hash misses: the same commitment with one axiom moved."""
-    versioning.commit(conn, graph(EXTENDED), version_id="v1")
+    versioning.commit(conn, graph(EXTENDED), version_id="v1", session_id=SESSION)
     nearly = EXTENDED + ":Survey rdfs:comment \"x\" .\n:Focus a owl:Class .\n"
-    match = versioning.nearest_state(conn, graph(nearly), threshold=0.3)
+    match = versioning.nearest_state(conn, graph(nearly), threshold=0.3, session_id=SESSION)
     assert match is not None and match[0].id == "v1" and 0 < match[1] <= 0.3
 
 
 def test_a_version_round_trips_and_keeps_its_lineage(conn):
-    versioning.commit(conn, graph(BASE), version_id="v1")
-    versioning.commit(conn, graph(EXTENDED), version_id="v2", parent_id="v1", iteration=1)
+    versioning.commit(conn, graph(BASE), version_id="v1", session_id=SESSION)
+    versioning.commit(conn, graph(EXTENDED), version_id="v2", parent_id="v1", iteration=1,
+        session_id=SESSION)
     versioning.commit(conn, graph(BASE), version_id="v3", parent_id="v1", iteration=1,
-                      branch_id="b_alt")
+                      branch_id="b_alt", session_id=SESSION)
 
     version, restored = versioning.load(conn, "v2")
     assert version.parent_id == "v1"
@@ -103,8 +108,9 @@ def test_a_version_round_trips_and_keeps_its_lineage(conn):
 
 
 def test_diff_with_parent_reports_what_the_iteration_did(conn):
-    versioning.commit(conn, graph(BASE), version_id="v0")
-    versioning.commit(conn, graph(EXTENDED), version_id="v1", parent_id="v0", iteration=1)
+    versioning.commit(conn, graph(BASE), version_id="v0", session_id=SESSION)
+    versioning.commit(conn, graph(EXTENDED), version_id="v1", parent_id="v0", iteration=1,
+        session_id=SESSION)
 
     parent, result = versioning.diff_with_parent(conn, "v1")
 
@@ -115,14 +121,15 @@ def test_diff_with_parent_reports_what_the_iteration_did(conn):
 
 
 def test_a_root_version_has_nothing_to_diff_against(conn):
-    versioning.commit(conn, graph(BASE), version_id="v0")
+    versioning.commit(conn, graph(BASE), version_id="v0", session_id=SESSION)
 
     assert versioning.diff_with_parent(conn, "v0") is None
 
 
 def test_a_rename_diffs_as_an_annotation_change_not_axiom_churn(conn):
-    versioning.commit(conn, graph(BASE), version_id="v0")
-    versioning.commit(conn, graph(RENAMED), version_id="v1", parent_id="v0", iteration=1)
+    versioning.commit(conn, graph(BASE), version_id="v0", session_id=SESSION)
+    versioning.commit(conn, graph(RENAMED), version_id="v1", parent_id="v0", iteration=1,
+        session_id=SESSION)
 
     _, result = versioning.diff_with_parent(conn, "v1")
 
@@ -172,6 +179,7 @@ def test_renaming_every_blank_node_is_not_a_new_state():
     assert versioning.state_hash(restriction_graph(0)) == versioning.state_hash(
         restriction_graph(1)
     )
+
 
 
 def test_the_labelling_does_not_depend_on_iteration_order():

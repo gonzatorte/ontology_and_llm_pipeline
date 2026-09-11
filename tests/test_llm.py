@@ -16,12 +16,15 @@ from onto_pipeline.llm import run as run_stage
 from onto_pipeline.seed import GlossContext
 from onto_pipeline.telemetry import Ledger
 
+SESSION = "test-1"
+
 _ANSWER = '{"en": "A procedure applied within a strategy.", "es": "Un procedimiento aplicado."}'
 
 
 @pytest.fixture
 def ledger(tmp_path):
-    return Ledger(connect(tmp_path), Execution(backoff_base_s=0), sleep=lambda _: None)
+    return Ledger(connect(tmp_path), Execution(backoff_base_s=0), sleep=lambda _: None,
+        session_id=SESSION)
 
 
 def context() -> GlossContext:
@@ -93,6 +96,7 @@ def test_a_malformed_answer_is_a_unit_failure_not_a_silent_gloss(ledger):
         ledger, ScriptedModel(responses), glosses.PROMPT, settings(Llm(), "prep_normalize_glosses"),
         payloads, glosses.parse,
     )
+
     assert set(result.failures) == {"iri0"}
     assert len(result.outputs) == 19
 

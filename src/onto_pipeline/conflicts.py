@@ -61,10 +61,14 @@ SCHEMA = """
 -- Falsity marks. Deliberately not a column on `mentions`: the mention layer is append-only,
 -- and a mark is a decision *about* a mention rather than a correction *of* it.
 CREATE TABLE IF NOT EXISTS assertion_marks (
-  mention_id  TEXT PRIMARY KEY,
+  mention_id  TEXT NOT NULL,
+  -- `mentions.id` deriva del path del documento, así que colisiona entre sesiones sobre el
+  -- mismo corpus: sin esta columna la marca de uno se le aplica a la mención del otro.
+  session_id  TEXT NOT NULL,
   mark        TEXT NOT NULL,     -- refuted | misextracted
   why         TEXT,
-  created_at  TEXT
+  created_at  TEXT,
+  PRIMARY KEY (session_id, mention_id)
 );
 CREATE INDEX IF NOT EXISTS idx_marks_kind ON assertion_marks(mark);
 """
@@ -326,42 +330,46 @@ def findings(
 
 
 def mark(
-    conn: Store, mention_ids: Sequence[str], kind: str, why: str = ""
+    conn: Store, mention_ids: Sequence[str], kind: str, why: str = "", *, session_id: str
 ) -> int:
     """Record a falsity mark. `refuted` and `misextracted` are opposite signals (6.4)."""
     if kind not in MARKS:
         raise ValueError(f"a mark is {' or '.join(MARKS)}, not {kind!r}")
     install(conn)
     conn.executemany(
-        "INSERT OR REPLACE INTO assertion_marks (mention_id, mark, why, created_at) "
-        "VALUES (?, ?, ?, ?)",
-        [(mention_id, kind, why, _now()) for mention_id in mention_ids],
+        "INSERT INTO assertion_marks (mention_id, session_id, mark, why, created_at) "
+        "VALUES (?, ?, ?, ?, ?) ON CONFLICT(session_id, mention_id) DO UPDATE SET "
+        "mark = excluded.mark, why = excluded.why, created_at = excluded.created_at",
+        [(mention_id, session_id, kind, why, _now()) for mention_id in mention_ids],
     )
     conn.commit()
     return len(mention_ids)
 
 
-def marks(conn: Store, kind: str | None = None) -> dict[str, str]:
+def marks(conn: Store, kind: str | None = None, *, session_id: str) -> dict[str, str]:
     install(conn)
-    query = "SELECT mention_id, mark FROM assertion_marks"
-    params: tuple = ()
+    query = "SELECT mention_id, mark FROM assertion_marks WHERE session_id = ?"
+    params: tuple = (session_id,)
     if kind:
-        query += " WHERE mark = ?"
-        params = (kind,)
+        query += " AND mark = ?"
+        params = (session_id, kind)
     return {row["mention_id"]: row["mark"] for row in conn.execute(query, params)}
 
 
-def as_exceptions(conn: Store) -> dict[str, str]:
+def as_exceptions(conn: Store, *, session_id: str) -> dict[str, str]:
     """Marks as mapping-rule exceptions, so they travel into the rules hash.
 
     This is what makes a refutation take effect. Regeneration is idempotent over
     (state, rules), so a decision that changed no rule would be a decision the ABox never
     notices — the mention would stay in it until something unrelated forced a rebuild.
     """
-    return {f"mention:{mention_id}": mark for mention_id, mark in sorted(marks(conn).items())}
+    return {
+        f"mention:{mention_id}": mark
+        for mention_id, mark in sorted(marks(conn, session_id=session_id).items())
+    }
 
 
-def misextractions(conn: Store) -> list[dict]:
+def misextractions(conn: Store, *, session_id: str) -> list[dict]:
     """The extraction errors, for the evaluation set.
 
     Free labels: nobody annotated them on purpose, they are what a reader noticed while
@@ -374,14 +382,14 @@ def misextractions(conn: Store) -> list[dict]:
         dict(row) for row in conn.execute(
             "SELECT a.mention_id, a.why, a.created_at, m.document_id, m.page, m.surface_text, "
             "m.span_start, m.span_end FROM assertion_marks a "
-            "JOIN mentions m ON m.id = a.mention_id "
-            "WHERE a.mark = ? ORDER BY m.document_id, m.span_start",
-            (MISEXTRACTED,),
+            "JOIN mentions m ON m.id = a.mention_id AND m.session_id = a.session_id "
+            "WHERE a.session_id = ? AND a.mark = ? ORDER BY m.document_id, m.span_start",
+            (session_id, MISEXTRACTED),
         )
     ]
 
 
-def export_misextractions(conn: Store) -> str:
+def export_misextractions(conn: Store, *, session_id: str) -> str:
     """JSONL, the same shape the retention set uses, so both feed one evaluation."""
     return "\n".join(
         json.dumps({
@@ -394,5 +402,5 @@ def export_misextractions(conn: Store) -> str:
             "error": MISEXTRACTED,
             "why": row["why"] or "",
         }, ensure_ascii=False)
-        for row in misextractions(conn)
+        for row in misextractions(conn, session_id=session_id)
     )

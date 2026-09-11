@@ -50,9 +50,11 @@ def ingest(
     config: Config,
     conn: Store,
     paths: list[Path],
+    *,
+    session_id: str,
     ledger: Ledger | None = None,
 ) -> StageResult:
-    ledger = ledger or Ledger(conn, config.execution)
+    ledger = ledger or Ledger(conn, config.execution, session_id=session_id)
     payloads = [(document_id(path, config.paths.corpus_root), _payload(path, config))
                 for path in paths]
     by_id = {doc_id: path for (doc_id, _), path in zip(payloads, paths, strict=True)}
@@ -61,7 +63,7 @@ def ingest(
         path = by_id[payload["document_id"]]
         parsed = parse_document(path, config, doc_id=payload["document_id"])
         _write_markdown(config, parsed)
-        _persist(conn, parsed)
+        _persist(conn, parsed, session_id)
         return UnitResult(output=_summary(parsed))
 
     return ledger.run(STAGE, payloads, worker)
@@ -129,16 +131,17 @@ def _write_markdown(config: Config, parsed: ParsedDocument) -> None:
     target.write_text(parsed.markdown, encoding="utf-8")
 
 
-def _persist(conn: Store, parsed: ParsedDocument) -> None:
+def _persist(conn: Store, parsed: ParsedDocument, session_id: str) -> None:
     conn.execute(
-        "INSERT INTO documents (id, path, content_hash, n_pages, parser_used, parser_version, "
-        "markdown_hash) VALUES (?, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(id) DO UPDATE SET path = excluded.path, "
+        "INSERT INTO documents (id, session_id, path, content_hash, n_pages, parser_used, "
+        "parser_version, markdown_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(session_id, id) DO UPDATE SET path = excluded.path, "
         "content_hash = excluded.content_hash, n_pages = excluded.n_pages, "
         "parser_used = excluded.parser_used, parser_version = excluded.parser_version, "
         "markdown_hash = excluded.markdown_hash",   # held_out se preserva a propósito
         (
             parsed.document_id,
+            session_id,
             str(parsed.path),
             parsed.content_hash,
             parsed.n_pages,
@@ -147,22 +150,30 @@ def _persist(conn: Store, parsed: ParsedDocument) -> None:
             parsed.markdown_hash,
         ),
     )
-    conn.execute("DELETE FROM page_classification WHERE document_id = ?", (parsed.document_id,))
+    conn.execute(
+        "DELETE FROM page_classification WHERE session_id = ? AND document_id = ?",
+        (session_id, parsed.document_id),
+    )
     conn.executemany(
-        "INSERT INTO page_classification (document_id, page, class, signals) VALUES (?, ?, ?, ?)",
+        "INSERT INTO page_classification (session_id, document_id, page, class, signals) "
+        "VALUES (?, ?, ?, ?, ?)",
         [
-            (parsed.document_id, pc.page, pc.label, json.dumps(pc.signals_json()))
+            (session_id, parsed.document_id, pc.page, pc.label, json.dumps(pc.signals_json()))
             for pc in parsed.page_classes
         ],
     )
-    conn.execute("DELETE FROM blocks WHERE document_id = ?", (parsed.document_id,))
+    conn.execute(
+        "DELETE FROM blocks WHERE session_id = ? AND document_id = ?",
+        (session_id, parsed.document_id),
+    )
     conn.executemany(
-        "INSERT INTO blocks (id, document_id, page, ordinal, bbox, block_type, text, "
-        "span_start, span_end, language, language_source, is_boilerplate, asset_path) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO blocks (id, session_id, document_id, page, ordinal, bbox, block_type, "
+        "text, span_start, span_end, language, language_source, is_boilerplate, asset_path) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 block.id,
+                session_id,
                 block.document_id,
                 block.page,
                 block.ordinal,
@@ -182,28 +193,32 @@ def _persist(conn: Store, parsed: ParsedDocument) -> None:
     conn.commit()
 
 
-def load_blocks(conn: Store, doc_id: str) -> list[dict]:
+def load_blocks(conn: Store, doc_id: str, *, session_id: str) -> list[dict]:
     rows = conn.execute(
-        "SELECT * FROM blocks WHERE document_id = ? ORDER BY page, ordinal", (doc_id,)
+        "SELECT * FROM blocks WHERE session_id = ? AND document_id = ? ORDER BY page, ordinal",
+        (session_id, doc_id),
     ).fetchall()
     return [dict(row) for row in rows]
 
 
-def load_page_classes(conn: Store, doc_id: str) -> list[dict]:
+def load_page_classes(conn: Store, doc_id: str, *, session_id: str) -> list[dict]:
     rows = conn.execute(
-        "SELECT page, class, signals FROM page_classification WHERE document_id = ? ORDER BY page",
-        (doc_id,),
+        "SELECT page, class, signals FROM page_classification "
+        "WHERE session_id = ? AND document_id = ? ORDER BY page",
+        (session_id, doc_id),
     ).fetchall()
     return [{"page": r["page"], "class": r["class"], "signals": json.loads(r["signals"])}
             for r in rows]
 
 
-def load_document(conn: Store, doc_id: str) -> dict | None:
-    row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
+def load_document(conn: Store, doc_id: str, *, session_id: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM documents WHERE session_id = ? AND id = ?", (session_id, doc_id)
+    ).fetchone()
     return dict(row) if row else None
 
 
-def load_block_objects(conn: Store, doc_id: str) -> list[Block]:
+def load_block_objects(conn: Store, doc_id: str, *, session_id: str) -> list[Block]:
     """Blocks as parsed, for the derived stages (chunking) that work on them directly."""
     return [
         Block(
@@ -221,37 +236,42 @@ def load_block_objects(conn: Store, doc_id: str) -> list[Block]:
             asset_path=row["asset_path"],
         )
         for row in conn.execute(
-            "SELECT * FROM blocks WHERE document_id = ? ORDER BY page, ordinal", (doc_id,)
+            "SELECT * FROM blocks WHERE session_id = ? AND document_id = ? "
+            "ORDER BY page, ordinal", (session_id, doc_id),
         )
     ]
 
 
-def set_held_out(conn: Store, doc_ids: list[str], held_out: bool = True) -> int:
+def set_held_out(
+    conn: Store, doc_ids: list[str], held_out: bool = True, *, session_id: str
+) -> int:
     """Mark documents as the retention set (EVAL-PIPELINE)."""
     cursor = conn.executemany(
-        "UPDATE documents SET held_out = ? WHERE id = ?",
-        [(int(held_out), doc_id) for doc_id in doc_ids],
+        "UPDATE documents SET held_out = ? WHERE session_id = ? AND id = ?",
+        [(int(held_out), session_id, doc_id) for doc_id in doc_ids],
     )
     conn.commit()
     return cursor.rowcount
 
 
-def process_documents(conn: Store) -> list[str]:
+def process_documents(conn: Store, *, session_id: str) -> list[str]:
     """The documents the process may consume. Held-out ones are parsed but never fed to it:
     evaluating the pipeline against documents it learned from measures nothing."""
     return [
         row["id"]
         for row in conn.execute(
-            "SELECT id FROM documents WHERE held_out = 0 ORDER BY id"
+            "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 ORDER BY id",
+            (session_id,),
         )
     ]
 
 
-def held_out_documents(conn: Store) -> list[str]:
+def held_out_documents(conn: Store, *, session_id: str) -> list[str]:
     return [
         row["id"]
         for row in conn.execute(
-            "SELECT id FROM documents WHERE held_out = 1 ORDER BY id"
+            "SELECT id FROM documents WHERE session_id = ? AND held_out = 1 ORDER BY id",
+            (session_id,),
         )
     ]
 
@@ -268,6 +288,7 @@ def select_for_reload(
     strategy: str,
     sample: float,
     seed: int,
+    session_id: str,
     table: str = "mentions",
 ) -> tuple[list[str], list[str]]:
     """Split candidates into (to process, skipped) under the reload policy.
@@ -283,7 +304,10 @@ def select_for_reload(
     """
     done = {
         row["document_id"]
-        for row in conn.execute(f"SELECT DISTINCT document_id FROM {table}")  # noqa: S608
+        for row in conn.execute(
+            f"SELECT DISTINCT document_id FROM {table} WHERE session_id = ?",  # noqa: S608
+            (session_id,),
+        )
     }
     fresh = [doc for doc in candidates if doc not in done]
     already = [doc for doc in candidates if doc in done]

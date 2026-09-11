@@ -19,6 +19,9 @@ from onto_pipeline import versioning
 from onto_pipeline.db import connect
 from onto_pipeline.services import StageError, Workspace, deliver, iterate
 
+SESSION = "test-1"
+
+
 SERVICES = Path(__file__).resolve().parents[1] / "src" / "onto_pipeline" / "services"
 
 
@@ -72,7 +75,7 @@ def _config(tmp_path: Path):
 
 def _workspace(tmp_path: Path) -> Workspace:
     config = _config(tmp_path)
-    return Workspace.of(config, connect(config.paths.work_dir))
+    return Workspace.of(config, connect(config.paths.work_dir), session_id=SESSION)
 
 
 # ─────────────────────────  resolución de versión  ─────────────────────────
@@ -104,11 +107,16 @@ def test_the_newest_version_wins_ties_by_insertion_order(tmp_path):
     y el orden de inserción desempata. Sin eso, "la más nueva" es una lotería."""
     workspace = _workspace(tmp_path)
     graph = _seed_graph()
-    versioning.commit(workspace.conn, graph, version_id="v0", note="seed")
+    versioning.commit(
+        workspace.conn, graph, version_id=f"{SESSION}:v0", note="seed", session_id=SESSION
+    )
     graph.add((URIRef(BASE + "C"), RDF.type, OWL.Class))
-    versioning.commit(workspace.conn, graph, version_id="v1", parent_id="v0", note="more")
-    assert workspace.resolve_version() == "v1"
-    assert workspace.resolve_version("v0") == "v0"
+    versioning.commit(
+        workspace.conn, graph, version_id=f"{SESSION}:v1", parent_id=f"{SESSION}:v0",
+        note="more", session_id=SESSION,
+    )
+    assert workspace.resolve_version() == f"{SESSION}:v1"
+    assert workspace.resolve_version("v0") == f"{SESSION}:v0"
 
 
 # ─────────────────────────  la entrega  ─────────────────────────
@@ -120,14 +128,18 @@ def test_export_walks_the_lineage_and_says_what_each_version_contributed(tmp_pat
     iteración, y eso sólo se sabe recorriendo el linaje."""
     workspace = _workspace(tmp_path)
     graph = _seed_graph()
-    versioning.commit(workspace.conn, graph, version_id="v0", note="normalized seed")
+    versioning.commit(workspace.conn, graph, version_id=f"{SESSION}:v0", note="normalized seed",
+        session_id=SESSION)
     graph.add((URIRef(BASE + "C"), RDF.type, OWL.Class))
     graph.add((URIRef(BASE + "C"), RDFS.subClassOf, URIRef(BASE + "A")))
-    versioning.commit(workspace.conn, graph, version_id="v1", parent_id="v0", note="one class")
+    versioning.commit(
+        workspace.conn, graph, version_id=f"{SESSION}:v1", parent_id=f"{SESSION}:v0",
+        note="one class", session_id=SESSION,
+    )
 
-    result = deliver.export(workspace, version="v1", include_abox=False)
+    result = deliver.export(workspace, version=f"{SESSION}:v1", include_abox=False)
 
-    assert [step.version_id for step in result.history] == ["v0", "v1"]
+    assert [step.version_id for step in result.history] == [f"{SESSION}:v0", f"{SESSION}:v1"]
     assert result.history[0].parent_id is None          # la raíz se reporta entera
     assert result.history[1].added == 2                 # la clase y su subsunción
     assert result.classes == 3 and result.seed_classes == 2
@@ -141,8 +153,11 @@ def test_export_writes_no_annotation_property_the_seed_did_not_declare(tmp_path)
     from onto_pipeline.seed import DECLARED_ANNOTATIONS
 
     workspace = _workspace(tmp_path)
-    versioning.commit(workspace.conn, _seed_graph(), version_id="v0", note="seed")
-    result = deliver.export(workspace, version="v0", include_abox=False)
+    versioning.commit(
+        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        session_id=SESSION,
+    )
+    result = deliver.export(workspace, version=f"{SESSION}:v0", include_abox=False)
 
     written = Graph()
     written.parse(result.path, format="trig")
@@ -157,12 +172,15 @@ def test_export_records_the_lineage_in_a_manifest_next_to_the_ontology(tmp_path)
     """El artefacto dice qué es la ontología; el manifiesto dice de dónde salió. Se leen
     juntos, así que se escriben juntos."""
     workspace = _workspace(tmp_path)
-    versioning.commit(workspace.conn, _seed_graph(), version_id="v0", note="seed")
-    result = deliver.export(workspace, version="v0", include_abox=False)
+    versioning.commit(
+        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        session_id=SESSION,
+    )
+    result = deliver.export(workspace, version=f"{SESSION}:v0", include_abox=False)
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["lineage"] == ["v0"]
-    assert manifest["version"] == "v0"
+    assert manifest["lineage"] == [f"{SESSION}:v0"]
+    assert manifest["version"] == f"{SESSION}:v0"
     assert manifest["abox_included"] is False
 
 
@@ -170,8 +188,13 @@ def test_exporting_to_turtle_says_that_it_flattened_the_provenance(tmp_path):
     """Turtle no tiene grafos con nombre. Perder la procedencia por documento está permitido;
     perderla en silencio es exactamente lo que la capa de menciones existe para no hacer."""
     workspace = _workspace(tmp_path)
-    versioning.commit(workspace.conn, _seed_graph(), version_id="v0", note="seed")
-    result = deliver.export(workspace, version="v0", include_abox=False, fmt=deliver.TURTLE)
+    versioning.commit(
+        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        session_id=SESSION,
+    )
+    result = deliver.export(
+        workspace, version=f"{SESSION}:v0", include_abox=False, fmt=deliver.TURTLE
+    )
     assert result.path.suffix == ".ttl"
 
 
@@ -179,8 +202,11 @@ def test_export_says_when_there_is_no_abox_instead_of_pretending(tmp_path):
     """Entregar sólo la TBox es una respuesta válida; entregarla sin decir que faltan las
     instancias no lo es."""
     workspace = _workspace(tmp_path)
-    versioning.commit(workspace.conn, _seed_graph(), version_id="v0", note="seed")
-    result = deliver.export(workspace, version="v0", refresh_abox=False)
+    versioning.commit(
+        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        session_id=SESSION,
+    )
+    result = deliver.export(workspace, version=f"{SESSION}:v0", refresh_abox=False)
     assert result.abox_included is False
     assert any("no ABox" in warning for warning in result.warnings)
 

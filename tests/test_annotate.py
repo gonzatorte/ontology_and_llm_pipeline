@@ -15,6 +15,8 @@ from onto_pipeline.ingest import (
     set_held_out,
 )
 
+SESSION = "test-1"
+
 ONTOLOGY = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
@@ -63,6 +65,7 @@ def test_the_payload_carries_what_the_export_has_to_reproduce(tmp_path):
         classes=annotate.seed_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
         pages=[[0, 4, 1]], target=tmp_path / "doc1.html",
     )
+
     html = target.read_text(encoding="utf-8")
     payload = json.loads(re.search(r"const DATA = (\{.*?\});", html, re.DOTALL).group(1))
     assert payload["doc_id"] == "doc1"
@@ -75,32 +78,33 @@ def test_held_out_documents_are_kept_out_of_the_process(two_column_pdf, config, 
     ITER-EXTRACT, or the
     evaluation measures the pipeline against its own input (EVAL-PIPELINE)."""
     conn = connect(config.paths.work_dir)
-    result = ingest(config, conn, [two_column_pdf])
+    result = ingest(config, conn, [two_column_pdf], session_id=SESSION)
     doc_id = next(iter(result.outputs))
 
-    assert process_documents(conn) == [doc_id]
-    assert held_out_documents(conn) == []
+    assert process_documents(conn, session_id=SESSION) == [doc_id]
+    assert held_out_documents(conn, session_id=SESSION) == []
 
-    set_held_out(conn, [doc_id])
-    assert process_documents(conn) == []
-    assert held_out_documents(conn) == [doc_id]
+    set_held_out(conn, [doc_id], session_id=SESSION)
+    assert process_documents(conn, session_id=SESSION) == []
+    assert held_out_documents(conn, session_id=SESSION) == [doc_id]
 
 
 def test_reingesting_does_not_silently_return_a_document_to_the_process(two_column_pdf, config):
     conn = connect(config.paths.work_dir)
-    doc_id = next(iter(ingest(config, conn, [two_column_pdf]).outputs))
-    set_held_out(conn, [doc_id])
+    doc_id = next(iter(ingest(config, conn, [two_column_pdf], session_id=SESSION).outputs))
+    set_held_out(conn, [doc_id], session_id=SESSION)
 
     config.classification.min_visible_chars = 250      # invalidate the cache, force a re-parse
-    ingest(config, conn, [two_column_pdf])
-    assert held_out_documents(conn) == [doc_id], "the flag must survive re-ingestion"
+    ingest(config, conn, [two_column_pdf], session_id=SESSION)
+    assert held_out_documents(conn,
+        session_id=SESSION) == [doc_id], "the flag must survive re-ingestion"
 
 
 @pytest.mark.parametrize("released", [False, True])
 def test_holding_out_is_reversible(two_column_pdf, config, released):
     conn = connect(config.paths.work_dir)
-    doc_id = next(iter(ingest(config, conn, [two_column_pdf]).outputs))
-    set_held_out(conn, [doc_id])
+    doc_id = next(iter(ingest(config, conn, [two_column_pdf], session_id=SESSION).outputs))
+    set_held_out(conn, [doc_id], session_id=SESSION)
     if released:
-        set_held_out(conn, [doc_id], held_out=False)
-    assert (process_documents(conn) == [doc_id]) is released
+        set_held_out(conn, [doc_id], held_out=False, session_id=SESSION)
+    assert (process_documents(conn, session_id=SESSION) == [doc_id]) is released

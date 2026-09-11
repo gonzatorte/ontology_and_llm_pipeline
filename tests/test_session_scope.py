@@ -1,0 +1,87 @@
+"""Ninguna consulta sobre una tabla por sesión puede olvidarse de filtrar por ella.
+
+**Por qué un test y no la disciplina.** Olvidarse de un `WHERE session_id = ?` no rompe nada
+visible: devuelve filas de más, o borra las de otro, y los tests de esa etapa siguen pasando
+porque corren sobre una sesión sola. Es la misma forma de falla que
+`FINDINGS-SILENT-FAILURES` colecciona — pasa cuando debería fallar — y la única defensa que
+escala a sesenta consultas es que algo las cuente.
+
+Esto lee el código fuente, no la base: una consulta que todavía no se ejecutó nunca igual
+aparece acá.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+SOURCE = Path(__file__).resolve().parents[1] / "src" / "onto_pipeline"
+
+# Las tablas cuyo contenido pertenece a una sesión de usuario. Las que no están acá o son
+# compartidas a propósito (`work_units` tiene su propia regla, abajo) o cuelgan de `version_id`,
+# que ya lleva la sesión adentro.
+SCOPED = (
+    "documents", "blocks", "page_classification", "mentions", "versions",
+    "competency_questions", "cq_results", "decisions", "assertion_marks", "grey_decisions",
+)
+
+_STATEMENT = re.compile(
+    r"(SELECT|INSERT INTO|UPDATE|DELETE FROM)\b[^\"']*?(?=\"|')", re.IGNORECASE | re.DOTALL
+)
+
+
+def statements() -> list[tuple[Path, str]]:
+    """Cada literal SQL del código, con el archivo en el que vive.
+
+    Se reconstruyen las cadenas partidas en varias líneas —el estilo del proyecto— concatenando
+    los literales adyacentes de una misma llamada.
+    """
+    found = []
+    for path in sorted(SOURCE.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for chunk in re.findall(r'(?:"[^"]*"\s*)+', text):
+            sql = " ".join(re.findall(r'"([^"]*)"', chunk))
+            if re.search(r"\b(FROM|INTO|UPDATE)\b", sql, re.IGNORECASE):
+                found.append((path, " ".join(sql.split())))
+    return found
+
+
+def touches(sql: str, table: str) -> bool:
+    return bool(re.search(rf"\b(FROM|INTO|UPDATE|JOIN)\s+{table}\b", sql, re.IGNORECASE))
+
+
+# Un id de versión es `<sesión>:v<N>`, único globalmente: filtrar por él ya acota la sesión, y
+# es lo que deja que las seis tablas colgadas de `version_id` no lleven columna propia.
+_BY_VERSION_ID = re.compile(r"\b(id|version_id|parent_id)\s*=\s*\?", re.IGNORECASE)
+
+
+def test_every_query_on_a_per_session_table_filters_by_the_session():
+    offenders = []
+    for path, sql in statements():
+        if "session_id" in sql:
+            continue
+        if touches(sql, "versions") and _BY_VERSION_ID.search(sql):
+            continue
+        for table in SCOPED:
+            if touches(sql, table):
+                offenders.append(f"{path.name}: {sql[:90]}")
+                break
+    assert not offenders, "consultas sin sesión:\n" + "\n".join(sorted(offenders))
+
+
+def test_the_work_unit_cache_is_looked_up_across_sessions_on_purpose():
+    """La excepción, y tiene que ser explícita.
+
+    La clave de `work_units` es content-addressed —cubre etapa, prompt, modelo, effort,
+    temperatura y hash del input— así que el **resultado** se comparte y nadie paga dos veces
+    por la misma pregunta. Lo que no se comparte es la contabilidad: el barrier pregunta si
+    quedan unidades **propias** corriendo, y sin eso una sesión interrumpida bloquea a las demás.
+    """
+    telemetry = (SOURCE / "telemetry.py").read_text(encoding="utf-8")
+
+    assert "WHERE key = ? AND status = 'done'" in " ".join(telemetry.split()), (
+        "la búsqueda en el caché tiene que ser por clave sola, entre sesiones"
+    )
+    assert "session_id = ? AND stage = ?" in " ".join(telemetry.split()), (
+        "el barrier y el reporte por etapa tienen que ser de la sesión, no de la tabla entera"
+    )

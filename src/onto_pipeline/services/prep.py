@@ -88,6 +88,7 @@ def normalize(workspace: Workspace) -> SeedNormalization:
     No genera glosas: eso es `generate_glosses`, que llama al modelo y por eso es una etapa
     aparte que la interfaz decide si corre.
     """
+    session = workspace.require_session()
     config = workspace.config
     seed = normalize_seed(
         config.paths.seed_ontology,
@@ -100,15 +101,15 @@ def normalize(workspace: Workspace) -> SeedNormalization:
     seed.graph.serialize(target, format="turtle")
 
     conn = workspace.conn
-    existing = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
+    existing = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
     committed = None
     if existing is None:
         committed = versioning.commit(
             conn, seed.graph, version_id="v0", note="normalized seed"
-        )
+        , session_id=session)
 
     contexts = gloss_contexts(seed)
-    current = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
+    current = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
     sync = review.sync(
         conn, review.findings_from_seed(seed),
         version_id=current.id if current else "v0",
@@ -151,6 +152,7 @@ def generate_glosses(
     La glosa es contra lo que compara `ITER-MATCH`, así que esto es lo que cierra la brecha de
     falsos huérfanos que el matcher muestra mientras cada clase tiene sólo una etiqueta.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     seed, contexts, target = normalization.seed, normalization.contexts, normalization.target
     if not contexts:
@@ -175,12 +177,12 @@ def generate_glosses(
     # Una glosa cambia el artefacto guardado pero no el estado lógico, así que la versión nueva
     # conserva el hash de su padre: re-glosar no es un estado nuevo para razonar (`ITER-APPLY`),
     # y la glosa igual queda versionada y viaja en el DAG (`PREP-NORMALIZE`).
-    parent = versioning.find_by_hash(conn, versioning.state_hash(seed.graph))
-    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    parent = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
+    next_id = workspace.next_version_id()
     committed = versioning.commit(
         conn, seed.graph, version_id=next_id,
         parent_id=parent.id if parent else None,
-        note="glosses (annotation-only; same logical state)",
+        note="glosses (annotation-only; same logical state)", session_id=session,
     )
     return GlossBootstrap(
         written=len(written), executed=result.executed, cached=result.cached,
@@ -216,6 +218,7 @@ def alignment(
     con los términos declarados: si quien conoce el dominio nombra el vocabulario que lo define
     y nada de eso está en el corpus, no hay matcher que lo arregle.
     """
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
 
@@ -229,7 +232,8 @@ def alignment(
     documents = [
         markdown_path(workspace.config, row["id"]).read_text(encoding="utf-8")
         for row in workspace.conn.execute(
-            "SELECT id FROM documents WHERE held_out = 0 ORDER BY id"
+            "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 ORDER BY id",
+            (session,),
         )
         if markdown_path(workspace.config, row["id"]).exists()
     ]
@@ -250,7 +254,8 @@ def alignment(
 
 def import_questions(workspace: Workspace, path: Path) -> int:
     """`PREP-CQ-USER`: preguntas escritas por el usuario, cada una con su SPARQL."""
-    return cq.add(workspace.conn, cq.read_file(path))
+    session = workspace.require_session()
+    return cq.add(workspace.conn, cq.read_file(path), session_id=session)
 
 
 @dataclass
@@ -279,13 +284,14 @@ def propose_questions(
     pregunta: un pasaje que dice "no debe" es de donde sale una pregunta restrictiva, y es
     invisible en una muestra al azar de párrafos.
     """
+    session = workspace.require_session()
     from .deliver import corpus_blocks
 
     config, conn = workspace.config, workspace.conn
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
 
-    blocks = corpus_blocks(conn)
+    blocks = corpus_blocks(conn, session_id=session)
     if not blocks:
         raise StageError("no parsed blocks; run ingest first")
     strata = cq_generation.sample(blocks, per_stratum=per_stratum, seed=seed)
@@ -311,13 +317,15 @@ def propose_questions(
     )
 
     answers = {cq_type: answer["questions"] for cq_type, answer in result.outputs.items()}
-    existing = [question.question for question in cq.load(conn, status=cq.ACCEPTED)]
-    existing += [question.question for question in cq.load(conn, status=cq_generation.PROPOSED)]
+    existing = [question.question for question in cq.load(conn, status=cq.ACCEPTED,
+        session_id=session)]
+    existing += [question.question for question in cq.load(conn, status=cq_generation.PROPOSED,
+        session_id=session)]
     similarity = workspace.text_similarity()
     filtered = cq_generation.screen(
         answers, {cq_type: pool for cq_type in answers}, existing, similarity=similarity,
     )
-    cq.add(conn, filtered.kept)
+    cq.add(conn, filtered.kept, session_id=session)
 
     return ProposedQuestions(
         strata={name: len(passages) for name, passages in sorted(strata.items())},
@@ -331,14 +339,16 @@ def propose_questions(
 
 
 def list_questions(workspace: Workspace, *, status: str = "proposed") -> list:
-    return cq.load(workspace.conn, status=status)
+    session = workspace.require_session()
+    return cq.load(workspace.conn, status=status, session_id=session)
 
 
 def decide_questions(
     workspace: Workspace, ids: list[str], *, discard: bool = False
 ) -> tuple[str, int]:
+    session = workspace.require_session()
     decision = cq.DISCARDED if discard else cq.ACCEPTED
-    return decision, cq.decide(workspace.conn, ids, decision)
+    return decision, cq.decide(workspace.conn, ids, decision, session_id=session)
 
 
 def seed_graph(workspace: Workspace) -> Graph:

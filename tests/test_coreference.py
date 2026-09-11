@@ -5,6 +5,8 @@ import pytest
 from onto_pipeline import coreference
 from onto_pipeline.db import connect
 
+SESSION = "test-1"
+
 MARKDOWN = "The system stores data. The platform indexes it. A second system exists."
 
 
@@ -79,13 +81,15 @@ def test_a_group_of_one_links_nothing():
 def test_groups_persist_onto_the_mention_layer(tmp_path):
     conn = connect(tmp_path)
     conn.executemany(
-        "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-        "VALUES (?, 'doc', 1, ?, 'active')",
-        [("m1", "system"), ("m2", "platform"), ("m3", "system")],
+        "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+        "VALUES (?, ?, 'doc', 1, ?, 'active')",
+        [("m1", SESSION, "system"), ("m2", SESSION, "platform"),
+         ("m3", SESSION, "system")],
     )
+
     marked = coreference.mark(MARKDOWN, mentions())
     grouping = coreference.resolve(marked, [["M0", "M1"]])
-    coreference.persist(conn, grouping.assignments)
+    coreference.persist(conn, grouping.assignments, session_id=SESSION)
 
     rows = dict(conn.execute("SELECT id, coref_group FROM mentions"))
     assert rows == {"m1": "g0", "m2": "g0", "m3": None}

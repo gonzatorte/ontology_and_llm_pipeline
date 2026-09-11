@@ -7,6 +7,8 @@ from onto_pipeline import cq_generation as gen
 from onto_pipeline.cq_generation import Passage
 from onto_pipeline.db import connect
 
+SESSION = "test-1"
+
 ASKS = "SELECT ?kind WHERE { ?kind rdfs:subClassOf ?x . ?x skos:prefLabel 'Interview' . }"
 TRIVIAL = "SELECT ?label WHERE { ?x skos:prefLabel ?label }"
 
@@ -100,6 +102,7 @@ def screen(entries, existing=(), **kwargs):
     )
 
 
+
 def test_a_question_a_single_triple_answers_is_dropped():
     """It asks whether one fact was written down, which any ontology with that fact passes
     regardless of whether it models the domain."""
@@ -172,13 +175,13 @@ def test_a_met_quota_reports_nothing():
 def test_a_proposed_question_stores_and_can_be_accepted(tmp_path):
     conn = connect(tmp_path)
     kept = screen([answer("What kinds of interview are there?")]).kept
-    cq.add(conn, kept)
-    assert cq.load(conn, status=gen.PROPOSED)[0].origin == cq.GENERATED
+    cq.add(conn, kept, session_id=SESSION)
+    assert cq.load(conn, status=gen.PROPOSED, session_id=SESSION)[0].origin == cq.GENERATED
 
-    cq.decide(conn, [kept[0].id], cq.ACCEPTED)
-    assert [q.id for q in cq.load(conn, status=cq.ACCEPTED)] == [kept[0].id]
+    cq.decide(conn, [kept[0].id], cq.ACCEPTED, session_id=SESSION)
+    assert [q.id for q in cq.load(conn, status=cq.ACCEPTED, session_id=SESSION)] == [kept[0].id]
 
 
 def test_an_unknown_decision_is_refused(tmp_path):
     with pytest.raises(ValueError, match="accepted or discarded"):
-        cq.decide(connect(tmp_path), ["cq_1"], "maybe")
+        cq.decide(connect(tmp_path), ["cq_1"], "maybe", session_id=SESSION)

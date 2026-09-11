@@ -66,6 +66,9 @@ class Workspace:
 
     config: Config
     conn: Store
+    # La sesión de usuario sobre la que corre todo lo que se pida a este workspace. Es el único
+    # estado de corrida que vive acá; lo demás es configuración.
+    session_id: str = ""
     config_path: Path | None = None
     # Sobreescrituras de `paths` pedidas por la interfaz, no por el archivo: el par
     # (corpus, ontología) es un parámetro de la corrida y no una decisión de configuración.
@@ -76,10 +79,16 @@ class Workspace:
         cls,
         config_path: Path,
         *,
+        session_id: str | None = None,
         corpus_root: Path | None = None,
         seed_ontology: Path | None = None,
         work_dir: Path | None = None,
     ) -> Workspace:
+        """Abrir el almacén y elegir sobre qué sesión de usuario se va a trabajar.
+
+        Sin `session_id` se usa la sesión actual —la que dejó marcada `session use`—, y si no
+        hay ninguna se dice cómo crear una en vez de fallar con una consulta vacía.
+        """
         config = Config.load(config_path)
         overrides: dict[str, Path] = {}
         for name, value in (
@@ -91,31 +100,48 @@ class Workspace:
                 resolved = Path(value).expanduser().resolve()
                 setattr(config.paths, name, resolved)
                 overrides[name] = resolved
-        return cls(
-            config=config,
-            conn=open_configured(config.database, config.paths.work_dir),
-            config_path=Path(config_path), overrides=overrides,
+        conn = open_configured(config.database, config.paths.work_dir)
+        workspace = cls(
+            config=config, conn=conn, config_path=Path(config_path), overrides=overrides,
         )
+        workspace.session_id = session_id or current_session(config.paths.work_dir) or ""
+        return workspace
 
     @classmethod
-    def of(cls, config: Config, conn: Store) -> Workspace:
+    def of(cls, config: Config, conn: Store, *, session_id: str = "") -> Workspace:
         """Para los tests y para quien ya tiene las dos cosas abiertas."""
-        return cls(config=config, conn=conn)
+        return cls(config=config, conn=conn, session_id=session_id)
+
+    def require_session(self) -> str:
+        """La sesión sobre la que corre esto, o un error que dice cómo crear una."""
+        if not self.session_id:
+            raise StageError(
+                "no hay sesión de usuario elegida. `onto-pipeline session new --use-case "
+                "<nombre>` crea una, `session list` muestra las que hay, y `--session <id>` "
+                "elige una para un comando suelto."
+            )
+        return self.session_id
 
     # ─────────────────────────  versiones  ─────────────────────────
 
     def resolve_version(self, version: str | None = None) -> str:
-        """La versión nombrada, o la más nueva.
+        """La versión nombrada, o la más nueva **de esta sesión**.
 
         `created_at` tiene precisión de segundo, así que dos versiones del mismo segundo
         empatan; `rowid` desempata por orden de inserción, que es lo que "la más nueva"
         significa acá.
+
+        El id de versión es `<sesión>:v<N>`, pero se acepta también la forma corta `v3`: es lo
+        que alguien teclea, y calificarla con la sesión actual es lo que vuelve innecesario
+        escribir el prefijo.
         """
         versioning.install(self.conn)
+        if version and ":" not in version:
+            version = f"{self.session_id}:{version}"
         row = self.conn.execute(
-            "SELECT id FROM versions WHERE id = COALESCE(?, id) "
+            "SELECT id FROM versions WHERE session_id = ? AND id = COALESCE(?, id) "
             "ORDER BY created_at DESC, rowid DESC LIMIT 1",
-            (version,),
+            (self.session_id, version),
         ).fetchone()
         if row is None:
             raise StageError(
@@ -138,18 +164,44 @@ class Workspace:
     def graph(self, version_id: str) -> Graph:
         return versioning.load(self.conn, version_id)[1]
 
+    def next_version_id(self) -> str:
+        return versioning.next_version_id(self.conn, self.require_session())
+
+    def session_dir(self) -> Path:
+        """Dónde van los artefactos de esta sesión.
+
+        Un solo lugar arma esta ruta. Antes eran siete lugares colgando de `work_dir` con
+        nombres fijos, y dos corridas se pisaban el Markdown, el ABox y los informes.
+        """
+        target = self.config.paths.work_dir / "sessions" / (self.session_id or "default")
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
     def ontology_dir(self) -> Path:
-        target = self.config.paths.work_dir / "ontology"
+        target = self.session_dir() / "ontology"
         target.mkdir(parents=True, exist_ok=True)
         return target
 
     def abox_path(self, version_id: str) -> Path:
-        return self.config.paths.work_dir / "ontology" / f"{version_id}.abox.trig"
+        return self.ontology_dir() / f"{_filename(version_id)}.abox.trig"
 
     # ─────────────────────────  modelo y encoders  ─────────────────────────
 
+    def note(self, kind: str, summary: str, payload: dict | None = None) -> None:
+        """Anotar en el historial de la sesión.
+
+        Las **elecciones** del usuario ya se guardan donde corresponde —`grey_decisions`,
+        `decisions`, `review_items`—; esto anota que **pasaron**, y qué etapa las produjo. Dos
+        copias de una decisión es cómo una de las dos queda vieja, así que acá va el resumen y
+        no el contenido.
+        """
+        from .. import sessions
+
+        if self.session_id:
+            sessions.record(self.conn, self.session_id, kind, summary, payload)
+
     def ledger(self) -> Ledger:
-        return Ledger(self.conn, self.config.execution)
+        return Ledger(self.conn, self.config.execution, session_id=self.session_id)
 
     def has_provider(self) -> bool:
         """Si hay credencial cargada para el proveedor configurado.
@@ -223,6 +275,27 @@ class Workspace:
             )
         except ReasonerUnavailable as exc:
             raise StageError(f"{exc}. {why}".strip()) from exc
+
+
+# La sesión actual vive en un archivo del almacén y no en el config, que se versiona: cuál
+# sesión está activa es estado de esta máquina, no una decisión del proyecto.
+_CURRENT = "current_session"
+
+
+def current_session(work_dir: Path) -> str:
+    marker = work_dir / _CURRENT
+    return marker.read_text(encoding="utf-8").strip() if marker.exists() else ""
+
+
+def use_session(work_dir: Path, session_id: str) -> None:
+    work_dir.mkdir(parents=True, exist_ok=True)
+    (work_dir / _CURRENT).write_text(session_id, encoding="utf-8")
+
+
+def _filename(version_id: str) -> str:
+    """El id de versión como nombre de archivo: `sesión:v3` lleva dos puntos, que en Windows no
+    es un carácter de nombre y en una URL es otra cosa."""
+    return version_id.replace(":", "-")
 
 
 def table_exists(conn: Store, name: str) -> bool:

@@ -24,7 +24,7 @@ from .workspace import Progress, StageError, Workspace, silent
 # ─────────────────────────────  lecturas compartidas  ─────────────────────────────
 
 
-def corpus_blocks(conn: Store) -> list[dict]:
+def corpus_blocks(conn: Store, *, session_id: str) -> list[dict]:
     """Los bloques de cuerpo de todo documento que el proceso puede leer.
 
     Los documentos retenidos quedan afuera acá como en todos lados: una glosa escrita desde el
@@ -33,9 +33,10 @@ def corpus_blocks(conn: Store) -> list[dict]:
     return [
         dict(row) for row in conn.execute(
             "SELECT b.id, b.document_id, b.page, b.text FROM blocks b "
-            "JOIN documents d ON d.id = b.document_id "
-            "WHERE d.held_out = 0 AND b.is_boilerplate = 0 AND b.block_type != 'figure' "
-            "ORDER BY b.document_id, b.page, b.ordinal"
+            "JOIN documents d ON d.id = b.document_id AND d.session_id = b.session_id "
+            "WHERE b.session_id = ? AND d.held_out = 0 AND b.is_boilerplate = 0 "
+            "AND b.block_type != 'figure' ORDER BY b.document_id, b.page, b.ordinal",
+            (session_id,),
         )
     ]
 
@@ -133,7 +134,10 @@ def version_rows(workspace: Workspace) -> list[dict]:
     versioning.install(workspace.conn)
     return [
         dict(row)
-        for row in workspace.conn.execute("SELECT * FROM versions ORDER BY created_at")
+        for row in workspace.conn.execute(
+            "SELECT * FROM versions WHERE session_id = ? ORDER BY created_at",
+            (workspace.require_session(),),
+        )
     ]
 
 
@@ -149,6 +153,7 @@ class Telemetry:
 
 def telemetry(workspace: Workspace) -> Telemetry:
     """Unidades de trabajo y costo por etapa, clases de página en todo el corpus."""
+    session = workspace.require_session()
     ledger = workspace.ledger()
     stages = [
         {"stage": row["stage"], **ledger.stage_report(row["stage"])}
@@ -159,7 +164,9 @@ def telemetry(workspace: Workspace) -> Telemetry:
     # La razón sale del JSON en Python y no con `json_extract`: esa función es de SQLite y no
     # existe igual en Postgres, y agrupar acá cuesta lo mismo que agruparlo allá.
     tally: dict[tuple[str, str], int] = {}
-    for row in workspace.conn.execute("SELECT class, signals FROM page_classification"):
+    for row in workspace.conn.execute(
+        "SELECT class, signals FROM page_classification WHERE session_id = ?", (session,)
+    ):
         reason = (json.loads(row["signals"]) if row["signals"] else {}).get("reason") or ""
         tally[(row["class"], reason)] = tally.get((row["class"], reason), 0) + 1
     page_classes = [
@@ -177,7 +184,10 @@ def telemetry(workspace: Workspace) -> Telemetry:
 def reports(workspace: Workspace, *, doc_id: str | None = None) -> list[Path]:
     """`DELIVERABLES-PENDING-PARSER-EVAL`: HTML autocontenido para evaluar el parseo a mano."""
     ids = [doc_id] if doc_id else [
-        row["id"] for row in workspace.conn.execute("SELECT id FROM documents ORDER BY id")
+        row["id"] for row in workspace.conn.execute(
+            "SELECT id FROM documents WHERE session_id = ? ORDER BY id",
+            (workspace.require_session(),),
+        )
     ]
     if not ids:
         raise StageError("nothing ingested yet")
@@ -186,8 +196,9 @@ def reports(workspace: Workspace, *, doc_id: str | None = None) -> list[Path]:
 
 def chunks(workspace: Workspace, doc_id: str) -> list:
     """Las unidades de extracción de un documento. Derivadas, nunca guardadas."""
+    session = workspace.require_session()
     found = chunk_document(
-        load_block_objects(workspace.conn, doc_id),
+        load_block_objects(workspace.conn, doc_id, session_id=session),
         workspace.config.chunking.target_chars,
         workspace.config.chunking.max_chars,
     )
@@ -198,8 +209,8 @@ def chunks(workspace: Workspace, doc_id: str) -> list:
 
 def blocks(workspace: Workspace, doc_id: str, *, page: int | None = None) -> list[dict]:
     """El almacén de bloques de un documento, para inspeccionar procedencia."""
-    query = "SELECT * FROM blocks WHERE document_id = ?"
-    params: list = [doc_id]
+    query = "SELECT * FROM blocks WHERE session_id = ? AND document_id = ?"
+    params: list = [workspace.require_session(), doc_id]
     if page is not None:
         query += " AND page = ?"
         params.append(page)

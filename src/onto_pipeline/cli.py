@@ -19,7 +19,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from . import orchestration, render, versioning
+from . import orchestration, render, sessions, versioning
 from .providers import load_env_file
 from .services import StageError, Workspace, deliver, evaluate, iterate, prep
 
@@ -34,6 +34,15 @@ PageOption = typer.Option(None, "--page", "-p")
 IterationOption = typer.Option(0, "--iteration", "-i")
 VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
 EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provider credential.")
+UseCaseNameOption = typer.Option(
+    ..., "--use-case", help="Directorio bajo `use_cases/`: el par (ontología inicial, corpus)."
+)
+SessionNameOption = typer.Option("", "--name", help="Un nombre para acordarse, opcional.")
+SessionArgument = typer.Argument(None, help="Por defecto, la sesión actual.")
+SessionOption = typer.Option(
+    None, "--session",
+    help="Sesión de usuario sobre la que correr. Por defecto, la actual (`session use`).",
+)
 ReleaseOption = typer.Option(False, "--release", help="Return the documents to the process.")
 AgainstOption = typer.Option(None, "--against", help="Default: the version's parent.")
 DiffLimitOption = typer.Option(10, "--limit", "-n", help="Axioms shown per lane; 0 for all.")
@@ -167,16 +176,26 @@ SeedOntologyOption = typer.Option(
 )
 
 
+# La sesión elegida con `--session`, que es una opción global y va antes del subcomando. Un
+# `state` de módulo y no un parámetro por comando: son cuarenta comandos y la alternativa es
+# repetir la bandera en todos, que es donde alguno se olvida.
+_CHOSEN: dict[str, str | None] = {"session": None}
+
+
 @app.callback()
-def main(env_file: Path | None = EnvFileOption) -> None:
+def main(
+    env_file: Path | None = EnvFileOption,
+    session: str | None = SessionOption,
+) -> None:
     """Env files are explicit, never auto-discovered."""
     if env_file is not None:
         names = load_env_file(env_file)
         console.print(f"[dim]loaded {', '.join(names)} from {env_file}[/]")
+    _CHOSEN["session"] = session
 
 
 def _workspace(config_path: Path) -> Workspace:
-    return Workspace.open(config_path)
+    return Workspace.open(config_path, session_id=_CHOSEN["session"])
 
 
 # ─────────────────────────────  PREP  ─────────────────────────────
@@ -854,7 +873,8 @@ def next_cmd(
         version_id = "(sin versión todavía)"
 
     plan = orchestration.survey(
-        workspace.conn, version_id, has_provider=workspace.has_provider()
+        workspace.conn, version_id, session_id=workspace.require_session(),
+        has_provider=workspace.has_provider(),
     )
     render.plan(console, plan, version_id)
 
@@ -900,11 +920,105 @@ def next_cmd(
     )
 
 
+session_app = typer.Typer(
+    help="Sesiones de usuario: una corrida sobre un caso de uso, con su estado e historial."
+)
+app.add_typer(session_app, name="session")
+
+
+@session_app.command("list")
+def session_list(config_path: Path = ConfigOption) -> None:
+    """Las sesiones que hay, con su fase y su caso de uso."""
+    workspace = Workspace.open(config_path)
+    render.session_list(
+        console, evaluate.list_sessions(workspace), current=workspace.session_id
+    )
+
+
+@session_app.command("new")
+def session_new(
+    config_path: Path = ConfigOption,
+    use_case: str = UseCaseNameOption,
+    name: str = SessionNameOption,
+) -> None:
+    """Crear una sesión sobre un caso de uso, y dejarla como la actual.
+
+    El caso de uso es el par (ontología inicial, corpus) que vive en `use_cases/`. Es material
+    de entrada y se comparte: dos sesiones sobre el mismo son la comparación que este proyecto
+    existe para poder hacer.
+    """
+    workspace = Workspace.open(config_path)
+    created = evaluate.new_session(workspace, use_case=use_case, name=name)
+    console.print(
+        f"[green]creada[/] {created.id}"
+        + (f" ({created.name})" if created.name else "")
+        + f" sobre {created.use_case} · fase {created.phase}"
+    )
+    console.print("[dim]es ahora la sesión actual; `--session <id>` elige otra por comando[/]")
+
+
+@session_app.command("use")
+def session_use(session_id: str, config_path: Path = ConfigOption) -> None:
+    """Fijar la sesión actual, la que usan los comandos sin `--session`."""
+    workspace = Workspace.open(config_path)
+    console.print(f"[green]actual[/] {evaluate.use_session(workspace, session_id).id}")
+
+
+@session_app.command("show")
+def session_show(
+    session_id: str | None = SessionArgument,
+    config_path: Path = ConfigOption,
+    limit: int | None = LimitOption,
+) -> None:
+    """Una sesión: su fase, su caso de uso, y qué pasó en ella."""
+    workspace = _workspace(config_path)
+    render.session_detail(
+        console, *evaluate.session_detail(workspace, session_id), limit=limit
+    )
+
+
+@session_app.command("reopen")
+def session_reopen(
+    config_path: Path = ConfigOption,
+    session_id: str | None = SessionArgument,
+    yes: bool = YesOption,
+    why: str = WhyOption,
+) -> None:
+    """Volver a la fase de preparación.
+
+    **No borra nada**: re-preparar commitea una raíz nueva y el linaje viejo queda alcanzable,
+    que es lo que el DAG ya hace con las ramas no elegidas. Lo que sí pasa es que el trabajo
+    hecho deja de estar en el camino que la sesión sigue, y por eso se dice con números antes
+    de preguntar.
+    """
+    workspace = _workspace(config_path)
+    try:
+        left = evaluate.reopen_session(workspace, session_id, confirmed=yes, why=why)
+    except sessions.PhaseViolation as exc:
+        console.print(f"[yellow]{exc}[/]")
+        console.print("`--yes` lo hace igual.")
+        raise typer.Exit(code=1) from exc
+    console.print(
+        "[green]vuelta a preparación[/]"
+        + (f" · quedó atrás {left.summary}" if not left.empty else "")
+    )
+
+
+@session_app.command("close")
+def session_close(
+    config_path: Path = ConfigOption,
+    session_id: str | None = SessionArgument,
+    comment: str = CommentOption,
+) -> None:
+    """Cerrar una sesión. Es la única fase que se declara a mano."""
+    workspace = _workspace(config_path)
+    closed = evaluate.close_session(workspace, session_id, note=comment)
+    console.print(f"[green]cerrada[/] {closed.id}")
+
+
 @app.command("wizard")
 def wizard_cmd(
     config_path: Path = ConfigOption,
-    corpus: Path | None = CorpusOption,
-    seed_ontology: Path | None = SeedOntologyOption,
     env_file: Path | None = RunEnvFileOption,
 ) -> None:
     """La otra interfaz: te guía, te pide lo que falta, y te devuelve la ontología enriquecida.
@@ -915,9 +1029,7 @@ def wizard_cmd(
     """
     from .wizard import run as run_wizard
 
-    run_wizard(
-        console, config_path, corpus=corpus, seed_ontology=seed_ontology, env_file=env_file
-    )
+    run_wizard(console, config_path, session_id=_CHOSEN["session"], env_file=env_file)
 
 
 def entrypoint() -> None:

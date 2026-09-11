@@ -12,12 +12,15 @@ from onto_pipeline.telemetry import (
     unit_key,
 )
 
+SESSION = "test-1"
+
+
 
 @pytest.fixture
 def ledger(tmp_path):
     conn = connect(tmp_path)
     execution = Execution(max_retries=3, backoff_base_s=0, stage_failure_rate_abort=0.10)
-    return Ledger(conn, execution, sleep=lambda _: None)
+    return Ledger(conn, execution, sleep=lambda _: None, session_id=SESSION)
 
 
 def payloads(n):

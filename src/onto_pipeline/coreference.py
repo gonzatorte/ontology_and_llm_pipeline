@@ -140,9 +140,9 @@ def resolve(marked: Marked, groups: list[list[str]]) -> Grouping:
     return result
 
 
-def persist(conn: Store, assignments: dict[str, str]) -> None:
+def persist(conn: Store, assignments: dict[str, str], *, session_id: str) -> None:
     conn.executemany(
-        "UPDATE mentions SET coref_group = ? WHERE id = ?",
-        [(group, mention_id) for mention_id, group in assignments.items()],
+        "UPDATE mentions SET coref_group = ? WHERE session_id = ? AND id = ?",
+        [(group, session_id, mention_id) for mention_id, group in assignments.items()],
     )
     conn.commit()

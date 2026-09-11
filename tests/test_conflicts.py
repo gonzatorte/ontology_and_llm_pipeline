@@ -8,6 +8,8 @@ from onto_pipeline import conflicts, mapping
 from onto_pipeline.db import connect
 from onto_pipeline.mapping import MappingRules, MentionRow
 
+SESSION = "test-1"
+
 A, B, C = "c:Technique", "c:Organization", "c:Interview"
 LABELS = {A: "Technique", B: "Organization", C: "Interview"}
 
@@ -131,15 +133,18 @@ def test_refuted_and_misextracted_are_kept_apart(tmp_path):
     """They look identical in an interface and are opposite signals; merging them loses the
     only free source of extraction-error labels."""
     conn = connect(tmp_path)
-    conflicts.mark(conn, ["m1"], conflicts.REFUTED, "the paper is wrong about this")
-    conflicts.mark(conn, ["m2"], conflicts.MISEXTRACTED, "the sentence never says this")
-    assert conflicts.marks(conn, conflicts.REFUTED) == {"m1": conflicts.REFUTED}
-    assert conflicts.marks(conn, conflicts.MISEXTRACTED) == {"m2": conflicts.MISEXTRACTED}
+    conflicts.mark(conn, ["m1"], conflicts.REFUTED, "the paper is wrong about this",
+        session_id=SESSION)
+    conflicts.mark(conn, ["m2"], conflicts.MISEXTRACTED, "the sentence never says this",
+        session_id=SESSION)
+    assert conflicts.marks(conn, conflicts.REFUTED, session_id=SESSION) == {"m1": conflicts.REFUTED}
+    assert conflicts.marks(conn, conflicts.MISEXTRACTED,
+        session_id=SESSION) == {"m2": conflicts.MISEXTRACTED}
 
 
 def test_an_unknown_mark_is_refused(tmp_path):
     with pytest.raises(ValueError, match="refuted"):
-        conflicts.mark(connect(tmp_path), ["m1"], "wrong")
+        conflicts.mark(connect(tmp_path), ["m1"], "wrong", session_id=SESSION)
 
 
 def test_a_mark_changes_the_rules_hash(tmp_path):
@@ -147,9 +152,9 @@ def test_a_mark_changes_the_rules_hash(tmp_path):
     regeneration is idempotent over (state, rules)."""
     conn = connect(tmp_path)
     rules = MappingRules()
-    before = rules.with_exceptions(conflicts.as_exceptions(conn)).rules_hash()
-    conflicts.mark(conn, ["m1"], conflicts.REFUTED)
-    after = rules.with_exceptions(conflicts.as_exceptions(conn)).rules_hash()
+    before = rules.with_exceptions(conflicts.as_exceptions(conn, session_id=SESSION)).rules_hash()
+    conflicts.mark(conn, ["m1"], conflicts.REFUTED, session_id=SESSION)
+    after = rules.with_exceptions(conflicts.as_exceptions(conn, session_id=SESSION)).rules_hash()
     assert before != after
 
 
@@ -158,13 +163,16 @@ def test_misextractions_export_as_the_evaluation_set_shape(tmp_path):
 
     conn = connect(tmp_path)
     conn.execute(
-        "INSERT INTO mentions (id, document_id, page, span_start, span_end, surface_text, "
-        "status) VALUES ('m2', 'd1', 3, 10, 20, 'university based', 'extracted')"
+        "INSERT INTO mentions (id, session_id, document_id, page, span_start, span_end, "
+        "surface_text, "
+        "status) VALUES ('m2', ?, 'd1', 3, 10, 20, 'university based', 'extracted')",
+        (SESSION,)
     )
     conn.commit()
-    conflicts.mark(conn, ["m2"], conflicts.MISEXTRACTED, "two words joined by the parser")
+    conflicts.mark(conn, ["m2"], conflicts.MISEXTRACTED, "two words joined by the parser",
+        session_id=SESSION)
 
-    line = json.loads(conflicts.export_misextractions(conn))
+    line = json.loads(conflicts.export_misextractions(conn, session_id=SESSION))
     assert line["error"] == conflicts.MISEXTRACTED and line["start"] == 10
     assert line["document_id"] == "d1"
 
@@ -266,6 +274,7 @@ def test_an_entailed_supertype_is_not_a_second_opinion_in_the_abox():
     result = mapping.regenerate(
         rows, {"m1": (A, "auto"), "m2": (C, "auto")}, MappingRules(), hierarchy()
     )
+
     assert result.n_conflicts == 0
     assert not any(quad[1] == mapping.NOTARIZED for quad in result.dataset.quads())
     assert types_of(result) == {A, C}, "both types are still asserted; only the flag is not"

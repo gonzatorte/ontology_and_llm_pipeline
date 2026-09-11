@@ -1058,6 +1058,43 @@ def delivery(console: Console, result: deliver.Delivery) -> None:
     console.print(f"[dim]provenance: {result.manifest_path}[/]")
 
 
+def session_list(console: Console, found: list, *, current: str = "") -> None:
+    """Las sesiones que hay. La actual va marcada: es la que usan los comandos sin `--session`."""
+    if not found:
+        console.print(
+            "[yellow]todavía no hay ninguna sesión[/] · "
+            "`onto-pipeline session new --use-case <nombre>` crea una"
+        )
+        return
+    table = Table("", "sesión", "caso de uso", "fase", "nombre", "última actividad")
+    for item in found:
+        table.add_row(
+            "[green]▸[/]" if item.id == current else "",
+            item.id, item.use_case, item.phase, item.name, item.updated_at,
+        )
+    console.print(table)
+
+
+def session_detail(console: Console, session, events: list, *, limit: int | None = None) -> None:
+    """Una sesión y su historial. El historial es append-only: se lee, no se corrige."""
+    table = Table("qué", "valor", title=session.label)
+    table.add_row("id", session.id)
+    table.add_row("caso de uso", session.use_case)
+    table.add_row("fase", session.phase)
+    table.add_row("creada", session.created_at)
+    table.add_row("última actividad", session.updated_at)
+    if session.note:
+        table.add_row("nota", session.note)
+    console.print(table)
+
+    history = Table("cuándo", "qué", "detalle")
+    for event in events[: limit or 20]:
+        history.add_row(event.at, event.kind, event.summary)
+    console.print(history)
+    if len(events) > (limit or 20):
+        console.print(f"[dim]… {len(events) - (limit or 20)} eventos más[/]")
+
+
 def plan(console: Console, survey, version_id: str) -> None:
     """Qué corresponde correr, y qué está esperando a una persona (`orchestration`)."""
     from . import orchestration

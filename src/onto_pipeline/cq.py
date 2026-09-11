@@ -50,7 +50,8 @@ TYPES = (
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS competency_questions (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
+  session_id   TEXT NOT NULL,
   question     TEXT NOT NULL,
   language     TEXT,
   cq_type      TEXT,
@@ -58,17 +59,19 @@ CREATE TABLE IF NOT EXISTS competency_questions (
   sparql       TEXT NOT NULL,
   status       TEXT NOT NULL,   -- proposed (PREP-CQ-GENERATED, unreviewed) | accepted | discarded
   citation     TEXT,            -- JSON {document_id, page, quote}; PREP-CQ-GENERATED requires one
-  created_at   TEXT
+  created_at   TEXT,
+  PRIMARY KEY (session_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS cq_results (
   cq_id        TEXT NOT NULL,
+  session_id   TEXT NOT NULL,
   iteration    INTEGER NOT NULL,
   passed       INTEGER NOT NULL,
   n_rows       INTEGER,
   error        TEXT,
   created_at   TEXT,
-  PRIMARY KEY (cq_id, iteration)
+  PRIMARY KEY (session_id, cq_id, iteration)
 );
 """
 
@@ -134,18 +137,21 @@ def validate(question: CompetencyQuestion) -> None:
         raise ValueError(f"{question.id}: a generated CQ needs a citation")
 
 
-def add(conn: Store, questions: list[CompetencyQuestion]) -> int:
+def add(conn: Store, questions: list[CompetencyQuestion], *, session_id: str) -> int:
     install(conn)
     for question in questions:
         validate(question)
     conn.executemany(
-        "INSERT INTO competency_questions (id, question, language, cq_type, origin, sparql, "
-        "status, citation, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(id) DO UPDATE SET question = excluded.question, sparql = excluded.sparql, "
+        "INSERT INTO competency_questions (id, session_id, question, language, cq_type, "
+        "origin, sparql, status, citation, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(session_id, id) DO UPDATE SET question = excluded.question, "
+        "sparql = excluded.sparql, "
         "status = excluded.status, cq_type = excluded.cq_type, citation = excluded.citation",
         [
             (
                 question.id,
+                session_id,
                 question.question,
                 question.language,
                 question.cq_type,
@@ -162,7 +168,9 @@ def add(conn: Store, questions: list[CompetencyQuestion]) -> int:
     return len(questions)
 
 
-def load(conn: Store, *, status: str = ACCEPTED) -> list[CompetencyQuestion]:
+def load(
+    conn: Store, *, session_id: str, status: str = ACCEPTED
+) -> list[CompetencyQuestion]:
     install(conn)
     return [
         CompetencyQuestion(
@@ -176,20 +184,21 @@ def load(conn: Store, *, status: str = ACCEPTED) -> list[CompetencyQuestion]:
             citation=json.loads(row["citation"]) if row["citation"] else None,
         )
         for row in conn.execute(
-            "SELECT * FROM competency_questions WHERE status = ? ORDER BY id", (status,)
+            "SELECT * FROM competency_questions WHERE session_id = ? AND status = ? ORDER BY id",
+        (session_id, status),
         )
     ]
 
 
-def decide(conn: Store, ids: list[str], status: str) -> int:
+def decide(conn: Store, ids: list[str], status: str, *, session_id: str) -> int:
     """Accept or discard proposed questions. The third action, reformulating, is an edit and
     goes through `import` like any question the user writes."""
     if status not in (ACCEPTED, DISCARDED):
         raise ValueError(f"a question is accepted or discarded, not {status!r}")
     install(conn)
     cursor = conn.executemany(
-        "UPDATE competency_questions SET status = ? WHERE id = ?",
-        [(status, item) for item in ids],
+        "UPDATE competency_questions SET status = ? WHERE session_id = ? AND id = ?",
+        [(status, session_id, item) for item in ids],
     )
     conn.commit()
     return cursor.rowcount
@@ -229,18 +238,20 @@ def evaluate(
     return evaluation
 
 
-def record(conn: Store, evaluation: Evaluation) -> None:
+def record(conn: Store, evaluation: Evaluation, *, session_id: str) -> None:
     install(conn)
     rows = (
-        [(cq_id, evaluation.iteration, 1, evaluation.n_rows.get(cq_id), None, _now())
+        [(cq_id, session_id, evaluation.iteration, 1, evaluation.n_rows.get(cq_id), None, _now())
          for cq_id in evaluation.passed]
-        + [(cq_id, evaluation.iteration, 0, 0, None, _now()) for cq_id in evaluation.failed]
-        + [(cq_id, evaluation.iteration, 0, None, error, _now())
+        + [(cq_id, session_id, evaluation.iteration, 0, 0, None, _now())
+           for cq_id in evaluation.failed]
+        + [(cq_id, session_id, evaluation.iteration, 0, None, error, _now())
            for cq_id, error in evaluation.errored.items()]
     )
     conn.executemany(
-        "INSERT INTO cq_results (cq_id, iteration, passed, n_rows, error, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(cq_id, iteration) DO UPDATE SET "
+        "INSERT INTO cq_results (cq_id, session_id, iteration, passed, n_rows, error, "
+        "created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(session_id, cq_id, iteration) DO UPDATE SET "
         "passed = excluded.passed, n_rows = excluded.n_rows, error = excluded.error",
         rows,
     )

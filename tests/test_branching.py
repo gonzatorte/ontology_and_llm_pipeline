@@ -4,6 +4,8 @@ from onto_pipeline import branching as br
 from onto_pipeline.axiomatization import Axiom
 from onto_pipeline.db import connect
 
+SESSION = "test-1"
+
 PARENT = "c:Interview"
 LABELS = {PARENT: "Interview", "c:Technique": "Technique"}
 
@@ -347,9 +349,9 @@ def test_a_branch_records_the_alternatives_it_was_taken_over(tmp_path):
     """Without them the record cannot justify the choice, which is what it is for (8.2)."""
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
+    br.persist(conn, "v1", [decision], session_id=SESSION)
 
-    rows = br.load(conn, "v1")
+    rows = br.load(conn, "v1", session_id=SESSION)
     assert len(rows) == 2
     import json
     axes = json.loads(rows[0]["axes"])
@@ -361,36 +363,36 @@ def test_choosing_one_branch_rejects_its_siblings(tmp_path):
     """What was accepted is in the ontology; what was rejected exists nowhere else (6.7)."""
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
+    br.persist(conn, "v1", [decision], session_id=SESSION)
     chosen = decision.branches[0]
-    br.settle(conn, chosen.id, note="the medium is the cut")
+    br.settle(conn, chosen.id, note="the medium is the cut", session_id=SESSION)
 
-    status = {row["id"]: row["status"] for row in br.load(conn, "v1")}
+    status = {row["id"]: row["status"] for row in br.load(conn, "v1", session_id=SESSION)}
     assert status.pop(chosen.id) == br.CHOSEN
     assert set(status.values()) == {br.NOT_CHOSEN}
 
 
 def test_history_is_empty_before_anything_was_decided(tmp_path):
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [stored_decision()])
-    assert br.history(conn) == {}
+    br.persist(conn, "v1", [stored_decision()], session_id=SESSION)
+    assert br.history(conn, session_id=SESSION) == {}
 
 
 def test_a_rejected_option_counts_against_itself(tmp_path):
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id)
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(conn, decision.branches[0].id, session_id=SESSION)
 
-    tally = br.history(conn)
+    tally = br.history(conn, session_id=SESSION)
     assert sorted(tally.values()) == [-1, 1]
 
 
 def test_reproposing_against_the_same_version_replaces_the_proposals(tmp_path):
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [stored_decision()])
-    br.persist(conn, "v1", [stored_decision()])
-    assert len(br.load(conn, "v1")) == 2
+    br.persist(conn, "v1", [stored_decision()], session_id=SESSION)
+    br.persist(conn, "v1", [stored_decision()], session_id=SESSION)
+    assert len(br.load(conn, "v1", session_id=SESSION)) == 2
 
 
 def test_a_settled_decision_is_not_re_opened_by_proposing_again(tmp_path):
@@ -398,12 +400,13 @@ def test_a_settled_decision_is_not_re_opened_by_proposing_again(tmp_path):
     its siblings' rejections — the only record of what was turned down."""
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id)
-    br.persist(conn, "v1", [decision])
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(conn, decision.branches[0].id, session_id=SESSION)
+    br.persist(conn, "v1", [decision], session_id=SESSION)
 
-    assert len(br.history(conn)) == 2
-    assert {row["status"] for row in br.load(conn, "v1")} == {br.CHOSEN, br.NOT_CHOSEN}
+    assert len(br.history(conn, session_id=SESSION)) == 2
+    assert {row["status"] for row in br.load(conn, "v1",
+        session_id=SESSION)} == {br.CHOSEN, br.NOT_CHOSEN}
 
 
 # ─────────────  el registro de decisiones (ITER-FEEDBACK, esquema GRADED-FEEDBACK)  ─────────────
@@ -412,8 +415,10 @@ def test_a_settled_decision_is_not_re_opened_by_proposing_again(tmp_path):
 def settled(tmp_path, **kwargs):
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id, note="porque sí", **kwargs)
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(
+        conn, decision.branches[0].id, note="porque sí", session_id=SESSION, **kwargs
+    )
     return conn, decision
 
 
@@ -434,8 +439,10 @@ def test_invalid_is_a_different_signal_from_rejected(tmp_path):
     la segunda, que es la que sirve para descartar de entrada."""
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id, invalid=[decision.branches[1].id])
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(
+        conn, decision.branches[0].id, invalid=[decision.branches[1].id], session_id=SESSION
+    )
     assert {row["status"] for row in rows(conn)} == {br.CHOSEN, br.INVALID}
 
 
@@ -443,9 +450,15 @@ def test_an_invalid_weighs_more_against_its_option_than_a_rejection(tmp_path):
     plain = settled(tmp_path / "a")[0]
     strong = connect(tmp_path / "b")
     decision = stored_decision()
-    br.persist(strong, "v1", [decision])
-    br.settle(strong, decision.branches[0].id, invalid=[decision.branches[1].id])
-    assert min(br.history(strong).values()) < min(br.history(plain).values())
+    br.persist(strong, "v1", [decision], session_id=SESSION)
+    br.settle(
+        strong, decision.branches[0].id, invalid=[decision.branches[1].id],
+        session_id=SESSION,
+    )
+    assert (
+        min(br.history(strong, session_id=SESSION).values())
+        < min(br.history(plain, session_id=SESSION).values())
+    )
 
 
 def test_the_axis_is_recorded_as_one_of_the_six_fixed_categories(tmp_path):
@@ -469,14 +482,14 @@ def test_the_comment_travels_with_the_decision(tmp_path):
 
 def test_precedents_come_back_by_category(tmp_path):
     conn, _ = settled(tmp_path)
-    found = br.precedents(conn, br.DIVISION_CRITERION)
+    found = br.precedents(conn, br.DIVISION_CRITERION, session_id=SESSION)
     assert len(found) == 2
-    assert br.precedents(conn, br.TERMINOLOGY) == []
+    assert br.precedents(conn, br.TERMINOLOGY, session_id=SESSION) == []
 
 
 def test_precedents_are_capped(tmp_path):
     conn, _ = settled(tmp_path)
-    assert len(br.precedents(conn, br.DIVISION_CRITERION, limit=1)) == 1
+    assert len(br.precedents(conn, br.DIVISION_CRITERION, limit=1, session_id=SESSION)) == 1
 
 
 def test_the_resulting_state_is_recorded_with_the_decision(tmp_path):
@@ -492,59 +505,72 @@ def test_the_resulting_state_is_recorded_with_the_decision(tmp_path):
 def with_forms(tmp_path, forms):
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id, note="no va", normal_forms=forms)
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(conn, decision.branches[0].id, note="no va", normal_forms=forms, session_id=SESSION)
     return conn, decision
 
 
 def test_a_proposal_already_rejected_is_found_by_its_normal_form(tmp_path):
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
+    br.persist(conn, "v1", [decision], session_id=SESSION)
     forms = {b.id: "Focus Group subClassOf Technique" for b in decision.branches}
-    br.settle(conn, decision.branches[0].id, note="ya se probó", normal_forms=forms)
-    found = br.already_rejected(conn, "Focus Group subClassOf Technique")
+    br.settle(
+        conn, decision.branches[0].id, note="ya se probó", normal_forms=forms,
+        session_id=SESSION,
+    )
+    found = br.already_rejected(conn, "Focus Group subClassOf Technique", session_id=SESSION)
     assert found and found["status"] in (br.NOT_CHOSEN, br.INVALID)
 
 
 def test_the_chosen_one_is_not_reported_as_rejected(tmp_path):
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id,
-              normal_forms={decision.branches[0].id: "elegida", decision.branches[1].id: "otra"})
-    assert br.already_rejected(conn, "elegida") is None
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(
+        conn, decision.branches[0].id,
+        normal_forms={decision.branches[0].id: "elegida", decision.branches[1].id: "otra"},
+        session_id=SESSION,
+    )
+    assert br.already_rejected(conn, "elegida", session_id=SESSION) is None
 
 
 def test_invalid_wins_over_rejected_when_both_exist(tmp_path):
     """Lo que interesa es si ya se dijo que estaba mal, no sólo que no se eligió."""
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id, invalid=[decision.branches[1].id],
-              normal_forms={b.id: "misma forma" for b in decision.branches})
-    assert br.already_rejected(conn, "misma forma")["status"] == br.INVALID
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(
+        conn, decision.branches[0].id, invalid=[decision.branches[1].id],
+        normal_forms={b.id: "misma forma" for b in decision.branches}, session_id=SESSION,
+    )
+    assert br.already_rejected(conn, "misma forma", session_id=SESSION)["status"] == br.INVALID
 
 
 def test_an_empty_normal_form_matches_nothing(tmp_path):
     conn, _ = with_forms(tmp_path, {})
-    assert br.already_rejected(conn, "") is None
+    assert br.already_rejected(conn, "", session_id=SESSION) is None
 
 
 def test_precedents_come_back_by_similarity(tmp_path):
     decision = stored_decision()
     conn = connect(tmp_path)
-    br.persist(conn, "v1", [decision])
-    br.settle(conn, decision.branches[0].id, note="porque sí",
-              normal_forms={b.id: f"forma {i}" for i, b in enumerate(decision.branches)})
+    br.persist(conn, "v1", [decision], session_id=SESSION)
+    br.settle(
+        conn, decision.branches[0].id, note="porque sí",
+        normal_forms={b.id: f"forma {i}" for i, b in enumerate(decision.branches)},
+        session_id=SESSION,
+    )
 
     def similarity(left, right):
         return [[1.0 if a == b else 0.0 for b in right] for a in left]
 
-    found = br.precedents_like(conn, "forma 0", similarity)
+    found = br.precedents_like(conn, "forma 0", similarity, session_id=SESSION)
     assert [row["normalized_axioms"] for row in found] == ["forma 0"]
 
 
 def test_a_precedent_below_the_floor_is_not_offered(tmp_path):
     conn, decision = with_forms(tmp_path, {b.id: "algo" for b in stored_decision().branches})
-    assert br.precedents_like(conn, "x", lambda left, right: [[0.1] * len(right)]) == []
+    assert br.precedents_like(
+        conn, "x", lambda left, right: [[0.1] * len(right)], session_id=SESSION
+    ) == []

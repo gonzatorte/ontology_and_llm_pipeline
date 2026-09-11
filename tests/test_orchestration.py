@@ -4,6 +4,8 @@ from onto_pipeline import orchestration
 from onto_pipeline.db import connect
 from onto_pipeline.orchestration import BLOCKED, DONE, READY, WAITING
 
+SESSION = "test-1"
+
 
 def store(tmp_path):
     conn = connect(tmp_path)
@@ -15,7 +17,7 @@ def store(tmp_path):
 
 
 def survey(conn, has_provider=True):
-    return orchestration.survey(conn, "v1", has_provider=has_provider)
+    return orchestration.survey(conn, "v1", has_provider=has_provider, session_id=SESSION)
 
 
 def named(plan, name):
@@ -23,19 +25,22 @@ def named(plan, name):
 
 
 def with_document(conn, blocks=1):
-    conn.execute("INSERT INTO documents (id, held_out) VALUES ('d1', 0)")
+    conn.execute(
+        "INSERT INTO documents (id, session_id, held_out) VALUES ('d1', ?, 0)", (SESSION,)
+    )
     for index in range(blocks):
         conn.execute(
-            "INSERT INTO blocks (id, document_id, page, ordinal, block_type, text) "
-            "VALUES (?, 'd1', 1, ?, 'paragraph', 'text')", (f"b{index}", index),
+            "INSERT INTO blocks (id, session_id, document_id, page, ordinal, block_type, text) "
+            "VALUES (?, ?, 'd1', 1, ?, 'paragraph', 'text')",
+            (f"b{index}", SESSION, index),
         )
     conn.commit()
 
 
 def with_mention(conn, mention_id="m1"):
     conn.execute(
-        "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-        "VALUES (?, 'd1', 1, 'focus group', 'extracted')", (mention_id,),
+        "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+        "VALUES (?, ?, 'd1', 1, 'focus group', 'extracted')", (mention_id, SESSION),
     )
     conn.commit()
 
@@ -139,7 +144,7 @@ def test_induction_is_blocked_until_bridging_ran(tmp_path):
 def test_a_store_missing_a_stages_table_reads_as_never_run(tmp_path):
     """The table belongs to the stage; its absence is the stage not having run, not an error."""
     conn = connect(tmp_path)
-    plan = orchestration.survey(conn, "v1", has_provider=True)
+    plan = orchestration.survey(conn, "v1", has_provider=True, session_id=SESSION)
     assert named(plan, "branch").state == BLOCKED
 
 
@@ -172,6 +177,7 @@ def test_the_reader_note_never_becomes_an_argument():
     step = orchestration.Step(
         "extract", "onto-pipeline extract (needs a provider: --env-file)", READY
     )
+
     argv = orchestration.command_line(step, Path("config/x.yaml"))
     assert argv == ["onto-pipeline", "extract", "--config", "config/x.yaml"]
 

@@ -189,18 +189,23 @@ def locate(
     return Located(mentions=mentions, unlocatable=unlocatable, rejected=rejected)
 
 
-def persist(conn: Store, document_id: str, mentions: list[Mention]) -> None:
+def persist(
+    conn: Store, document_id: str, mentions: list[Mention], *, session_id: str
+) -> None:
     """The mention layer is immutable except by extension, so a re-run replaces this
     document's rows rather than accumulating duplicates."""
-    conn.execute("DELETE FROM mentions WHERE document_id = ?", (document_id,))
+    conn.execute(
+        "DELETE FROM mentions WHERE session_id = ? AND document_id = ?",
+        (session_id, document_id),
+    )
     conn.executemany(
-        "INSERT INTO mentions (id, document_id, page, bbox, span_start, span_end, "
+        "INSERT INTO mentions (id, session_id, document_id, page, bbox, span_start, span_end, "
         "surface_text, block_type, language, language_source, coref_group, candidate_entity, "
-        "status) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)",
+        "status) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)",
         [
             (
-                m.id, m.document_id, m.page, m.span_start, m.span_end, m.surface_text,
-                m.block_type, m.language, m.language_source, m.status,
+                m.id, session_id, m.document_id, m.page, m.span_start, m.span_end,
+                m.surface_text, m.block_type, m.language, m.language_source, m.status,
             )
             for m in mentions
         ],
@@ -208,10 +213,11 @@ def persist(conn: Store, document_id: str, mentions: list[Mention]) -> None:
     conn.commit()
 
 
-def load(conn: Store, document_id: str) -> list[dict]:
+def load(conn: Store, document_id: str, *, session_id: str) -> list[dict]:
     return [
         dict(row)
         for row in conn.execute(
-            "SELECT * FROM mentions WHERE document_id = ? ORDER BY span_start", (document_id,)
+            "SELECT * FROM mentions WHERE session_id = ? AND document_id = ? "
+            "ORDER BY span_start", (session_id, document_id),
         )
     ]

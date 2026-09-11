@@ -83,6 +83,9 @@ def category_of(axis_id: str) -> str:
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS branches (
   id             TEXT PRIMARY KEY,
+  -- Sesión propia, aunque cuelgue de una versión: `history` consulta **a través** de versiones
+  -- —"¿qué se decidió antes sobre granularidad?"— así que no hay un `version_id` que la acote.
+  session_id     TEXT NOT NULL,
   version_id     TEXT NOT NULL,    -- the state it branches from
   decision_id    TEXT NOT NULL,    -- branches of one decision are the alternatives to it
   iteration      INTEGER,
@@ -721,7 +724,8 @@ def axes_record(decision: Decision, branch: Branch) -> list[dict]:
 
 
 def persist(
-    conn: Store, version_id: str, decisions: Sequence[Decision], *, iteration: int = 0
+    conn: Store, version_id: str, decisions: Sequence[Decision], *, session_id: str,
+    iteration: int = 0,
 ) -> None:
     install(conn)
     # A decision already settled is not re-opened by proposing again: branch ids are
@@ -730,51 +734,57 @@ def persist(
     # turned down (6.7). Re-deciding is a new version's job, not a re-run's.
     settled = {
         row["decision_id"] for row in conn.execute(
-            "SELECT DISTINCT decision_id FROM branches WHERE version_id = ? AND status != ?",
-            (version_id, PROPOSED),
+            "SELECT DISTINCT decision_id FROM branches "
+            "WHERE session_id = ? AND version_id = ? AND status != ?",
+            (session_id, version_id, PROPOSED),
         )
     }
-    conn.execute("DELETE FROM branches WHERE version_id = ? AND status = ?",
-                 (version_id, PROPOSED))
+    conn.execute(
+        "DELETE FROM branches WHERE session_id = ? AND version_id = ? AND status = ?",
+        (session_id, version_id, PROPOSED),
+    )
     rows = []
     for decision in decisions:
         if decision.id in settled:
             continue
         for branch in decision.branches:
             rows.append((
-                branch.id, version_id, decision.id, iteration,
+                branch.id, session_id, version_id, decision.id, iteration,
                 json.dumps(axes_record(decision, branch), ensure_ascii=False),
                 json.dumps(branch.add_axioms), json.dumps(branch.remove_axioms),
                 json.dumps(asdict(branch.score)), branch.state_hash,
                 json.dumps(branch.cq_delta), PROPOSED, branch.note, _now(),
             ))
     conn.executemany(
-        "INSERT OR REPLACE INTO branches (id, version_id, decision_id, iteration, axes, "
-        "add_axioms, remove_axioms, score, state_hash, cq_delta, status, note, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO branches (id, session_id, version_id, decision_id, iteration, "
+        "axes, add_axioms, remove_axioms, score, state_hash, cq_delta, status, note, "
+        "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
 
 
-def load(conn: Store, version_id: str) -> list[dict]:
+def load(conn: Store, version_id: str, *, session_id: str) -> list[dict]:
     install(conn)
     return [
         dict(row) for row in conn.execute(
-            "SELECT * FROM branches WHERE version_id = ? ORDER BY decision_id, id",
-            (version_id,),
+            "SELECT * FROM branches WHERE session_id = ? AND version_id = ? "
+            "ORDER BY decision_id, id",
+            (session_id, version_id),
         )
     ]
 
 
-def find(conn: Store, branch_id: str) -> dict | None:
+def find(conn: Store, branch_id: str, *, session_id: str) -> dict | None:
     install(conn)
-    row = conn.execute("SELECT * FROM branches WHERE id = ?", (branch_id,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM branches WHERE session_id = ? AND id = ?", (session_id, branch_id)
+    ).fetchone()
     return dict(row) if row else None
 
 
 def settle(
-    conn: Store, branch_id: str, *, note: str = "",
+    conn: Store, branch_id: str, *, session_id: str, note: str = "",
     invalid: Sequence[str] = (), state_hash: str = "",
     normal_forms: dict[str, str] | None = None,
 ) -> dict:
@@ -790,41 +800,49 @@ def settle(
     distinta, y sólo la segunda sirve para descartar de entrada una propuesta parecida.
     """
     install(conn)
-    row = conn.execute("SELECT * FROM branches WHERE id = ?", (branch_id,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM branches WHERE session_id = ? AND id = ?", (session_id, branch_id)
+    ).fetchone()
     if row is None:
         raise KeyError(f"no branch {branch_id!r}")
     invalid = set(invalid)
 
     siblings = [
         dict(other) for other in conn.execute(
-            "SELECT * FROM branches WHERE version_id = ? AND decision_id = ? AND id != ?",
-            (row["version_id"], row["decision_id"], branch_id),
+            "SELECT * FROM branches "
+            "WHERE session_id = ? AND version_id = ? AND decision_id = ? AND id != ?",
+            (session_id, row["version_id"], row["decision_id"], branch_id),
         )
     ]
     for other in siblings:
         conn.execute(
-            "UPDATE branches SET status = ? WHERE id = ?",
-            (INVALID if other["id"] in invalid else NOT_CHOSEN, other["id"]),
+            "UPDATE branches SET status = ? WHERE session_id = ? AND id = ?",
+            (INVALID if other["id"] in invalid else NOT_CHOSEN, session_id, other["id"]),
         )
-    conn.execute("UPDATE branches SET status = ?, note = ? WHERE id = ?",
-                 (CHOSEN, note or row["note"] or "", branch_id))
+    conn.execute(
+        "UPDATE branches SET status = ?, note = ? WHERE session_id = ? AND id = ?",
+        (CHOSEN, note or row["note"] or "", session_id, branch_id),
+    )
 
     normal_forms = normal_forms or {}
     chosen = dict(row) | {
         "status": CHOSEN, "note": note or row["note"] or "",
         "normal_form": normal_forms.get(branch_id, ""),
     }
-    _record(conn, chosen, CHOSEN, state_hash)
+    _record(conn, chosen, CHOSEN, state_hash, session_id=session_id)
     for other in siblings:
         _record(
             conn, other | {"normal_form": normal_forms.get(other["id"], "")},
             INVALID if other["id"] in invalid else NOT_CHOSEN, state_hash,
+            session_id=session_id,
         )
     conn.commit()
     return dict(row)
 
 
-def _record(conn: Store, branch: dict, status: str, state_hash: str) -> None:
+def _record(
+    conn: Store, branch: dict, status: str, state_hash: str, *, session_id: str
+) -> None:
     """Una fila por (rama, eje) en `decisions`, el esquema GRADED-FEEDBACK.
 
     Una fila por eje y no por rama: el historial se consulta por categoría —"¿qué se decidió
@@ -833,11 +851,12 @@ def _record(conn: Store, branch: dict, status: str, state_hash: str) -> None:
     entries = json.loads(branch["axes"]) or [{"axis": "", "option": ""}]
     for entry in entries:
         conn.execute(
-            "INSERT OR REPLACE INTO decisions (id, iteration, branch_id, status, axis, "
-            "comment, normalized_axioms, ontology_state, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO decisions (id, session_id, iteration, branch_id, status, "
+            "axis, comment, normalized_axioms, ontology_state, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 f"{branch['id']}:{entry['axis']}",
+                session_id,
                 branch["iteration"],
                 branch["id"],
                 status,
@@ -850,7 +869,7 @@ def _record(conn: Store, branch: dict, status: str, state_hash: str) -> None:
         )
 
 
-def already_rejected(conn: Store, normal: str) -> dict | None:
+def already_rejected(conn: Store, normal: str, *, session_id: str) -> dict | None:
     """La decisión anterior sobre **esta misma** propuesta, si la hubo.
 
     Compara por forma normal: el mismo compromiso vuelve en otra iteración con IRIs distintos, y
@@ -861,15 +880,15 @@ def already_rejected(conn: Store, normal: str) -> dict | None:
     if not normal:
         return None
     row = conn.execute(
-        "SELECT * FROM decisions WHERE normalized_axioms = ? AND status IN (?, ?) "
-        "ORDER BY (status = ?) DESC, created_at DESC LIMIT 1",
-        (normal, NOT_CHOSEN, INVALID, INVALID),
+        "SELECT * FROM decisions WHERE session_id = ? AND normalized_axioms = ? "
+        "AND status IN (?, ?) ORDER BY (status = ?) DESC, created_at DESC LIMIT 1",
+        (session_id, normal, NOT_CHOSEN, INVALID, INVALID),
     ).fetchone()
     return dict(row) if row else None
 
 
 def precedents_like(
-    conn: Store, normal: str, similarity, *, limit: int = 5,
+    conn: Store, normal: str, similarity, *, session_id: str, limit: int = 5,
     minimum: float = 0.5,
 ) -> list[dict]:
     """Las decisiones anteriores más parecidas a esta propuesta.
@@ -885,7 +904,8 @@ def precedents_like(
     install(conn)
     rows = [
         dict(row) for row in conn.execute(
-            "SELECT * FROM decisions WHERE normalized_axioms != '' ORDER BY created_at DESC"
+            "SELECT * FROM decisions WHERE session_id = ? AND normalized_axioms != '' "
+            "ORDER BY created_at DESC", (session_id,),
         )
     ]
     if not rows or not normal:
@@ -899,7 +919,7 @@ def precedents_like(
 
 
 def precedents(
-    conn: Store, category: str, *, limit: int = 5
+    conn: Store, category: str, *, session_id: str, limit: int = 5
 ) -> list[dict]:
     """Las decisiones anteriores sobre esta categoría, la más reciente primero.
 
@@ -911,14 +931,14 @@ def precedents(
     install(conn)
     return [
         dict(row) for row in conn.execute(
-            "SELECT * FROM decisions WHERE axis = ? ORDER BY created_at DESC, rowid DESC "
-            "LIMIT ?",
-            (category, limit),
+            "SELECT * FROM decisions WHERE session_id = ? AND axis = ? "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (session_id, category, limit),
         )
     ]
 
 
-def history(conn: Store) -> dict[tuple[str, str], int]:
+def history(conn: Store, *, session_id: str) -> dict[tuple[str, str], int]:
     """How often each (axis, option) was chosen before, minus how often it was rejected.
 
     Feeds `historical_affinity`, and is empty by construction in the first iteration — the
@@ -928,8 +948,9 @@ def history(conn: Store) -> dict[tuple[str, str], int]:
     tally: dict[tuple[str, str], int] = {}
     weights = {CHOSEN: 1, NOT_CHOSEN: -1, INVALID: -2}
     for row in conn.execute(
-        f"SELECT axes, status FROM branches WHERE status IN ({','.join('?' * len(SETTLED))})",
-        SETTLED,
+        "SELECT axes, status FROM branches "
+        f"WHERE session_id = ? AND status IN ({','.join('?' * len(SETTLED))})",
+        (session_id, *SETTLED),
     ):
         # `invalid` pesa el doble que `rejected`: una es "elegí otra" y la otra "esto no puede
         # ser", y son las dos cosas que GRADED-FEEDBACK separa.

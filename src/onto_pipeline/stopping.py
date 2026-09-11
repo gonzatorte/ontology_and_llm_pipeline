@@ -97,17 +97,19 @@ def install(conn: Store) -> None:
     typing_store.install(conn)
 
 
-def pass_rate_history(conn: Store) -> list[float]:
+def pass_rate_history(conn: Store, *, session_id: str) -> list[float]:
     """Fraction of competency questions answered, one entry per iteration, oldest first."""
     install(conn)
     rows = conn.execute(
-        "SELECT iteration, AVG(passed) AS rate FROM cq_results GROUP BY iteration "
-        "ORDER BY iteration"
+        "SELECT iteration, AVG(passed) AS rate FROM cq_results WHERE session_id = ? "
+        "GROUP BY iteration ORDER BY iteration", (session_id,),
     ).fetchall()
     return [float(row["rate"]) for row in rows]
 
 
-def concepts_by_document(conn: Store, version_id: str) -> dict[str, set[str]]:
+def concepts_by_document(
+    conn: Store, version_id: str, *, session_id: str
+) -> dict[str, set[str]]:
     """What concepts each document turned out to be about.
 
     A concept is a class one of its mentions was typed to, or an induced proposal one of its
@@ -119,25 +121,25 @@ def concepts_by_document(conn: Store, version_id: str) -> dict[str, set[str]]:
     found: dict[str, set[str]] = {}
     for row in conn.execute(
         "SELECT m.document_id AS document_id, t.iri AS concept FROM mention_typing t "
-        "JOIN mentions m ON m.id = t.mention_id "
+        "JOIN mentions m ON m.id = t.mention_id AND m.session_id = ? "
         "WHERE t.version_id = ? AND t.iri IS NOT NULL",
-        (version_id,),
+        (session_id, version_id),
     ):
         found.setdefault(row["document_id"], set()).add(row["concept"])
 
     for row in conn.execute(
         "SELECT m.document_id AS document_id, p.proposed_id AS concept "
         "FROM proposed_class_mentions p "
-        "JOIN mentions m ON m.id = p.mention_id "
+        "JOIN mentions m ON m.id = p.mention_id AND m.session_id = ? "
         "JOIN proposed_classes c ON c.id = p.proposed_id "
         "WHERE c.version_id = ?",
-        (version_id,),
+        (session_id, version_id),
     ):
         found.setdefault(row["document_id"], set()).add("induced:" + row["concept"])
     return found
 
 
-def processing_order(conn: Store) -> list[str]:
+def processing_order(conn: Store, *, session_id: str) -> list[str]:
     """Documents in the order they entered the process, which is insertion order.
 
     The curve is a function of that order and of nothing else, so it has to be the real one:
@@ -145,7 +147,8 @@ def processing_order(conn: Store) -> list[str]:
     """
     return [
         row["id"] for row in conn.execute(
-            "SELECT id FROM documents WHERE held_out = 0 ORDER BY rowid"
+            "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 ORDER BY rowid",
+            (session_id,),
         )
     ]
 
@@ -181,6 +184,7 @@ def assess(
     conn: Store,
     version_id: str,
     *,
+    session_id: str,
     target_pass_rate: float,
     novelty_window: int,
     novelty_threshold: float,
@@ -189,8 +193,11 @@ def assess(
 ) -> Assessment:
     from .cq import should_stop
 
-    history = pass_rate_history(conn)
-    curve = accumulation(processing_order(conn), concepts_by_document(conn, version_id))
+    history = pass_rate_history(conn, session_id=session_id)
+    curve = accumulation(
+        processing_order(conn, session_id=session_id),
+        concepts_by_document(conn, version_id, session_id=session_id),
+    )
     slope = tail_slope(curve, novelty_window)
 
     criteria = [_competency(history, target_pass_rate, should_stop)]

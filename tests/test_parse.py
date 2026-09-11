@@ -6,6 +6,8 @@ from onto_pipeline.db import connect
 from onto_pipeline.ingest import ingest, markdown_path
 from onto_pipeline.parse import PARAGRAPH, parse_document
 
+SESSION = "test-1"
+
 
 def test_spans_index_the_markdown_exactly(two_column_pdf, config):
     """The central provenance guarantee: mention offsets (SCHEMAS-MENTIONS) are anchored on these
@@ -47,7 +49,7 @@ def test_heading_is_detected_by_relative_font_size(two_column_pdf, config):
 
 def test_ingest_persists_blocks_pages_and_markdown(two_column_pdf, config):
     conn = connect(config.paths.work_dir)
-    result = ingest(config, conn, [two_column_pdf])
+    result = ingest(config, conn, [two_column_pdf], session_id=SESSION)
 
     doc_id = next(iter(result.outputs))
     assert result.executed == 1
@@ -60,16 +62,16 @@ def test_ingest_persists_blocks_pages_and_markdown(two_column_pdf, config):
 
 def test_reingesting_an_unchanged_document_is_a_cache_hit(two_column_pdf, config):
     conn = connect(config.paths.work_dir)
-    ingest(config, conn, [two_column_pdf])
-    again = ingest(config, conn, [two_column_pdf])
+    ingest(config, conn, [two_column_pdf], session_id=SESSION)
+    again = ingest(config, conn, [two_column_pdf], session_id=SESSION)
     assert again.cached == 1 and again.executed == 0
 
 
 def test_changing_a_threshold_invalidates_the_cache(two_column_pdf, config):
     conn = connect(config.paths.work_dir)
-    ingest(config, conn, [two_column_pdf])
+    ingest(config, conn, [two_column_pdf], session_id=SESSION)
     config.classification.min_visible_chars = 250
-    again = ingest(config, conn, [two_column_pdf])
+    again = ingest(config, conn, [two_column_pdf], session_id=SESSION)
     assert again.executed == 1
 
 

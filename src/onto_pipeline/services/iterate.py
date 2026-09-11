@@ -50,15 +50,15 @@ from .workspace import Progress, StageError, Workspace, silent, table_exists
 # ─────────────────────────────  lecturas compartidas  ─────────────────────────────
 
 
-def orphans(conn: Store, version_id: str) -> list[dict]:
+def orphans(conn: Store, version_id: str, *, session_id: str) -> list[dict]:
     """Las menciones que ninguna clase tipó contra esta versión."""
     return [
         dict(row)
         for row in conn.execute(
             "SELECT m.id, m.surface_text, t.runner_up, t.score FROM mention_typing t "
-            "JOIN mentions m ON m.id = t.mention_id "
+            "JOIN mentions m ON m.id = t.mention_id AND m.session_id = ? "
             "WHERE t.version_id = ? AND t.iri IS NULL ORDER BY m.id",
-            (version_id,),
+            (session_id, version_id),
         )
     ]
 
@@ -73,11 +73,12 @@ def label_similarity(matcher, left, right) -> list[list[float]]:
 
 
 def _documents(workspace: Workspace, doc_id: str | None, include_held_out: bool) -> list[str]:
+    session = workspace.require_session()
     if doc_id:
         return [doc_id]
-    ids = process_documents(workspace.conn)
+    ids = process_documents(workspace.conn, session_id=session)
     if include_held_out:
-        ids += held_out_documents(workspace.conn)
+        ids += held_out_documents(workspace.conn, session_id=session)
     return ids
 
 
@@ -119,6 +120,7 @@ def extract(
     Los documentos retenidos se saltean salvo que se los pida: son el conjunto de retención, y
     correr el proceso sobre ellos mediría al pipeline contra su propia entrada.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     model = workspace.model()
     stage = llm.settings(config.llm, extraction.STAGE)
@@ -127,14 +129,14 @@ def extract(
     if doc_id:
         ids, skipped = [doc_id], []
     else:
-        candidates = process_documents(conn)
+        candidates = process_documents(conn, session_id=session)
         if include_held_out:
-            candidates += held_out_documents(conn)
+            candidates += held_out_documents(conn, session_id=session)
         ids, skipped = select_for_reload(
             conn, candidates,
             strategy=config.iteration.reload,
             sample=config.iteration.reload_sample,
-            seed=config.iteration.reload_seed,
+            seed=config.iteration.reload_seed, session_id=session,
         )
     if not ids:
         raise StageError(
@@ -145,7 +147,8 @@ def extract(
 
     reported: list[DocumentExtraction] = []
     for identifier in ids:
-        blocks = {block.id: block for block in load_block_objects(conn, identifier)}
+        blocks = {block.id: block for block in load_block_objects(conn, identifier,
+            session_id=session)}
         document_chunks = chunk_document(
             list(blocks.values()), config.chunking.target_chars, config.chunking.max_chars
         )
@@ -171,7 +174,7 @@ def extract(
             mentions.extend(located.mentions)
             unlocatable += len(located.unlocatable)
             rejected += len(located.rejected)
-        extraction.persist(conn, identifier, mentions)
+        extraction.persist(conn, identifier, mentions, session_id=session)
 
         reported.append(DocumentExtraction(
             document_id=identifier, chunks=len(document_chunks), mentions=len(mentions),
@@ -215,6 +218,7 @@ def corefer(
     revisar: un marcador que no existe o que se reclama dos veces se rechaza en vez de enlazar
     en silencio las menciones equivocadas.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     model = workspace.model()
     stage = llm.settings(config.llm, coreference.STAGE)
@@ -222,7 +226,7 @@ def corefer(
 
     reported: list[DocumentCoreference] = []
     for identifier in _documents(workspace, doc_id, include_held_out):
-        mentions = extraction.load(conn, identifier)
+        mentions = extraction.load(conn, identifier, session_id=session)
         if not mentions:
             continue
         marked = coreference.mark(
@@ -236,7 +240,7 @@ def corefer(
         )
 
         grouping = coreference.resolve(marked, result.outputs.get(identifier, []))
-        coreference.persist(conn, grouping.assignments)
+        coreference.persist(conn, grouping.assignments, session_id=session)
         reported.append(DocumentCoreference(
             document_id=identifier, mentions=len(mentions), groups=len(grouping.groups),
             linked=len(grouping.assignments),
@@ -275,6 +279,7 @@ def match(
     Es el cuello de botella de calidad del pipeline. Los umbrales que lee están calibrados
     contra `craft-cl` y no contra este par: tratá los números como una primera mirada.
     """
+    session = workspace.require_session()
     from ..embeddings import CrossEncoderReranker, EncoderUnavailable, SentenceTransformerEncoder
     from ..matching import ASK, Matcher
 
@@ -290,7 +295,7 @@ def match(
     rows = [
         mention
         for identifier in _documents(workspace, None, include_held_out)
-        for mention in extraction.load(conn, identifier)
+        for mention in extraction.load(conn, identifier, session_id=session)
     ]
     if not rows:
         raise StageError("no mentions; run extract first")
@@ -323,7 +328,7 @@ def match(
 
     progress(f"{len(mentions)} mentions against {len(targets)} classes")
     typings = matcher.type_mentions(mentions, targets)
-    split = typing_store.persist_typings(conn, version_id, typings)
+    split = typing_store.persist_typings(conn, version_id, typings, session_id=session)
     inferred_class = {item.mention_id: item.iri for item in typings if item.iri}
     decisions = matcher.resolve(
         mentions, synonyms=synonyms, keys=keys, inferred_class=inferred_class
@@ -335,7 +340,7 @@ def match(
         for decision in decisions if decision.action == ASK
         for mention_id in (decision.left, decision.right)
     }
-    typing_store.persist_entities(conn, entities, unresolved)
+    typing_store.persist_entities(conn, entities, unresolved, session_id=session)
 
     return Matching(
         version_id=version_id, total=split.total, typed=split.typed, grey=split.grey,
@@ -376,9 +381,10 @@ def grey_pending(
     La política conservadora no los tipa, y nada río abajo los trata como tipados. Esperan acá
     en vez de decidirse por un umbral, que es el motivo entero de que la zona exista.
     """
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     labels = versioning.label_index(workspace.graph(version_id))
-    rows = typing_store.pending(workspace.conn, version_id, limit or 0)
+    rows = typing_store.pending(workspace.conn, version_id, limit or 0, session_id=session)
     return GreyQueue(
         version_id=version_id,
         pairs=[
@@ -413,6 +419,7 @@ def grey_answer(
     sobreviven al próximo `match` — preguntar lo mismo en cada corrida es como se entrena a
     alguien a dejar de contestar.
     """
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     row = workspace.conn.execute(
         "SELECT iri, score FROM mention_typing WHERE mention_id = ? AND version_id = ?",
@@ -425,7 +432,12 @@ def grey_answer(
 
     chosen = None if none_of_these else to
     typing_store.answer(
-        workspace.conn, mention_id, chosen, offered=row["iri"], score=row["score"], why=comment
+        workspace.conn, mention_id, chosen, offered=row["iri"], score=row["score"],
+        why=comment, session_id=session,
+    )
+    workspace.note(
+        "decision", f"zona gris: {mention_id} → {chosen or 'ninguna'}",
+        {"mention": mention_id, "iri": chosen},
     )
     return chosen
 
@@ -436,11 +448,13 @@ def grey_labels(workspace: Workspace) -> list[dict]:
     Nadie las anota a propósito: son un subproducto de alguien haciendo su trabajo, y son la
     única señal de entrenamiento que este diseño produce para ajustar el re-ranker.
     """
-    return typing_store.labels(workspace.conn)
+    session = workspace.require_session()
+    return typing_store.labels(workspace.conn, session_id=session)
 
 
 def grey_export(workspace: Workspace, path: Path) -> int:
-    rows = typing_store.labels(workspace.conn)
+    session = workspace.require_session()
+    rows = typing_store.labels(workspace.conn, session_id=session)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8"
@@ -481,10 +495,11 @@ def bridge(
     que no se le ofreció es una respuesta rechazada, no un puente.
     """
     config, conn = workspace.config, workspace.conn
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
 
-    found = orphans(conn, version_id)
+    found = orphans(conn, version_id, session_id=session)
     if not found:
         raise StageError(f"no orphan mentions against {version_id}; run match first")
 
@@ -565,10 +580,11 @@ def induce(
     subsunción asertada.
     """
     config, conn = workspace.config, workspace.conn
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
 
-    found = orphans(conn, version_id)
+    found = orphans(conn, version_id, session_id=session)
     if not found:
         raise StageError(f"no orphan mentions against {version_id}; run match first")
 
@@ -868,6 +884,7 @@ def apply_axioms(
     la forma y el spec deja pasarlas explícitamente; el rechazo del razonador y el de OntoClean
     no se pasan por arriba de ninguna manera.
     """
+    session = workspace.require_session()
     conn = workspace.conn
     candidate = axiomatization.apply(graph, axioms)
     progress("validating the candidate ontology")
@@ -886,7 +903,7 @@ def apply_axioms(
         result.refused = STRUCTURE
         return result
 
-    seen = versioning.find_by_hash(conn, versioning.state_hash(candidate))
+    seen = versioning.find_by_hash(conn, versioning.state_hash(candidate), session_id=session)
     if seen is not None:
         # Volver a un estado que ya está en el DAG está permitido, pero explícitamente: si se
         # commiteara igual, el DAG diría que la iteración avanzó cuando no avanzó.
@@ -894,12 +911,16 @@ def apply_axioms(
         result.loop_version = seen
         return result
 
-    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    next_id = workspace.next_version_id()
     result.committed = versioning.commit(
         conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
-        branch_id=branch_id, note=note,
+        branch_id=branch_id, note=note, session_id=session,
     )
     result.diff = publish_diff(workspace, result.committed.id)
+    workspace.note(
+        "stage", f"versión {result.committed.id}: {note}",
+        {"version": result.committed.id, "axioms": len(axioms)},
+    )
     return result
 
 
@@ -932,6 +953,7 @@ def axiomatize(
     Al modelo se le hace una pregunta atómica por propuesta —un tipo de, un ejemplo de, o
     ninguna— y el código escribe el OWL.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
@@ -961,7 +983,9 @@ def axiomatize(
     shapes: dict[str, str] = {}
     matcher = workspace.matcher()
     has_history = bool(
-        conn.execute("SELECT 1 FROM decisions LIMIT 1").fetchone()
+        conn.execute(
+            "SELECT 1 FROM decisions WHERE session_id = ? LIMIT 1", (session,)
+        ).fetchone()
         if table_exists(conn, "decisions") else None
     )
     for proposal in proposals:
@@ -976,8 +1000,9 @@ def axiomatize(
             row["surface_text"]
             for row in conn.execute(
                 "SELECT DISTINCT m.surface_text FROM proposed_class_mentions p "
-                "JOIN mentions m ON m.id = p.mention_id WHERE p.proposed_id = ? LIMIT 12",
-                (proposal["id"],),
+                "JOIN mentions m ON m.id = p.mention_id AND m.session_id = ? "
+                "WHERE p.proposed_id = ? LIMIT 12",
+                (session, proposal["id"]),
             )
         ]
         # Lo que se decidió antes sobre una propuesta de esta forma. Requiere la forma normal,
@@ -995,7 +1020,7 @@ def axiomatize(
         shapes[proposal["id"]] = shape
         precedents = branching.precedents_like(
             conn, shape, lambda left, right: label_similarity(matcher, left, right)
-        ) if has_history else []
+        , session_id=session) if has_history else []
         payloads.append(
             (proposal["id"], axiomatization.payload(proposal, candidates, phrases, precedents))
         )
@@ -1026,7 +1051,7 @@ def axiomatize(
     repeats = {
         proposal_id: previous
         for proposal_id, shape in shapes.items()
-        if (previous := branching.already_rejected(conn, shape))
+        if (previous := branching.already_rejected(conn, shape, session_id=session))
     }
 
     tally: dict[str, int] = {}
@@ -1081,6 +1106,7 @@ def survey_branches(
 
     Lo habitual es que no haya eje, y entonces se aplica todo y se dice que fue así.
     """
+    session = workspace.require_session()
     from ..reasoning import ReasonerUnavailable
 
     config, conn = workspace.config, workspace.conn
@@ -1137,7 +1163,7 @@ def survey_branches(
     support = {axiom.id: axiom.support for axiom in axioms}
     orphan_total = len({mention for axiom in axioms for mention in axiom.support})
     entities = len({axiom.subject_iri for axiom in axioms})
-    tally = branching.history(conn)
+    tally = branching.history(conn, session_id=session)
     for decision in plan.decisions:
         for candidate in decision.branches:
             candidate.score = branching.score(
@@ -1146,7 +1172,7 @@ def survey_branches(
             )
             kept = [by_id[axiom_id] for axiom_id in candidate.add_axioms]
             candidate.state_hash = versioning.state_hash(axiomatization.apply(graph, kept))
-            seen = versioning.find_by_hash(conn, candidate.state_hash)
+            seen = versioning.find_by_hash(conn, candidate.state_hash, session_id=session)
             if seen is not None:
                 candidate.note = f"returns to {seen.id}"
         decision.branches = branching.rank(
@@ -1182,6 +1208,7 @@ def choose_branch(
     registrada para un estado que nunca se aplicó diría que el usuario eligió algo que la
     ontología nunca contuvo.
     """
+    session = workspace.require_session()
     conn = workspace.conn
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
@@ -1218,7 +1245,7 @@ def choose_branch(
                 [by_id[a] for a in json.loads(other["add_axioms"]) if a in by_id], labels
             )
             for other in branching.load(conn, version_id)
-        },
+        }, session_id=session,
     )
     choice.settled = True
     return choice
@@ -1299,6 +1326,7 @@ def enrich(
     mención de un documento contribuyente contra esa clase no es evidencia independiente de
     cobertura; `circular` es lo que las hace contables.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
@@ -1360,10 +1388,11 @@ def enrich(
     enriched = enrichment.apply(graph, changed)
     # Sólo anotación, así que el estado lógico es el del padre: re-glosar no es un estado nuevo
     # para razonar (`ITER-APPLY`), y la glosa igual queda versionada y viaja en el DAG.
-    next_id = f"v{conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    next_id = workspace.next_version_id()
     report.committed = versioning.commit(
         conn, enriched, version_id=next_id, parent_id=version_id, iteration=1,
         note=f"glosses enriched from the corpus ({len(changed)} classes; same logical state)",
+            session_id=session,
     )
     report.diff = publish_diff(workspace, report.committed.id)
     row = conn.execute(
@@ -1393,6 +1422,7 @@ def circular(workspace: Workspace, *, version: str | None = None) -> Circularity
     de cobertura: la clase se describió usando ese documento, así que el match es en parte el
     pipeline reconociendo su propia escritura.
     """
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
     typed = workspace.conn.execute(
@@ -1401,7 +1431,7 @@ def circular(workspace: Workspace, *, version: str | None = None) -> Circularity
     ).fetchone()["n"]
     return Circularity(
         version_id=version_id,
-        flagged=enrichment.circular_matches(workspace.conn, version_id),
+        flagged=enrichment.circular_matches(workspace.conn, version_id, session_id=session),
         typed=typed, labels=versioning.label_index(graph),
     )
 
@@ -1511,13 +1541,14 @@ def survey_conflicts(workspace: Workspace, *, version: str | None = None) -> Con
     notariza sin preguntar, porque decidir caso por caso es la revisión manual que esto existe
     para evitar. Sólo los que hacen incompatible a una clase llegan a `review`, y serán pocos.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
     labels = versioning.label_index(graph)
 
     rules = mapping.rules_from_config(config.mapping, config.seed.base_iri)
-    rows, typings = mapping.load_inputs(conn, version_id)
+    rows, typings = mapping.load_inputs(conn, version_id, session_id=session)
     if not rows:
         raise StageError("no mentions; run extract first")
 
@@ -1584,15 +1615,18 @@ def mark(
     `misextracted`: el documento nunca lo dijo y el extractor leyó mal. Eso es un bug de
     `ITER-EXTRACT`, también sale del ABox, y va al conjunto de evaluación.
     """
+    session = workspace.require_session()
     try:
-        return conflicts.mark(workspace.conn, mentions, how, comment)
+        return conflicts.mark(workspace.conn, mentions, how, comment, session_id=session)
     except ValueError as exc:
         raise StageError(str(exc)) from exc
 
 
 def export_misextractions(workspace: Workspace, path: Path) -> Path:
+    session = workspace.require_session()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(conflicts.export_misextractions(workspace.conn) + "\n", encoding="utf-8")
+    path.write_text(conflicts.export_misextractions(workspace.conn,
+        session_id=session) + "\n", encoding="utf-8")
     return path
 
 
@@ -1672,6 +1706,7 @@ def declare_functional(
     funda dos entidades distintas — y no levanta ninguna inconsistencia al hacerlo. Esto
     muestra exactamente qué individuos se fundirían antes de commitear nada.
     """
+    session = workspace.require_session()
     version_id = workspace.resolve_version(version)
     graph = workspace.graph(version_id)
     abox = _abox(workspace, version_id)
@@ -1697,12 +1732,16 @@ def declare_functional(
     if not commit:
         return result
 
-    next_id = f"v{workspace.conn.execute('SELECT COUNT(*) FROM versions').fetchone()[0]}"
+    next_id = workspace.next_version_id()
     result.committed = versioning.commit(
         workspace.conn, candidate, version_id=next_id, parent_id=version_id, iteration=1,
-        note=f"{result.name} declared functional (user decision, ITER-APPLY)",
+        note=f"{result.name} declared functional (user decision, ITER-APPLY)", session_id=session,
     )
     result.diff = publish_diff(workspace, result.committed.id)
+    workspace.note(
+        "decision", f"{result.name} declarada funcional",
+        {"version": result.committed.id, "property": property_iri},
+    )
     return result
 
 
@@ -1745,14 +1784,15 @@ def regenerate(
     de nuevo. Puro y de sólo lectura sobre la capa de menciones, que es el invariante que esta
     etapa podría romper sin querer.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     version_id = workspace.resolve_version(version)
     # Las marcas de falsedad viajan como excepciones por caso, así que una refutación llega al
     # hash de las reglas.
     rules = mapping.rules_from_config(config.mapping, config.seed.base_iri).with_exceptions(
-        conflicts.as_exceptions(conn)
+        conflicts.as_exceptions(conn, session_id=session)
     )
-    rows, typings = mapping.load_inputs(conn, version_id)
+    rows, typings = mapping.load_inputs(conn, version_id, session_id=session)
     if not rows:
         raise StageError("no mentions; run extract first")
 

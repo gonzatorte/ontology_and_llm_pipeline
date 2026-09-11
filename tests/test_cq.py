@@ -8,6 +8,8 @@ from rdflib import Graph
 from onto_pipeline import cq
 from onto_pipeline.db import connect
 
+SESSION = "test-1"
+
 ONTOLOGY = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -82,9 +84,9 @@ def test_a_query_that_blows_up_at_run_time_is_an_error_not_a_failure():
 
 
 def test_results_are_recorded_per_iteration(conn, graph):
-    cq.add(conn, [question("cq1", ANSWERED), question("cq2", UNANSWERED)])
-    stored = cq.load(conn)
-    cq.record(conn, cq.evaluate(graph, stored, iteration=3))
+    cq.add(conn, [question("cq1", ANSWERED), question("cq2", UNANSWERED)], session_id=SESSION)
+    stored = cq.load(conn, session_id=SESSION)
+    cq.record(conn, cq.evaluate(graph, stored, iteration=3), session_id=SESSION)
     rows = dict(conn.execute("SELECT cq_id, passed FROM cq_results WHERE iteration = 3"))
     assert rows == {"cq1": 1, "cq2": 0}
 
@@ -111,6 +113,7 @@ def test_questions_are_imported_from_the_users_file(conn, tmp_path):
         ]),
         encoding="utf-8",
     )
-    assert cq.add(conn, cq.read_file(path)) == 1
-    stored = cq.load(conn)
+
+    assert cq.add(conn, cq.read_file(path), session_id=SESSION) == 1
+    stored = cq.load(conn, session_id=SESSION)
     assert (stored[0].origin, stored[0].cq_type) == (cq.USER, "definitional")

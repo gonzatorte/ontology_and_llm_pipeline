@@ -41,12 +41,14 @@ CREATE INDEX IF NOT EXISTS idx_typing_version ON mention_typing(version_id, zone
 -- twice. They are also, unglamorously, the accept/reject labels ITER-TUNE wants for tuning the
 -- re-ranker: the only source of them this design ever has.
 CREATE TABLE IF NOT EXISTS grey_decisions (
-  mention_id  TEXT PRIMARY KEY,
+  mention_id  TEXT NOT NULL,
+  session_id  TEXT NOT NULL,
   iri         TEXT,             -- NULL means "none of these": the mention is an orphan
   offered     TEXT,             -- what the matcher had proposed, for the training set
   score       REAL,
   why         TEXT,
-  created_at  TEXT
+  created_at  TEXT,
+  PRIMARY KEY (session_id, mention_id)
 );
 """
 
@@ -121,7 +123,9 @@ def mentions_from(rows: list[dict]) -> list[Mention]:
     ]
 
 
-def persist_typings(conn: Store, version_id: str, typings) -> OrphanSplit:
+def persist_typings(
+    conn: Store, version_id: str, typings, *, session_id: str
+) -> OrphanSplit:
     """Store one run's typings, with the grey-zone answers already applied.
 
     Applied here rather than left to a consumer: a decision the user made has to survive the
@@ -129,7 +133,7 @@ def persist_typings(conn: Store, version_id: str, typings) -> OrphanSplit:
     system trains someone to stop answering.
     """
     install(conn)
-    answers = decisions(conn)
+    answers = decisions(conn, session_id=session_id)
     split = OrphanSplit()
     rows = []
     for typing in typings:
@@ -156,29 +160,31 @@ def persist_typings(conn: Store, version_id: str, typings) -> OrphanSplit:
 
 
 def answer(
-    conn: Store, mention_id: str, iri: str | None, *,
+    conn: Store, mention_id: str, iri: str | None, *, session_id: str,
     offered: str | None = None, score: float | None = None, why: str = "",
 ) -> None:
     """Record one grey-zone answer. `iri=None` is "none of these", which is a real answer."""
     install(conn)
     conn.execute(
-        "INSERT OR REPLACE INTO grey_decisions (mention_id, iri, offered, score, why, "
-        "created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (mention_id, iri, offered, score, why,
+        "INSERT OR REPLACE INTO grey_decisions (mention_id, session_id, iri, offered, score, "
+        "why, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (mention_id, session_id, iri, offered, score, why,
          datetime.now(timezone.utc).isoformat(timespec="seconds")),
     )
     conn.commit()
 
 
-def decisions(conn: Store) -> dict[str, str | None]:
+def decisions(conn: Store, *, session_id: str) -> dict[str, str | None]:
     install(conn)
     return {
         row["mention_id"]: row["iri"]
-        for row in conn.execute("SELECT mention_id, iri FROM grey_decisions")
+        for row in conn.execute(
+            "SELECT mention_id, iri FROM grey_decisions WHERE session_id = ?", (session_id,)
+        )
     }
 
 
-def labels(conn: Store) -> list[dict]:
+def labels(conn: Store, *, session_id: str) -> list[dict]:
     """The accept/reject labels, as the re-ranker would need them (ITER-TUNE).
 
     A row per answer: the mention's text, the class that was offered, its score, and whether
@@ -190,25 +196,28 @@ def labels(conn: Store) -> list[dict]:
         dict(row) | {"accepted": bool(row["iri"] and row["iri"] == row["offered"])}
         for row in conn.execute(
             "SELECT g.mention_id, m.surface_text, m.document_id, g.offered, g.iri, g.score, "
-            "g.why FROM grey_decisions g JOIN mentions m ON m.id = g.mention_id "
-            "ORDER BY g.created_at"
+            "g.why FROM grey_decisions g "
+            "JOIN mentions m ON m.id = g.mention_id AND m.session_id = g.session_id "
+            "WHERE g.session_id = ? ORDER BY g.created_at", (session_id,),
         )
     ]
 
 
-def pending(conn: Store, version_id: str, limit: int = 0) -> list[dict]:
+def pending(conn: Store, version_id: str, limit: int = 0, *, session_id: str) -> list[dict]:
     """Grey-zone typings nobody has answered yet, best score first."""
     install(conn)
     query = (
         "SELECT t.mention_id, t.iri, t.score, t.runner_up, m.surface_text, m.document_id, "
-        "m.page FROM mention_typing t JOIN mentions m ON m.id = t.mention_id "
+        "m.page FROM mention_typing t "
+        "JOIN mentions m ON m.id = t.mention_id AND m.session_id = ? "
         "LEFT JOIN grey_decisions g ON g.mention_id = t.mention_id "
+        "AND g.session_id = m.session_id "
         "WHERE t.version_id = ? AND t.zone = ? AND g.mention_id IS NULL "
         "ORDER BY t.score DESC"
     )
     if limit:
         query += f" LIMIT {int(limit)}"
-    return [dict(row) for row in conn.execute(query, (version_id, GREY))]
+    return [dict(row) for row in conn.execute(query, (session_id, version_id, GREY))]
 
 
 def entities_from(decisions: list[Decision]) -> dict[str, str]:
@@ -235,17 +244,17 @@ def entities_from(decisions: list[Decision]) -> dict[str, str]:
 
 
 def persist_entities(
-    conn: Store, entities: dict[str, str], unresolved: set[str]
+    conn: Store, entities: dict[str, str], unresolved: set[str], *, session_id: str
 ) -> None:
     conn.executemany(
-        "UPDATE mentions SET candidate_entity = ? WHERE id = ?",
-        [(entity, mention_id) for mention_id, entity in entities.items()],
+        "UPDATE mentions SET candidate_entity = ? WHERE session_id = ? AND id = ?",
+        [(entity, session_id, mention_id) for mention_id, entity in entities.items()],
     )
     # The conservative policy leaves duplicates behind, and a duplicate whose two halves each
     # carry one value looks like confirmation of functionality (6.8). The state is what keeps
     # them out of that count.
     conn.executemany(
-        "UPDATE mentions SET status = ? WHERE id = ?",
-        [(POSSIBLE_DUPLICATE, mention_id) for mention_id in sorted(unresolved)],
+        "UPDATE mentions SET status = ? WHERE session_id = ? AND id = ?",
+        [(POSSIBLE_DUPLICATE, session_id, mention_id) for mention_id in sorted(unresolved)],
     )
     conn.commit()

@@ -8,6 +8,8 @@ from onto_pipeline import enrichment as en
 from onto_pipeline.db import connect
 from onto_pipeline.enrichment import Enrichment, Passage
 
+SESSION = "test-1"
+
 IRI = "c:FocusGroup"
 
 
@@ -175,8 +177,9 @@ def test_every_annotation_it_writes_is_declared_by_the_seed():
 
 def typed(conn, mention_id, iri, document_id, version="v1"):
     conn.execute(
-        "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-        "VALUES (?, ?, 1, ?, 'typed')", (mention_id, document_id, "focus group"),
+        "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+        "VALUES (?, ?, ?, 1, ?, 'typed')",
+        (mention_id, SESSION, document_id, "focus group"),
     )
     conn.execute(
         "INSERT INTO mention_typing (mention_id, version_id, iri, score, zone) "
@@ -196,7 +199,7 @@ def test_a_match_against_a_document_that_wrote_the_gloss_is_flagged(tmp_path):
     typed(conn, "m1", IRI, "d1")
     typed(conn, "m2", IRI, "d2")
 
-    flagged = en.circular_matches(conn, "v1")
+    flagged = en.circular_matches(conn, "v1", session_id=SESSION)
     assert [row["mention_id"] for row in flagged] == ["m1"]
 
 
@@ -209,7 +212,7 @@ def test_a_contribution_from_an_earlier_version_still_counts(tmp_path):
     typing_store.install(conn)
     en.persist(conn, "v1", [Enrichment(IRI, alt_labels=["group interview"], documents=["d1"])])
     typed(conn, "m1", IRI, "d1", version="v4")
-    assert len(en.circular_matches(conn, "v4")) == 1
+    assert len(en.circular_matches(conn, "v4", session_id=SESSION)) == 1
 
 
 def test_a_class_the_corpus_did_not_improve_contributes_nothing(tmp_path):

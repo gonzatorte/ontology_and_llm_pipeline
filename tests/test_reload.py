@@ -5,16 +5,19 @@ import pytest
 from onto_pipeline.db import connect
 from onto_pipeline.ingest import select_for_reload
 
+SESSION = "test-1"
+
 
 @pytest.fixture
 def conn(tmp_path):
     conn = connect(tmp_path)
     # d1..d4 already processed; d5 and d6 never were
     conn.executemany(
-        "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-        "VALUES (?, ?, 1, 'x', 'active')",
-        [(f"m{i}", f"d{i}") for i in range(1, 5)],
+        "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+        "VALUES (?, ?, ?, 1, 'x', 'active')",
+        [(f"m{i}", SESSION, f"d{i}") for i in range(1, 5)],
     )
+
     conn.commit()
     return conn
 
@@ -23,7 +26,8 @@ ALL = [f"d{i}" for i in range(1, 7)]
 
 
 def select(conn, strategy, sample=0.5, seed=0):
-    return select_for_reload(conn, ALL, strategy=strategy, sample=sample, seed=seed)
+    return select_for_reload(conn, ALL, strategy=strategy, sample=sample, seed=seed,
+        session_id=SESSION)
 
 
 def test_a_document_never_processed_is_always_processed(conn):

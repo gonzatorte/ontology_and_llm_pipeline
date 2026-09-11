@@ -4,6 +4,8 @@ from onto_pipeline import stopping
 from onto_pipeline.db import connect
 from onto_pipeline.stopping import Point
 
+SESSION = "test-1"
+
 
 def curve(*new: int) -> list[Point]:
     points, total = [], 0
@@ -16,11 +18,14 @@ def curve(*new: int) -> list[Point]:
 def seed(conn, documents: list[str], typings: dict[str, tuple[str, str]]):
     """`typings` maps a mention id to (document, class IRI)."""
     for document in documents:
-        conn.execute("INSERT INTO documents (id, held_out) VALUES (?, 0)", (document,))
+        conn.execute(
+            "INSERT INTO documents (id, session_id, held_out) VALUES (?, ?, 0)",
+            (document, SESSION),
+        )
     for mention_id, (document, iri) in typings.items():
         conn.execute(
-            "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-            "VALUES (?, ?, 1, 'x', 'typed')", (mention_id, document),
+            "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+            "VALUES (?, ?, ?, 1, 'x', 'typed')", (mention_id, SESSION, document),
         )
         conn.execute(
             "INSERT INTO mention_typing (mention_id, version_id, iri, score, zone) "
@@ -39,7 +44,8 @@ def test_a_concept_seen_again_adds_nothing(tmp_path):
     typing_store.install(conn)
     seed(conn, ["d1", "d2"], {"m1": ("d1", "c:A"), "m2": ("d2", "c:A"), "m3": ("d2", "c:B")})
     points = stopping.accumulation(
-        stopping.processing_order(conn), stopping.concepts_by_document(conn, "v1")
+        stopping.processing_order(conn,
+            session_id=SESSION), stopping.concepts_by_document(conn, "v1", session_id=SESSION)
     )
     assert [(p.new, p.cumulative) for p in points] == [(1, 1), (1, 2)]
 
@@ -50,10 +56,13 @@ def test_a_held_out_document_is_not_part_of_the_curve(tmp_path):
 
     typing_store.install(conn)
     seed(conn, ["d1"], {"m1": ("d1", "c:A")})
-    conn.execute("INSERT INTO documents (id, held_out) VALUES ('d2', 1)")
+    conn.execute(
+        "INSERT INTO documents (id, session_id, held_out) VALUES ('d2', ?, 1)", (SESSION,)
+    )
     conn.commit()
     assert [p.document_id for p in stopping.accumulation(
-        stopping.processing_order(conn), stopping.concepts_by_document(conn, "v1")
+        stopping.processing_order(conn,
+            session_id=SESSION), stopping.concepts_by_document(conn, "v1", session_id=SESSION)
     )] == ["d1"]
 
 
@@ -61,9 +70,12 @@ def test_the_order_is_the_one_the_process_used(tmp_path):
     """Sorting by id would draw a curve for a process that never happened."""
     conn = connect(tmp_path)
     for document in ("zebra", "alpha"):
-        conn.execute("INSERT INTO documents (id, held_out) VALUES (?, 0)", (document,))
+        conn.execute(
+            "INSERT INTO documents (id, session_id, held_out) VALUES (?, ?, 0)",
+            (document, SESSION),
+        )
     conn.commit()
-    assert stopping.processing_order(conn) == ["zebra", "alpha"]
+    assert stopping.processing_order(conn, session_id=SESSION) == ["zebra", "alpha"]
 
 
 def test_an_induced_concept_counts_even_though_no_class_exists_yet(tmp_path):
@@ -77,7 +89,7 @@ def test_an_induced_concept_counts_even_though_no_class_exists_yet(tmp_path):
     induction.persist(conn, "v1", [
         induction.Proposal("c1", "Data Repository", "g", "criterion", 1, ["m1"])
     ])
-    assert len(stopping.concepts_by_document(conn, "v1")["d1"]) == 2
+    assert len(stopping.concepts_by_document(conn, "v1", session_id=SESSION)["d1"]) == 2
 
 
 def test_a_tail_shorter_than_the_window_is_unknown_not_zero():
@@ -96,6 +108,7 @@ def assess(conn, *, iteration=1, max_iterations=20, window=3, threshold=1.0, tar
     return stopping.assess(
         conn, "v1", target_pass_rate=target, novelty_window=window,
         novelty_threshold=threshold, iteration=iteration, max_iterations=max_iterations,
+            session_id=SESSION,
     )
 
 
@@ -130,9 +143,11 @@ def test_the_primary_criterion_needs_the_rate_to_have_settled(tmp_path):
     cq.install(conn)
     for iteration, passed in enumerate([1, 1, 1]):
         conn.execute(
-            "INSERT INTO cq_results (cq_id, iteration, passed) VALUES (?, ?, ?)",
-            (f"q{iteration}", iteration, passed),
+            "INSERT INTO cq_results (cq_id, session_id, iteration, passed) "
+            "VALUES (?, ?, ?, ?)",
+            (f"q{iteration}", SESSION, iteration, passed),
         )
+
     conn.commit()
     assessment = assess(conn)
     assert named(assessment, "competency questions").state == stopping.MET

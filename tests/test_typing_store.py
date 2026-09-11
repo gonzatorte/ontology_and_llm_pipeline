@@ -6,6 +6,8 @@ from onto_pipeline import typing_store
 from onto_pipeline.db import connect
 from onto_pipeline.matching import Decision, Typing
 
+SESSION = "test-1"
+
 ONTOLOGY = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
@@ -41,7 +43,7 @@ def test_typings_are_stored_per_version_not_on_the_mention(tmp_path):
         Typing("m1", "c:Technique", 0.95, "auto"),
         Typing("m2", "c:Technique", 0.75, "grey"),
         Typing("m3", None, 0.30, "discarded"),
-    ])
+    ], session_id=SESSION)
     assert (split.typed, split.grey, split.orphan) == (1, 1, 1)
     assert split.orphan_rate == 1 / 3
     stored = conn.execute("SELECT COUNT(*) AS n FROM mention_typing WHERE version_id='v1'")
@@ -50,9 +52,10 @@ def test_typings_are_stored_per_version_not_on_the_mention(tmp_path):
 
 def test_retyping_the_same_version_replaces_rather_than_accumulates(tmp_path):
     conn = connect(tmp_path)
-    typing_store.persist_typings(conn, "v1", [Typing("m1", "c:T", 0.9, "auto")])
+    typing_store.persist_typings(conn, "v1", [Typing("m1", "c:T", 0.9, "auto")], session_id=SESSION)
     # discarded always carries a null iri: that is what the matcher returns below the zone.
-    typing_store.persist_typings(conn, "v1", [Typing("m1", None, 0.4, "discarded")])
+    typing_store.persist_typings(conn, "v1", [Typing("m1", None, 0.4, "discarded")],
+        session_id=SESSION)
     rows = [row["iri"] for row in
             conn.execute("SELECT iri FROM mention_typing WHERE version_id='v1'")]
     assert rows == [None]
@@ -61,8 +64,10 @@ def test_retyping_the_same_version_replaces_rather_than_accumulates(tmp_path):
 def test_a_later_version_can_type_the_same_mention_differently(tmp_path):
     """The self-correcting loop of 4.3: a mention orphaned at iteration 3 can be typed at 8."""
     conn = connect(tmp_path)
-    typing_store.persist_typings(conn, "v1", [Typing("m1", None, 0.3, "discarded")])
-    typing_store.persist_typings(conn, "v2", [Typing("m1", "c:Technique", 0.95, "auto")])
+    typing_store.persist_typings(conn, "v1", [Typing("m1", None, 0.3, "discarded")],
+        session_id=SESSION)
+    typing_store.persist_typings(conn, "v2", [Typing("m1", "c:Technique", 0.95, "auto")],
+        session_id=SESSION)
     rows = dict(conn.execute("SELECT version_id, iri FROM mention_typing WHERE mention_id='m1'"))
     assert rows == {"v1": None, "v2": "c:Technique"}
 
@@ -84,11 +89,13 @@ def test_grey_zone_mentions_are_marked_so_they_leave_the_functional_count(tmp_pa
     is what keeps them out of that count (ITER-APPLY)."""
     conn = connect(tmp_path)
     conn.executemany(
-        "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-        "VALUES (?, 'doc', 1, 'x', 'active')",
-        [("m1",), ("m2",), ("m3",)],
+        "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+        "VALUES (?, ?, 'doc', 1, 'x', 'active')",
+        [("m1", SESSION), ("m2", SESSION), ("m3", SESSION)],
     )
-    typing_store.persist_entities(conn, {"m1": "m1", "m2": "m1"}, unresolved={"m3"})
+
+    typing_store.persist_entities(conn, {"m1": "m1", "m2": "m1"}, unresolved={"m3"},
+        session_id=SESSION)
     rows = dict(conn.execute("SELECT id, status FROM mentions"))
     assert rows["m3"] == typing_store.POSSIBLE_DUPLICATE
     assert rows["m1"] == "active"

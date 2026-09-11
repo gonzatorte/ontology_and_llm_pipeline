@@ -9,6 +9,8 @@ from onto_pipeline.db import connect
 from onto_pipeline.mapping import MappingRules, MentionRow
 from onto_pipeline.typing_store import POSSIBLE_DUPLICATE
 
+SESSION = "test-1"
+
 INSTITUTION = "https://ontology.local/id/institution"
 TOOL = "https://ontology.local/id/tool"
 
@@ -167,7 +169,7 @@ def test_recording_the_rules_twice_reports_nothing_changed(tmp_path):
     """This is what makes regeneration idempotent rather than merely deterministic."""
     conn = connect(tmp_path)
     graph = mapping.flatten(mapping.regenerate([row("m1", "d1")], {}, MappingRules()).dataset)
-    versioning.commit(conn, graph, version_id="v0")
+    versioning.commit(conn, graph, version_id="v0", session_id=SESSION)
 
     assert versioning.record_rules(conn, "v0", "sha256:aaa") is True
     assert versioning.record_rules(conn, "v0", "sha256:aaa") is False
@@ -178,9 +180,9 @@ def test_the_rules_column_is_added_to_a_store_that_predates_it(tmp_path):
     conn = connect(tmp_path)
     conn.script(
         "DROP TABLE IF EXISTS versions;"
-        "CREATE TABLE versions (id TEXT PRIMARY KEY, parent_id TEXT, iteration INTEGER,"
-        " branch_id TEXT, state_hash TEXT NOT NULL, turtle TEXT NOT NULL, note TEXT,"
-        " created_at TEXT);"
+        "CREATE TABLE versions (id TEXT PRIMARY KEY, session_id TEXT NOT NULL,"
+        " parent_id TEXT, iteration INTEGER, branch_id TEXT, state_hash TEXT NOT NULL,"
+        " turtle TEXT NOT NULL, note TEXT, created_at TEXT);"
     )
     versioning.install(conn)
 
@@ -190,13 +192,14 @@ def test_the_rules_column_is_added_to_a_store_that_predates_it(tmp_path):
 def test_load_inputs_never_writes_to_the_mention_layer(tmp_path):
     conn = connect(tmp_path)
     conn.execute(
-        "INSERT INTO mentions (id, document_id, page, surface_text, status) "
-        "VALUES ('m1', 'd1', 1, 'Genome Canada', 'ok')"
+        "INSERT INTO mentions (id, session_id, document_id, page, surface_text, status) "
+        "VALUES ('m1', ?, 'd1', 1, 'Genome Canada', 'ok')", (SESSION,)
     )
+
     conn.commit()
     before = list(conn.execute("SELECT * FROM mentions"))
 
-    rows, typings = mapping.load_inputs(conn, "v0")
+    rows, typings = mapping.load_inputs(conn, "v0", session_id=SESSION)
 
     assert [item.id for item in rows] == ["m1"]
     assert typings == {}

@@ -8,6 +8,8 @@ from onto_pipeline.db import connect
 from onto_pipeline.extraction import Candidate
 from onto_pipeline.parse import PARAGRAPH, Block
 
+SESSION = "test-1"
+
 
 def block(ordinal, text, page=1, span_start=0):
     b = Block(document_id="doc", page=page, ordinal=ordinal, bbox=(0, 0, 1, 1),
@@ -83,6 +85,7 @@ def test_provenance_comes_from_the_block_the_mention_lands_in():
         chunk_of(first, second), [Candidate("PET scan", "imaging method")],
         {first.id: first, second.id: second},
     )
+
     mention = located.mentions[0]
     assert (mention.page, mention.block_id, mention.language) == (7, second.id, "en")
 
@@ -93,9 +96,9 @@ def test_mentions_persist_and_a_rerun_replaces_rather_than_duplicates(tmp_path):
     located = extraction.locate(chunk_of(only), [Candidate("researchers", "people")],
                                 {only.id: only})
 
-    extraction.persist(conn, "doc", located.mentions)
-    extraction.persist(conn, "doc", located.mentions)
-    rows = extraction.load(conn, "doc")
+    extraction.persist(conn, "doc", located.mentions, session_id=SESSION)
+    extraction.persist(conn, "doc", located.mentions, session_id=SESSION)
+    rows = extraction.load(conn, "doc", session_id=SESSION)
     assert len(rows) == 1
     assert rows[0]["surface_text"] == "researchers"
     assert rows[0]["status"] == extraction.ACTIVE

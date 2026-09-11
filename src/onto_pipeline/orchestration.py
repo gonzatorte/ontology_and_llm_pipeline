@@ -89,20 +89,30 @@ def _count(conn: Store, query: str, params: tuple = ()) -> int:
     return int(row[0]) if row else 0
 
 
-def survey(conn: Store, version_id: str, *, has_provider: bool) -> Plan:
+def survey(
+    conn: Store, version_id: str, *, session_id: str, has_provider: bool
+) -> Plan:
     """The state of every stage against one ontology version."""
-    documents = _count(conn, "SELECT COUNT(*) FROM documents WHERE held_out = 0")
-    blocks = _count(conn, "SELECT COUNT(*) FROM blocks")
-    mentions = _count(conn, "SELECT COUNT(*) FROM mentions")
-    grouped = _count(conn, "SELECT COUNT(*) FROM mentions WHERE coref_group IS NOT NULL")
+    documents = _count(
+        conn, "SELECT COUNT(*) FROM documents WHERE session_id = ? AND held_out = 0",
+        (session_id,),
+    )
+    blocks = _count(conn, "SELECT COUNT(*) FROM blocks WHERE session_id = ?", (session_id,))
+    mentions = _count(conn, "SELECT COUNT(*) FROM mentions WHERE session_id = ?", (session_id,))
+    grouped = _count(
+        conn, "SELECT COUNT(*) FROM mentions WHERE session_id = ? AND coref_group IS NOT NULL",
+        (session_id,),
+    )
     # Joined against `mentions`, not counted raw. A version matched before a re-extraction keeps
     # typings for mentions that no longer exist, and counting those makes this command disagree
     # with `grey list`, which does join — two numbers for one question is worse than either.
-    live = ("FROM mention_typing t JOIN mentions m ON m.id = t.mention_id "
+    live = ("FROM mention_typing t "
+            "JOIN mentions m ON m.id = t.mention_id AND m.session_id = ? "
             "WHERE t.version_id = ?")
-    typed = _count(conn, f"SELECT COUNT(*) {live}", (version_id,))
-    grey = _count(conn, f"SELECT COUNT(*) {live} AND t.zone = 'grey'", (version_id,))
-    orphans = _count(conn, f"SELECT COUNT(*) {live} AND t.iri IS NULL", (version_id,))
+    scope = (session_id, version_id)
+    typed = _count(conn, f"SELECT COUNT(*) {live}", scope)
+    grey = _count(conn, f"SELECT COUNT(*) {live} AND t.zone = 'grey'", scope)
+    orphans = _count(conn, f"SELECT COUNT(*) {live} AND t.iri IS NULL", scope)
     stale = _count(
         conn, "SELECT COUNT(*) FROM mention_typing WHERE version_id = ?", (version_id,)
     ) - typed
@@ -118,7 +128,11 @@ def survey(conn: Store, version_id: str, *, has_provider: bool) -> Plan:
         (version_id,),
     )
     open_reviews = _count(conn, "SELECT COUNT(*) FROM review_items WHERE status = 'open'")
-    questions = _count(conn, "SELECT COUNT(*) FROM competency_questions WHERE status='accepted'")
+    questions = _count(
+        conn,
+        "SELECT COUNT(*) FROM competency_questions WHERE session_id = ? AND status='accepted'",
+        (session_id,),
+    )
 
     def stage(
         name: str, command: str, done: bool, ready: bool, detail: str,

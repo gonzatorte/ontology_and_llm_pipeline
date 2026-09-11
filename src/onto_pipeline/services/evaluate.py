@@ -19,6 +19,7 @@ from .. import (
     cq,
     matching,
     review,
+    sessions,
     stopping,
     tuning,
     use_cases,
@@ -60,6 +61,7 @@ def assess(
     La cobertura de menciones está deliberadamente ausente: un sistema optimiza lo que se mide,
     y una clase paraguas maximiza cobertura destruyendo el valor conceptual.
     """
+    session = workspace.require_session()
     config = workspace.config
     version_id = workspace.resolve_version(version)
     return Stopping(
@@ -70,7 +72,7 @@ def assess(
             novelty_window=config.stopping.novelty_window,
             novelty_threshold=config.stopping.novelty_threshold,
             iteration=iteration,
-            max_iterations=config.iteration.max_iterations,
+            max_iterations=config.iteration.max_iterations, session_id=session,
         ),
     )
 
@@ -101,8 +103,9 @@ def evaluate_questions(
     Consulta el grafo con entailments por defecto: una pregunta inferencial pregunta qué aporta
     el razonador, y SPARQL sobre las tripletas asertadas no puede verlo.
     """
+    session = workspace.require_session()
     conn = workspace.conn
-    questions = cq.load(conn)
+    questions = cq.load(conn, session_id=session)
     if not questions:
         raise StageError("no accepted competency questions")
 
@@ -128,7 +131,7 @@ def evaluate_questions(
         note = "asserted triples only, so inferential questions will under-report"
 
     evaluation = cq.evaluate(graph, questions, iteration=iteration)
-    cq.record(conn, evaluation)
+    cq.record(conn, evaluation, session_id=session)
     return QuestionRun(
         version_id=version_id, questions=questions, evaluation=evaluation,
         asserted=asserted, entailed=len(graph), inferred=infer, note=note,
@@ -153,10 +156,12 @@ def hold_out(workspace: Workspace, doc_ids: list[str], *, release: bool = False)
     `PREP-PARSE`— pero no pueden llegar a `ITER-EXTRACT`, o la evaluación mide al pipeline
     contra su propia entrada.
     """
-    changed = set_held_out(workspace.conn, list(doc_ids), held_out=not release)
+    session = workspace.require_session()
+    changed = set_held_out(workspace.conn, list(doc_ids), held_out=not release, session_id=session)
     return Retention(
         changed=changed, requested=len(doc_ids),
-        process=process_documents(workspace.conn), held_out=held_out_documents(workspace.conn),
+        process=process_documents(workspace.conn,
+            session_id=session), held_out=held_out_documents(workspace.conn, session_id=session),
     )
 
 
@@ -174,8 +179,9 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
     Los offsets indexan el Markdown del parser, así que la herramienta lo embebe tal cual; el
     corpus nunca sale de la máquina.
     """
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
-    ids = [doc_id] if doc_id else held_out_documents(conn)
+    ids = [doc_id] if doc_id else held_out_documents(conn, session_id=session)
     if not ids:
         raise StageError(
             "no held-out documents. Mark them first: onto-pipeline hold-out <doc_id> ..."
@@ -188,7 +194,7 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
 
     written, missing = [], []
     for identifier in ids:
-        document = load_document(conn, identifier)
+        document = load_document(conn, identifier, session_id=session)
         if document is None:
             missing.append(identifier)
             continue
@@ -197,7 +203,7 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
             markdown=markdown_path(config, identifier).read_text(encoding="utf-8"),
             markdown_hash=document["markdown_hash"],
             classes=classes,
-            pages=annotate.page_index(load_blocks(conn, identifier)),
+            pages=annotate.page_index(load_blocks(conn, identifier, session_id=session)),
             target=config.paths.work_dir / "annotate" / f"{identifier}.html",
         ))
     return AnnotationTool(
@@ -224,12 +230,13 @@ class BratExport:
 def export_annotations(workspace: Workspace, path: Path) -> BratExport:
     """`DELIVERABLES-PENDING-BRAT-EXPORTER`: JSONL del conjunto de retención a BRAT/INCEpTION,
     validado contra el Markdown en disco."""
+    session = workspace.require_session()
     config, conn = workspace.config, workspace.conn
     out_dir = config.paths.work_dir / "brat"
 
     documents: list[ExportedDocument] = []
     for document in annotation.read_jsonl(path):
-        stored = load_document(conn, document.doc_id)
+        stored = load_document(conn, document.doc_id, session_id=session)
         if stored is None:
             documents.append(ExportedDocument(document.doc_id, error="not ingested"))
             continue
@@ -508,3 +515,72 @@ __all__ = [
     "export_annotations", "hold_out", "resolve_review", "review_counts", "review_items",
     "tune",
 ]
+
+
+# ─────────────────────────────  sesiones de usuario  ─────────────────────────────
+
+
+def list_sessions(workspace: Workspace) -> list[sessions.UserSession]:
+    """Las sesiones que hay, con la fase ya puesta al día contra los datos."""
+    found = sessions.all_sessions(workspace.conn)
+    for session in found:
+        sessions.sync_phase(workspace.conn, session.id)
+    return sessions.all_sessions(workspace.conn)
+
+
+def new_session(
+    workspace: Workspace, *, use_case: str, name: str = ""
+) -> sessions.UserSession:
+    """Crear una sesión sobre un caso de uso, y dejarla como la actual.
+
+    El caso de uso tiene que existir: crear una sesión sobre un directorio que no está es
+    descubrirlo tres etapas después, cuando `ingest` no encuentra el corpus.
+    """
+    directory = workspace.config.paths.use_cases_root / use_case
+    if not directory.is_dir():
+        available = sorted(
+            item.name for item in workspace.config.paths.use_cases_root.iterdir()
+            if item.is_dir() and not item.name.startswith("_")
+        ) if workspace.config.paths.use_cases_root.is_dir() else []
+        raise StageError(
+            f"no hay caso de uso {use_case!r} en {workspace.config.paths.use_cases_root}"
+            + (f"; hay {', '.join(available)}" if available else "")
+        )
+    created = sessions.create(workspace.conn, use_case=use_case, name=name)
+    use_current(workspace, created.id)
+    return created
+
+
+def use_session(workspace: Workspace, session_id: str) -> sessions.UserSession:
+    found = sessions.load(workspace.conn, session_id)
+    use_current(workspace, found.id)
+    return found
+
+
+def use_current(workspace: Workspace, session_id: str) -> None:
+    from .workspace import use_session as mark
+
+    mark(workspace.config.paths.work_dir, session_id)
+    workspace.session_id = session_id
+
+
+def session_detail(
+    workspace: Workspace, session_id: str | None = None
+) -> tuple[sessions.UserSession, list[sessions.Event]]:
+    chosen = session_id or workspace.require_session()
+    sessions.sync_phase(workspace.conn, chosen)
+    return sessions.load(workspace.conn, chosen), sessions.history(workspace.conn, chosen)
+
+
+def reopen_session(
+    workspace: Workspace, session_id: str | None = None, *, confirmed: bool, why: str = ""
+) -> sessions.Reopening:
+    chosen = session_id or workspace.require_session()
+    return sessions.reopen_prep(workspace.conn, chosen, confirmed=confirmed, why=why)
+
+
+def close_session(
+    workspace: Workspace, session_id: str | None = None, *, note: str = ""
+) -> sessions.UserSession:
+    chosen = session_id or workspace.require_session()
+    return sessions.close(workspace.conn, chosen, note=note)

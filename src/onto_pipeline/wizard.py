@@ -89,16 +89,18 @@ def _path(console: Console, question: str, default: Path | None) -> Path:
 def _open(
     console: Console,
     config_path: Path,
-    corpus: Path | None,
-    seed_ontology: Path | None,
+    session_id: str | None,
     env_file: Path | None,
 ) -> Workspace:
-    """Confirmar la configuración, y pedir el par (corpus, semilla) de esta corrida.
+    """Confirmar la configuración y elegir la sesión de usuario.
 
-    El par se pregunta **siempre**, aunque el archivo de configuración lo tenga: qué corpus y
-    qué semilla se usan es un parámetro de la corrida y no una decisión de configuración. Lo
-    demás del archivo se muestra y se confirma; una clave que no esté toma su default, que es
-    lo que pydantic ya hacía en silencio y acá se dice.
+    **Lo primero que se pregunta es sobre qué sesión se trabaja**: retomar una que quedó a medias
+    o empezar una nueva sobre un caso de uso. El caso de uso —el par (ontología inicial,
+    corpus)— es material de entrada y ya vive en `use_cases/`, así que no se pregunta por rutas
+    sueltas: se elige cuál.
+
+    Del archivo de configuración se muestra lo que decide algo y se confirma; una clave que no
+    esté toma su default, que es lo que pydantic ya hacía en silencio y acá se dice.
     """
     console.print(Panel.fit(
         "[bold]onto-pipeline[/] · enriquecimiento ontológico asistido\n"
@@ -128,16 +130,77 @@ def _open(
     if not _confirm(console, "¿Sigo con esta configuración?"):
         raise Abort
 
-    corpus = corpus or _path(console, "Corpus de esta corrida", config.paths.corpus_root)
-    seed_ontology = seed_ontology or _path(
-        console, "Ontología semilla de esta corrida", config.paths.seed_ontology
-    )
-    workspace = Workspace.open(config_path, corpus_root=corpus, seed_ontology=seed_ontology)
+    workspace = Workspace.open(config_path, session_id=session_id)
+    _choose_session(console, workspace)
 
     if env_file is not None:
         names = load_env_file(env_file)
         console.print(f"[dim]cargadas {', '.join(names)} de {env_file}[/]")
     return workspace
+
+
+def _choose_session(console: Console, workspace: Workspace) -> None:
+    """Retomar una sesión o empezar una nueva. Es la primera pregunta, y no se saltea.
+
+    Sin sesión no hay dónde poner nada: las menciones, las versiones y las decisiones cuelgan
+    de una. Y con varias guardadas, asumir cuál es sería decidir por el usuario lo único que
+    esta pantalla existe para preguntar.
+    """
+    existing = evaluate.list_sessions(workspace)
+    if existing:
+        console.print(Panel.fit(
+            f"[bold]sesiones[/] · {len(existing)} guardadas\n"
+            "[dim]Una sesión es una corrida sobre un caso de uso. Retomar una sigue donde "
+            "quedó; el estado vive en el almacén.[/]",
+            border_style="cyan",
+        ))
+        render.session_list(console, existing, current=workspace.session_id)
+        for index, item in enumerate(existing, start=1):
+            console.print(f"  {_key(str(index))} {item.id} · {item.phase}")
+        console.print(f"  {_key('n')} empezar una nueva")
+
+        choice = _ask(
+            console, "¿Cuál retomo?",
+            default=str(_index_of(existing, workspace.session_id) or 1),
+        ).strip().lower()
+        if choice != "n":
+            if choice.isdigit() and 1 <= int(choice) <= len(existing):
+                evaluate.use_current(workspace, existing[int(choice) - 1].id)
+                return
+            console.print("[yellow]no entendí; empiezo una nueva[/]")
+
+    cases = _use_cases(workspace)
+    if not cases:
+        raise StageError(
+            f"no hay ningún caso de uso en {workspace.config.paths.use_cases_root}. "
+            "Un caso de uso es un directorio con su `use_case.yml`; ver use_cases/README.md."
+        )
+    console.print("\n[bold]¿Sobre qué caso de uso?[/] (el par ontología inicial + corpus)")
+    for index, name in enumerate(cases, start=1):
+        console.print(f"  {_key(str(index))} {name}")
+    picked = _ask(console, "¿Cuál?", default="1").strip()
+    if not (picked.isdigit() and 1 <= int(picked) <= len(cases)):
+        raise Abort
+    name = _ask(console, "¿Le ponés un nombre? (opcional)", default="").strip()
+    created = evaluate.new_session(workspace, use_case=cases[int(picked) - 1], name=name)
+    console.print(f"[green]sesión {created.id}[/] sobre {created.use_case}")
+
+
+def _use_cases(workspace: Workspace) -> list[str]:
+    root = workspace.config.paths.use_cases_root
+    if not root.is_dir():
+        return []
+    return sorted(
+        item.name for item in root.iterdir()
+        if item.is_dir() and not item.name.startswith("_")
+    )
+
+
+def _index_of(found: list, session_id: str) -> int | None:
+    for index, item in enumerate(found, start=1):
+        if item.id == session_id:
+            return index
+    return None
 
 
 def _provider(console: Console, workspace: Workspace) -> bool:
@@ -500,7 +563,8 @@ def _pass(console: Console, workspace: Workspace) -> None:
     puede, y decir por qué no lo demás."""
     version_id = workspace.latest_version() or "(sin versión todavía)"
     plan = orchestration.survey(
-        workspace.conn, version_id, has_provider=workspace.has_provider()
+        workspace.conn, version_id, session_id=workspace.require_session(),
+        has_provider=workspace.has_provider(),
     )
     render.plan(console, plan, version_id)
 
@@ -560,13 +624,12 @@ def run(
     console: Console,
     config_path: Path,
     *,
-    corpus: Path | None = None,
-    seed_ontology: Path | None = None,
+    session_id: str | None = None,
     env_file: Path | None = None,
 ) -> None:
-    """El wizard entero: configurar, preparar, iterar, entregar."""
+    """El wizard entero: elegir sesión, preparar, iterar, entregar."""
     try:
-        workspace = _open(console, config_path, corpus, seed_ontology, env_file)
+        workspace = _open(console, config_path, session_id, env_file)
         if not _normalize_seed(console, workspace):
             return
         while True:

@@ -84,17 +84,34 @@ def input_hash(payload: Any) -> str:
 
 
 class Ledger:
-    def __init__(self, conn: Store, execution: Execution, sleep=time.sleep) -> None:
+    """Caché, checkpoint y telemetría. El caché se comparte entre sesiones; el resto no.
+
+    **La clave es content-addressed** —cubre etapa, versión del prompt, modelo, reasoning effort,
+    temperatura y hash del input— así que el resultado de una sesión sirve para otra y nadie
+    paga dos veces por la misma pregunta. Eso es lo caro y es lo que se comparte.
+
+    **La contabilidad es por sesión, y tiene que serlo.** El barrier pregunta si quedan unidades
+    corriendo antes de empezar la etapa siguiente; si mirara la tabla entera, una sesión con
+    trabajo en vuelo frenaría a las demás, y una sesión interrumpida las frenaría **para
+    siempre**, porque deja sus unidades en `running`. Por eso hay una fila por (sesión, clave):
+    el resultado se lee de cualquiera, el estado sólo del propio.
+    """
+
+    def __init__(
+        self, conn: Store, execution: Execution, *, session_id: str, sleep=time.sleep
+    ) -> None:
         self.conn = conn
         self.execution = execution
+        self.session_id = session_id
         self._sleep = sleep
 
     def barrier(self, stage: str, iteration: int | None = None) -> None:
         row = self.conn.execute(
             "SELECT COUNT(*) AS n FROM work_units "
-            "WHERE stage = ? AND COALESCE(iteration, -1) = COALESCE(?, -1) "
+            "WHERE session_id = ? AND stage = ? "
+            "AND COALESCE(iteration, -1) = COALESCE(?, -1) "
             "AND status IN ('pending', 'running')",
-            (stage, iteration),
+            (self.session_id, stage, iteration),
         ).fetchone()
         if row["n"]:
             raise BarrierViolation(f"stage {stage} still has {row['n']} unfinished units")
@@ -114,12 +131,17 @@ class Ledger:
         result = StageResult(stage=stage)
 
         for label, payload, key in planned:
+            # La búsqueda en el caché es **por clave sola**, sin sesión: ahí está el ahorro. Que
+            # la respuesta la haya pagado otra sesión no la vuelve otra respuesta — la clave
+            # cubre todo lo que la determina.
             row = self.conn.execute(
-                "SELECT status, output FROM work_units WHERE key = ?", (key,)
+                "SELECT output FROM work_units WHERE key = ? AND status = 'done' LIMIT 1",
+                (key,),
             ).fetchone()
-            if row["status"] == "done":
+            if row is not None:
                 result.outputs[label] = json.loads(row["output"])
                 result.cached += 1
+                self._settle(key, row["output"])
                 continue
             self._execute(stage, key, label, payload, worker, result)
             self._check_failure_rate(stage, result, len(planned))
@@ -138,13 +160,27 @@ class Ledger:
         for label, payload in payloads:
             key = unit_key(stage, prompt_version, settings, payload)
             self.conn.execute(
-                "INSERT INTO work_units (key, stage, iteration, status, input_hash, created_at) "
-                "VALUES (?, ?, ?, 'pending', ?, ?) ON CONFLICT(key) DO NOTHING",
-                (key, stage, iteration, input_hash(payload), _now()),
+                "INSERT INTO work_units (key, session_id, stage, iteration, status, "
+                "input_hash, created_at) VALUES (?, ?, ?, ?, 'pending', ?, ?) "
+                "ON CONFLICT(session_id, key) DO NOTHING",
+                (key, self.session_id, stage, iteration, input_hash(payload), _now()),
             )
             planned.append((label, payload, key))
         self.conn.commit()
         return planned
+
+    def _settle(self, key: str, output: str) -> None:
+        """Marcar la unidad propia como hecha con el resultado que pagó otra sesión.
+
+        Sin esto, la sesión que reusa el caché deja su fila en `pending` para siempre y su
+        propio barrier la frena en la etapa siguiente.
+        """
+        self.conn.execute(
+            "UPDATE work_units SET status = 'done', output = ?, completed_at = ? "
+            "WHERE session_id = ? AND key = ? AND status != 'done'",
+            (output, _now(), self.session_id, key),
+        )
+        self.conn.commit()
 
     def _execute(
         self,
@@ -155,7 +191,10 @@ class Ledger:
         worker: Callable[[Any], UnitResult],
         result: StageResult,
     ) -> None:
-        self.conn.execute("UPDATE work_units SET status = 'running' WHERE key = ?", (key,))
+        self.conn.execute(
+            "UPDATE work_units SET status = 'running' WHERE session_id = ? AND key = ?",
+            (self.session_id, key),
+        )
         self.conn.commit()
 
         last_error = ""
@@ -165,8 +204,9 @@ class Ledger:
             except Exception as exc:  # noqa: BLE001 - the ledger records every failure mode
                 last_error = f"{type(exc).__name__}: {exc}"
                 self.conn.execute(
-                    "UPDATE work_units SET attempts = ?, error = ? WHERE key = ?",
-                    (attempt, last_error, key),
+                    "UPDATE work_units SET attempts = ?, error = ? "
+                    "WHERE session_id = ? AND key = ?",
+                    (attempt, last_error, self.session_id, key),
                 )
                 self.conn.commit()
                 if attempt < self.execution.max_retries:
@@ -175,13 +215,15 @@ class Ledger:
 
             self.conn.execute(
                 "UPDATE work_units SET status = 'done', output = ?, attempts = ?, error = NULL, "
-                "in_tokens = ?, out_tokens = ?, completed_at = ? WHERE key = ?",
+                "in_tokens = ?, out_tokens = ?, completed_at = ? "
+                "WHERE session_id = ? AND key = ?",
                 (
                     json.dumps(unit.output, ensure_ascii=False, default=str),
                     attempt,
                     unit.in_tokens,
                     unit.out_tokens,
                     _now(),
+                    self.session_id,
                     key,
                 ),
             )
@@ -193,8 +235,9 @@ class Ledger:
             return
 
         self.conn.execute(
-            "UPDATE work_units SET status = 'failed', completed_at = ? WHERE key = ?",
-            (_now(), key),
+            "UPDATE work_units SET status = 'failed', completed_at = ? "
+            "WHERE session_id = ? AND key = ?",
+            (_now(), self.session_id, key),
         )
         self.conn.commit()
         result.failures[label] = last_error
@@ -216,7 +259,7 @@ class Ledger:
             "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, "
             "SUM(COALESCE(in_tokens, 0)) AS in_tokens, "
             "SUM(COALESCE(out_tokens, 0)) AS out_tokens "
-            "FROM work_units WHERE stage = ?",
-            (stage,),
+            "FROM work_units WHERE session_id = ? AND stage = ?",
+            (self.session_id, stage),
         ).fetchone()
         return dict(row)

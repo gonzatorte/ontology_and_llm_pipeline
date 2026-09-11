@@ -17,6 +17,8 @@ from onto_pipeline.config import Config
 from onto_pipeline.db import connect
 from onto_pipeline.services import StageError, Workspace
 
+SESSION = "test-1"
+
 
 @pytest.fixture
 def console() -> Console:
@@ -36,7 +38,7 @@ def _workspace(tmp_path: Path) -> Workspace:
 
     typing_store.install(conn)
     review.install(conn)
-    return Workspace.of(config, conn)
+    return Workspace.of(config, conn, session_id=SESSION)
 
 
 def _plan(*steps) -> orchestration.Plan:

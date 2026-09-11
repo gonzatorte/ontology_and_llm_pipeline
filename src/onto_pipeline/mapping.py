@@ -315,7 +315,7 @@ def _settle(
 
 
 def load_inputs(
-    conn: Store, version_id: str
+    conn: Store, version_id: str, *, session_id: str
 ) -> tuple[list[MentionRow], dict[str, tuple[str | None, str]]]:
     """Read-only over the mention layer, by contract: regeneration never writes to it.
 
@@ -333,7 +333,8 @@ def load_inputs(
         )
         for row in conn.execute(
             "SELECT id, document_id, page, surface_text, span_start, span_end, "
-            "candidate_entity, status FROM mentions ORDER BY id"
+            "candidate_entity, status FROM mentions WHERE session_id = ? ORDER BY id",
+            (session_id,),
         )
     ]
     typings = {
