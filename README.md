@@ -441,7 +441,7 @@ alcanza para una sesión por vez. Ver Configuración.
 
 ```bash
 uv run onto-pipeline wizard
-uv run onto-pipeline wizard --corpus ../otro/corpus --seed-ontology ../otra.owl
+uv run onto-pipeline --session craft-cl-2 wizard     # con la sesión ya elegida
 uv run onto-pipeline wizard --run-env-file opencode.env
 ```
 
@@ -453,9 +453,10 @@ y, en vez de frenar, la hace.
 Qué hace, en orden:
 
 1. **Confirma la configuración** y dice que toda clave que el archivo no defina toma su default.
-2. **Pregunta el par (corpus, ontología inicial) siempre**, aunque el archivo lo tenga: cuál se usa es
-   un parámetro de la corrida, no una decisión de configuración. Que hoy viva en `CONFIG` es
-   deuda — [`DEBT-RUN-PARAMETERS`](technical_debt.md).
+2. **Pregunta sobre qué sesión de usuario trabajás**: retomar una que quedó a medias —con su
+   fase y qué le falta— o empezar una nueva sobre uno de los casos de uso de `use_cases/`. No
+   pregunta por rutas sueltas: el caso de uso *es* el par (ontología inicial, corpus). Con
+   `--session <id>` antes del subcomando ya viene elegida.
 3. **Normaliza la ontología inicial** si todavía no hay ninguna versión, y ofrece escribir las glosas que
    falten.
 4. **Recorre el plan** de `next` etapa por etapa: corre lo que se corre solo, pregunta en los
