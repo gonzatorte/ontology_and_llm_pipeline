@@ -125,6 +125,7 @@ existe para que no se pierdan entre las entradas.
 | 6 | **Escribir el primer juego de shapes** de SHACL | El filtro corre y siempre reporta SKIPPED porque no hay ninguna escrita. Sólo sobre lo que el pipeline mismo escribió: shapes sobre verdades del dominio chocan con el mundo abierto | [`DEBT-VALIDATION-CHAIN`](technical_debt.md) |
 | 7 | **Correr dos sesiones con etapas de modelo a la vez** | Lo probado en paralelo es la ingesta, que es CPU. Las llamadas al modelo son secuenciales dentro de una sesión, así que el riesgo está en el ledger —que sí tiene test— pero nadie lo corrió con dos sesiones pagando a la vez | [`DEBT-POSTGRES-UNTESTED`](technical_debt.md) |
 | 8 | **Dónde parte `auto` de zona gris** | El barrido mide **un** corte y el pipeline usa **dos**: lo calibrado es el corte de huérfano. Dónde empieza la zona gris es cuánta revisión humana se acepta, y eso no lo contesta ningún corpus — es una decisión, no una medición | [`FINDINGS-MEASURED-MATCHER-CRAFT`](findings.md), [`DEBT-THRESHOLDS`](technical_debt.md) |
+| 9 | **Contexto al decidir un hallazgo de revisión** | Hoy se decide sobre una línea —tipo y resumen—, y una divergencia de etiqueta no se juzga sin ver el IRI original, de dónde sale cada etiqueta y dónde se usa la entidad. Ninguna de esas decisiones la lee todavía ningún código | [`DEBT-REVIEW-CONTEXT`](technical_debt.md) |
 
 <details>
 <summary>Lo que estaba en cola y se cerró</summary>

@@ -533,6 +533,34 @@ por accidente:
   aplicarla a la zona gris es trabajo conocido, y es lo que además destraba `ITER-TUNE`, que
   está bloqueado por falta de pares contestados y no por falta de código.
 
+### DEBT-REVIEW-CONTEXT — Un hallazgo de revisión se decide sin ver de dónde sale
+
+Pedido por el usuario el 2026-09-11. El wizard muestra cada hallazgo de `review_items` en una
+línea: el tipo y el resumen. Para una divergencia de etiqueta eso es
+`Responde a pregunta (en) | answersToQuestion (en)`, y con eso no se ve lo que hay que juzgar —
+en ese caso la etiqueta está en castellano y declarada como inglés, que es un problema de idioma
+y no de traducción—.
+
+Lo que haría falta ver antes de contestar, y de dónde sale:
+
+- **El IRI original y el tipo de entidad.** Están: `payload.original_iri` y la tabla.
+- **De dónde sale cada etiqueta**, del IRI o declarada. Está: `payload.labels[].source`.
+- **Si el idioma venía declarado o se adivinó.** No se guarda: `Label.language` es uno u otro
+  sin decir cuál.
+- **La similitud medida contra el umbral** (`label_divergence_threshold`). No se guarda.
+- **Dónde se usa la entidad**: superclases, subclases, dominio y rango, disjunciones.
+  `initial_ontology.GlossContext` ya calcula exactamente ese vecindario para las glosas.
+
+Dos hechos que pesan sobre cuánto invertir, verificados el 2026-09-11:
+
+- **Ningún código lee la decisión.** `review.py` lo dice —«the decision is recorded, acting on
+  it is a separate step»— y ese paso no existe para ninguno de los tres tipos de
+  `PREP-NORMALIZE` (divergencia, chequeo semántico pendiente, errata). El spec sí dice que las
+  correcciones de erratas «se aplican a las etiquetas».
+- **El matcher no ve la etiqueta que sale del IRI** cuando hay una declarada:
+  `typing_store.targets_from` lee `skos:prefLabel` y `skos:altLabel`, y la derivada queda como
+  una `rdfs:label` más.
+
 ### DEBT-RUN-PARAMETERS — Sobre qué corre el pipeline es un parámetro — RESUELTA
 
 > **Cerrada el 2026-09-11.** Lo era, y ahora lo es: una **sesión de usuario** corre sobre un
