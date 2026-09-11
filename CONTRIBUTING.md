@@ -4,7 +4,7 @@
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 574 tests, ~5 s, sin red ni Docker
+uv run pytest -q                       # 589 tests, ~5 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars, Java 11+)
 ```
@@ -63,6 +63,17 @@ git worktree add ../pipeline-<nombre> -b <nombre>
 Un checkout por sesión y nadie puede pisar a nadie; el desacuerdo aparece al mergear, que es
 ruidoso. **El repositorio es el único canal entre sesiones:** lo que tiene que llegar a otra se
 commitea, no se deja en el árbol.
+
+## Sesiones de usuario
+
+Casi todo lo que el pipeline produce pertenece a una **sesión**: menciones, versiones, decisiones
+y artefactos. Una sesión corre sobre un **caso de uso** —el par (ontología inicial, corpus) de
+`use_cases/`—, que es material de entrada y se comparte entre sesiones.
+
+Al escribir una consulta nueva sobre una tabla por sesión, **filtrala**. Olvidarse no rompe nada
+visible: devuelve filas de más, o borra las de otra sesión, y los tests de esa etapa siguen
+pasando porque corren sobre una sola. `tests/test_session_scope.py` lee el código y falla si
+alguna se olvida; si tu consulta es una excepción legítima, el test dice cuáles son y por qué.
 
 ## Commits
 

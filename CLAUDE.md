@@ -12,7 +12,7 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología inicial, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~17.900 líneas en 54 módulos, 564 tests. **Dos interfaces sobre el mismo pipeline**:
+con `uv`, ~19.100 líneas en 56 módulos, 589 tests. **Dos interfaces sobre el mismo pipeline**:
 un CLI de ~40 comandos y `wizard`, que recorre el mismo plan preguntando en cada punto de
 decisión. Las dos llaman a `services/`.
 
@@ -65,6 +65,7 @@ uv run pytest -q                       # 574 tests, ~5 s, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
 ./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
 uv run onto-pipeline --help
+uv run onto-pipeline session list      # las sesiones de usuario que hay
 uv run onto-pipeline next              # qué corresponde correr, y qué espera al usuario
 uv run onto-pipeline wizard            # lo mismo, pero preguntando en vez de frenar
 uv run onto-pipeline export            # la ontología terminada: TBox + ABox + manifiesto
@@ -105,7 +106,17 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
     ningún otro lado. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
     `SUM(booleano)`, el JSON se lee en Python y no con `json_extract`. `tests/test_store.py`
     corre el mismo contrato contra los dos.
-11. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno y `wizard` lo
+11. **Todo dato derivado pertenece a una sesión de usuario, y toda consulta lo filtra.** Los ids
+    de documento y de mención derivan del corpus, así que dos sesiones sobre el mismo generan
+    los mismos: sin el filtro, la segunda le **borra** las menciones a la primera. Las
+    excepciones son dos y están escritas: lo que cuelga de `version_id` —que es
+    `<sesión>:v<N>`, único globalmente— y el **resultado** de `work_units`, que es
+    content-addressed y se comparte para no pagar dos veces. `tests/test_session_scope.py` lee
+    el código y falla si alguna consulta se olvida.
+12. **La fase de una sesión se deriva de los datos.** Hay una columna `phase`, pero es una
+    afirmación: `sessions.observed_phase` cuenta filas y `sync_phase` la corrige antes de que
+    alguien la lea. Volver a `PREP` desde `ITER` **no borra**: dice qué queda atrás y ramifica.
+13. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno y `wizard` lo
     pregunta; las dos cosas son la misma regla. Correr lo que viene después de una decisión que
     nadie tomó es tomarla por default, que es lo que `BRANCH-ONLY-REVIEW` nombra.
 

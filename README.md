@@ -174,6 +174,7 @@ existe para que no se pierdan entre las entradas.
 | Criterios de parada (`EVAL-STOPPING`) | listo (`stop`); los cuatro |
 | Guía de iteración | listo (`next`); corre una etapa con `--run` y nunca cruza una decisión |
 | Sesión interactiva | listo (`wizard`); qué cubre y qué falta, en `DEBT-WIZARD-COVERAGE` |
+| Sesiones de usuario en paralelo | listo (`session`); requiere `database.backend: postgres` para dos a la vez |
 | Regeneración del ABox | listo (`regenerate`); falta el disparador tras aplicar una rama |
 | Entrega de la ontología terminada | listo (`export`); TBox + ABox + manifiesto de procedencia |
 
@@ -272,13 +273,21 @@ hardcodeado. Las rutas relativas se resuelven contra el archivo de config, así 
 comandos funcionan desde cualquier directorio.
 
 ```yaml
+database:
+  backend: sqlite          # sqlite | postgres — postgres admite dos sesiones escribiendo a la vez
+  dsn: ""                  # postgresql://usuario@host/base
+
 paths:
-  corpus_root: ../../Corpus-08052026/General/files
-  initial_ontology: ../../qualitative_ontology.rdf
+  corpus_root: ../use_cases/qualitative/corpus
+  initial_ontology: ../use_cases/qualitative/ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
   use_cases_root: ../use_cases        # los casos de uso; ver Calibración, en Uso
 ```
+
+Ningún módulo sabe contra qué motor corre el almacén: el SQL se escribe con `?` y las filas se
+leen por nombre, y lo que difiere entre los dos vive en `store.py`. Los tests corren siempre
+sobre SQLite, sin servidor.
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
 —nunca autodescubierto— que se pasa con `--env-file`:
@@ -376,6 +385,47 @@ flowchart LR
   class db,md,as,on,rv,rp,an,ex store
 ```
 
+
+### Sesiones de usuario
+
+```bash
+uv run onto-pipeline session new --use-case craft-cl --name "con glosas"
+uv run onto-pipeline session list
+uv run onto-pipeline session show            # la actual: fase e historial
+uv run onto-pipeline --session craft-cl-2 next
+```
+
+Una **sesión de usuario** es una corrida sobre un **caso de uso** —el par (ontología inicial,
+corpus) que vive en `use_cases/`—. Tiene identidad (`craft-cl-1`), fase, historial, y sus propios
+datos: menciones, versiones, decisiones y artefactos en disco.
+
+**Dos sesiones pueden correr sobre el mismo caso de uso**, y esa es la comparación que el
+proyecto existe para poder hacer: el mismo corpus con otra configuración. El caso de uso es
+material de entrada, inmutable y compartido.
+
+**Lo caro se comparte; la contabilidad no.** Las respuestas del modelo se cachean por contenido,
+así que la segunda sesión sobre el mismo corpus **no vuelve a pagar** una etapa que la primera ya
+corrió. Lo que sí es por sesión es el estado de las unidades de trabajo — si fuera compartido,
+una sesión con trabajo en vuelo frenaría a las demás, y una interrumpida las frenaría para
+siempre.
+
+**La fase se deriva de los datos.** `prep` mientras se prepara material; `iter` desde que hay
+menciones. Hay una columna, pero es una afirmación que se valida contra el almacén: guardar el
+estado en un solo lugar y creerle es cómo dos lugares empiezan a discrepar sobre qué etapa
+corresponde.
+
+**Volver atrás no borra: ramifica.**
+
+```bash
+uv run onto-pipeline session reopen --why "otra ontología inicial"
+```
+
+Dice con números qué queda atrás —versiones, menciones, decisiones— y pide confirmación. Nada se
+borra: re-preparar commitea una raíz nueva y el linaje viejo sigue alcanzable, que es lo que el
+DAG ya hace con las ramas no elegidas (`ITER-APPLY`, `REORG-PATH-DEPENDENCE`).
+
+**Para correr dos en paralelo hace falta Postgres.** SQLite da un escritor y muchos lectores, que
+alcanza para una sesión por vez. Ver Configuración.
 
 ### La ruta guiada — `wizard`
 
@@ -1121,6 +1171,8 @@ data/                 gitignoreado; todo es derivado y regenerable
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
   calibration/        resultados del barrido, un JSON por caso de uso
+  sessions/<id>/      lo derivado de cada sesión: markdown, ontology, annotate, reports
+  current_session     cuál es la actual (`session use`); es estado de esta máquina
 lib/                  jars del razonador (gitignoreado)
 
 use_cases/            los casos de uso. Sólo README.md, use_case.yml y PROCEDENCIA.md se versionan
