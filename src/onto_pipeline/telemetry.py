@@ -125,8 +125,17 @@ class Ledger:
         iteration: int | None = None,
         prompt_version: str = "",
         settings: Any = None,
+        shared_cache: bool = True,
     ) -> StageResult:
-        """Run `worker` over (label, payload) pairs. Labels index the returned outputs."""
+        """Run `worker` over (label, payload) pairs. Labels index the returned outputs.
+
+        **`shared_cache=False` es para las etapas que persisten por su cuenta.** En un acierto
+        de caché el worker **no corre**: sólo se rellena `result.outputs`. Para las etapas que
+        llaman al modelo eso está bien, porque el llamador re-persiste desde ahí y una sesión
+        nueva escribe sus propias filas reusando la respuesta. Pero `ingest` parsea *y* guarda
+        adentro del worker, y lo que queda en el ledger es un resumen: con el caché compartido,
+        la segunda sesión reportaba «2 cached» y escribía **cero bloques**. Medido, no supuesto.
+        """
         planned = self._plan(stage, iteration, payloads, prompt_version, settings)
         result = StageResult(stage=stage)
 
@@ -137,6 +146,10 @@ class Ledger:
             row = self.conn.execute(
                 "SELECT output FROM work_units WHERE key = ? AND status = 'done' LIMIT 1",
                 (key,),
+            ).fetchone() if shared_cache else self.conn.execute(
+                "SELECT output FROM work_units "
+                "WHERE session_id = ? AND key = ? AND status = 'done'",
+                (self.session_id, key),
             ).fetchone()
             if row is not None:
                 result.outputs[label] = json.loads(row["output"])

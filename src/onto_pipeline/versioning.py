@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS versions (
   note         TEXT,
   created_at   TEXT,
   rules_hash   TEXT,             -- which mapping rules produced this version's ABox
+  -- El ordinal dentro de la sesión, explícito. `created_at` tiene precisión de segundo y dos
+  -- versiones del mismo segundo empatan; `rowid` desempataba, pero es de SQLite.
+  seq          INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (parent_id) REFERENCES versions(id)
 );
 CREATE INDEX IF NOT EXISTS idx_versions_hash ON versions(session_id, state_hash);
@@ -88,7 +91,10 @@ def install(conn: Store) -> None:
     # fact needs this. `rules_hash` records which mapping rules produced a version's ABox:
     # without it the same TBox under different rules gives different ABoxes and nothing says
     # so (mapping_rules_plan.md).
-    if "rules_hash" not in conn.columns("versions"):
+    columns = conn.columns("versions")
+    if "seq" not in columns:
+        conn.execute("ALTER TABLE versions ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
+    if "rules_hash" not in columns:
         conn.execute("ALTER TABLE versions ADD COLUMN rules_hash TEXT")
     conn.commit()
 
@@ -280,6 +286,13 @@ def diff_with_parent(conn: Store, version_id: str) -> tuple[Version, Diff] | Non
     return parent, diff(parent_graph, graph)
 
 
+def _count(conn: Store, session_id: str) -> int:
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM versions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    return int(row["n"]) if row else 0
+
+
 def next_version_id(conn: Store, session_id: str) -> str:
     """El id de la versión siguiente: `<sesión>:v<N>`, con N contado dentro de la sesión.
 
@@ -289,10 +302,7 @@ def next_version_id(conn: Store, session_id: str) -> str:
     la clave primaria.
     """
     install(conn)
-    row = conn.execute(
-        "SELECT COUNT(*) AS n FROM versions WHERE session_id = ?", (session_id,)
-    ).fetchone()
-    return f"{session_id}:v{int(row['n']) if row else 0}"
+    return f"{session_id}:v{_count(conn, session_id)}"
 
 
 def commit(
@@ -317,10 +327,10 @@ def commit(
     )
     conn.execute(
         "INSERT INTO versions (id, session_id, parent_id, iteration, branch_id, state_hash, "
-        "turtle, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "turtle, note, created_at, seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             version.id, session_id, parent_id, iteration, branch_id, version.state_hash,
-            graph.serialize(format="turtle"), note, _now(),
+            graph.serialize(format="turtle"), note, _now(), _count(conn, session_id),
         ),
     )
     conn.commit()

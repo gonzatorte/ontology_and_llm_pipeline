@@ -30,13 +30,20 @@ database:
 
 ```bash
 uv sync --extra postgres
-ONTO_PIPELINE_TEST_DSN=postgresql://usuario@host/base uv run pytest -q tests/test_store.py
+docker run -d --rm --name onto-pg -e POSTGRES_PASSWORD=onto -e POSTGRES_USER=onto \
+    -e POSTGRES_DB=onto -p 55432:5432 postgres:16-alpine
+ONTO_PIPELINE_TEST_DSN=postgresql://onto:onto@127.0.0.1:55432/onto uv run pytest -q
 ```
 
 `tests/test_store.py` corre **el mismo contrato contra los dos** motores, parametrizado: sin
 `ONTO_PIPELINE_TEST_DSN` los casos de Postgres se saltean y la suite sigue sin necesitar
 servidor. Si tocás `store.py`, es el archivo que tiene que seguir pasando en verde con la
 variable puesta.
+
+**Correrla contra Postgres al menos una vez por cambio de esquema vale la pena.** La primera vez
+encontró tres cosas que los 592 tests en SQLite no podían ver: `rowid`, que no existe allá; filas
+leídas por posición, que `dict_row` no permite; y un comentario SQL con apóstrofe que
+desbalanceaba el separador de sentencias. Está todo en `DEBT-POSTGRES-UNTESTED`.
 
 **Lo que hace falta para correr el pipeline, no para desarrollarlo:** una credencial de proveedor
 en un archivo de entorno (`cp example.env opencode.env`, ver `README.md`) y los jars del

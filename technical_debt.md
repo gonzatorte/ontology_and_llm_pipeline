@@ -35,24 +35,35 @@ mirando ninguno de los tres.
 >
 > Lo que quedó sin probar contra un servidor de verdad está anotado en `DEBT-POSTGRES-UNTESTED`.
 
-### DEBT-POSTGRES-UNTESTED — El backend de Postgres no corrió contra un servidor
+### DEBT-POSTGRES-UNTESTED — El backend de Postgres no corrió contra un servidor — RESUELTA
 
-`store.open_postgres` y la traducción de `?` a `%s` están escritas y tienen test, pero **los
-casos de Postgres de `tests/test_store.py` nunca se ejecutaron**: en la máquina donde se escribió
-no hay servidor corriendo. Lo verificado es la mitad de SQLite y que la falla sin servidor sea
-clara.
-
-Lo que falta es una corrida con `ONTO_PIPELINE_TEST_DSN` apuntando a un Postgres real. Tres cosas
-son las candidatas a romperse primero, y ninguna la ve SQLite:
-
-- **Las claves foráneas.** El esquema declara **una sola** (`versions.parent_id`) y SQLite las
-  ignora salvo que se le pidan — `open_sqlite` ahora las pide, justamente para que la diferencia
-  no aparezca recién allá.
-- **Una sentencia que falla aborta la transacción entera.** En SQLite no, y hay código que
-  contaba con eso; `orchestration._count` ya se reescribió para preguntar en vez de atajar, pero
-  puede haber más.
-- **Los tipos.** SQLite acepta cualquier cosa en cualquier columna; Postgres no. Un `INTEGER` que
-  recibe un `bool` de Python, o un `TEXT` que recibe un `Path`, pasa acá y falla allá.
+> **Verificado el 2026-09-11** contra `postgres:16-alpine`: la suite entera en verde con
+> `ONTO_PIPELINE_TEST_DSN` puesta (597 casos, cero salteados), el esquema completo creado, y
+> **dos sesiones de usuario ingestando en paralelo** sin bloqueos ni colisiones — con los ids de
+> documento repetidos entre las dos, que es exactamente lo que antes destruía datos.
+>
+> **Encontró tres cosas que SQLite no podía ver**, y las tres estaban en código que ya pasaba
+> los 592 tests:
+>
+> - **`rowid` no existe en Postgres.** Lo usaban `resolve_version` para desempatar dos versiones
+>   del mismo segundo y `processing_order` para el orden en que los documentos entraron al
+>   proceso. La segunda importa: la curva de acumulación de `EVAL-STOPPING` es función de ese
+>   orden y de nada más. Ahora hay dos columnas explícitas, `versions.seq` y
+>   `documents.ingested_at`.
+> - **Las filas se leían por posición** en dos lugares (`row[0]`). `sqlite3.Row` lo permite y
+>   `dict_row` de psycopg no. Ahora la columna se nombra en la consulta (`COUNT(*) AS n`).
+> - **Una apóstrofe en un comentario SQL** —«the spec's mention row»— desbalanceaba las comillas
+>   del separador de sentencias y se tragaba todos los `;` siguientes, así que el esquema entero
+>   llegaba como una sola sentencia. En SQLite nunca se notó porque ahí se usa `executescript`.
+>
+> Y confirmó **la trampa del caché compartido** que estaba prevista: una sesión nueva sobre el
+> mismo corpus reportaba «2 cached» y escribía **cero bloques**, porque el worker de `ingest`
+> parsea *y* persiste y en un acierto de caché no corre. `ingest` quedó fuera del caché
+> compartido, con tres tests que lo fijan.
+>
+> Lo que **no** se probó: dos sesiones corriendo **etapas de modelo** a la vez. Eso cuesta plata
+> y las llamadas son secuenciales dentro de una sesión, así que el riesgo está en el ledger, que
+> sí está probado.
 
 ### DEBT-PARALLEL-EXTRACTION — Paralelizar las llamadas de `ITER-EXTRACT`
 

@@ -42,6 +42,10 @@ CREATE TABLE IF NOT EXISTS documents (
   -- produces, but never fed to the process. Without this flag the held-out documents leak
   -- into ITER-EXTRACT and the evaluation measures the pipeline against its own training material.
   held_out      INTEGER NOT NULL DEFAULT 0,
+  -- El orden en que el documento entró al proceso. La curva de acumulación de `EVAL-STOPPING`
+  -- es función de ese orden y de nada más, así que tiene que ser el real: ordenar por id
+  -- dibujaría la curva de un proceso que nunca pasó. Era `rowid`, que sólo existe en SQLite.
+  ingested_at   TEXT,
   PRIMARY KEY (session_id, id)
 );
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import parse
@@ -66,7 +67,9 @@ def ingest(
         _persist(conn, parsed, session_id)
         return UnitResult(output=_summary(parsed))
 
-    return ledger.run(STAGE, payloads, worker)
+    # Sin caché compartido: el worker parsea **y persiste**, así que un acierto de otra
+    # sesión saltearía la escritura y esta sesión se quedaría sin bloques.
+    return ledger.run(STAGE, payloads, worker, shared_cache=False)
 
 
 def _payload(path: Path, config: Config) -> dict:
@@ -134,7 +137,7 @@ def _write_markdown(config: Config, parsed: ParsedDocument) -> None:
 def _persist(conn: Store, parsed: ParsedDocument, session_id: str) -> None:
     conn.execute(
         "INSERT INTO documents (id, session_id, path, content_hash, n_pages, parser_used, "
-        "parser_version, markdown_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        "parser_version, markdown_hash, ingested_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(session_id, id) DO UPDATE SET path = excluded.path, "
         "content_hash = excluded.content_hash, n_pages = excluded.n_pages, "
         "parser_used = excluded.parser_used, parser_version = excluded.parser_version, "
@@ -148,6 +151,7 @@ def _persist(conn: Store, parsed: ParsedDocument, session_id: str) -> None:
             parsed.parser_used,
             parsed.parser_version,
             parsed.markdown_hash,
+            datetime.now(timezone.utc).isoformat(timespec="microseconds"),
         ),
     )
     conn.execute(

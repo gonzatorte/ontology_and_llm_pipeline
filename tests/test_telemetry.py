@@ -141,3 +141,65 @@ def test_reasoning_effort_is_part_of_the_key(ledger):
     low = {"tier": "small", "temperature": 0.0, "reasoning_effort": "low"}
     assert (unit_key("ITER-EXTRACT", "v1", base, {"c": 1})
             != unit_key("ITER-EXTRACT", "v1", low, {"c": 1}))
+
+
+def test_a_stage_that_persists_on_its_own_does_not_reuse_another_sessions_cache(tmp_path):
+    """La trampa del caché compartido, medida contra Postgres antes de arreglarla.
+
+    En un acierto de caché el worker **no corre**: sólo se rellena `outputs`. Para las etapas
+    que llaman al modelo eso está bien —el llamador re-persiste desde ahí—, pero `ingest`
+    parsea *y* guarda adentro del worker. Compartido, la segunda sesión reportaba «cached» y
+    escribía **cero bloques**: el trabajo parecía hecho y no estaba.
+    """
+    conn = connect(tmp_path)
+    payload = [("uno", {"texto": "x"})]
+
+    first = Ledger(conn, Execution(), session_id="a")
+    first.run("etapa", payload, lambda _: UnitResult(output={"ok": True}), shared_cache=False)
+
+    ran = []
+    second = Ledger(conn, Execution(), session_id="b")
+    result = second.run(
+        "etapa", payload,
+        lambda _: (ran.append(1), UnitResult(output={"ok": True}))[1],
+        shared_cache=False,
+    )
+
+    assert ran, "el worker de la segunda sesión tiene que correr y escribir lo suyo"
+    assert result.executed == 1 and result.cached == 0
+
+
+def test_a_model_answer_is_reused_across_sessions_because_that_is_what_costs(tmp_path):
+    """La otra mitad, y es la que justifica compartir: la clave cubre etapa, prompt, modelo,
+    effort, temperatura y hash del input, así que la respuesta de una sesión es la respuesta de
+    la otra. Volver a pedirla sería pagarla dos veces."""
+    conn = connect(tmp_path)
+    payload = [("uno", {"texto": "x"})]
+
+    Ledger(conn, Execution(), session_id="a").run(
+        "etapa", payload, lambda _: UnitResult(output={"ok": True})
+    )
+
+    ran = []
+    result = Ledger(conn, Execution(), session_id="b").run(
+        "etapa", payload, lambda _: (ran.append(1), UnitResult(output={}))[1]
+    )
+
+    assert not ran and result.cached == 1
+    assert result.outputs["uno"] == {"ok": True}
+
+
+def test_one_sessions_unfinished_work_does_not_block_another(tmp_path):
+    """El barrier mira las unidades **propias**. Mirando la tabla entera, una sesión con trabajo
+    en vuelo frenaba a las demás — y una interrumpida las frenaba para siempre, porque deja las
+    suyas en `running`."""
+    conn = connect(tmp_path)
+    conn.execute(
+        "INSERT INTO work_units (key, session_id, stage, status, created_at) "
+        "VALUES ('k', 'a', 'etapa', 'running', '2026-01-01')"
+    )
+    conn.commit()
+
+    Ledger(conn, Execution(), session_id="b").barrier("etapa")   # no levanta
+    with pytest.raises(BarrierViolation):
+        Ledger(conn, Execution(), session_id="a").barrier("etapa")

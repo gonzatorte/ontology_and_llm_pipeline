@@ -40,6 +40,7 @@ def ingest(
     progress: Progress = silent,
 ) -> Ingestion:
     """`PREP-CLASSIFY`+`PREP-PARSE`: clasificar páginas, parsear, poblar bloques y Markdown."""
+    session = workspace.require_session()
     paths = (
         [path.resolve() for path in documents] if documents
         else discover(workspace.config.paths.corpus_root)
@@ -54,7 +55,9 @@ def ingest(
         paths = paths[:limit]
 
     progress(f"ingesting {len(paths)} document(s)")
-    result = ingest_documents(workspace.config, workspace.conn, paths)
+    result = ingest_documents(
+        workspace.config, workspace.conn, paths, session_id=session
+    )
     return Ingestion(
         paths=paths, outputs=result.outputs, executed=result.executed,
         cached=result.cached, failures=result.failures,

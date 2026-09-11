@@ -932,7 +932,7 @@ def precedents(
     return [
         dict(row) for row in conn.execute(
             "SELECT * FROM decisions WHERE session_id = ? AND axis = ? "
-            "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
             (session_id, category, limit),
         )
     ]

@@ -67,12 +67,17 @@ def test_a_held_out_document_is_not_part_of_the_curve(tmp_path):
 
 
 def test_the_order_is_the_one_the_process_used(tmp_path):
-    """Sorting by id would draw a curve for a process that never happened."""
+    """Ordenar por id dibujaría la curva de un proceso que nunca pasó.
+
+    El orden sale de `ingested_at`, una columna explícita. Era `rowid`, que sólo existe en
+    SQLite y con Postgres dejaba la consulta sin ordenar por nada.
+    """
     conn = connect(tmp_path)
-    for document in ("zebra", "alpha"):
+    for index, document in enumerate(("zebra", "alpha")):
         conn.execute(
-            "INSERT INTO documents (id, session_id, held_out) VALUES (?, ?, 0)",
-            (document, SESSION),
+            "INSERT INTO documents (id, session_id, held_out, ingested_at) "
+            "VALUES (?, ?, 0, ?)",
+            (document, SESSION, f"2026-01-0{index + 1}"),
         )
     conn.commit()
     assert stopping.processing_order(conn, session_id=SESSION) == ["zebra", "alpha"]

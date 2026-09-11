@@ -86,7 +86,7 @@ def _count(conn: Store, query: str, params: tuple = ()) -> int:
     if table and not conn.table_exists(table.group(1)):
         return 0
     row = conn.execute(query, params).fetchone()
-    return int(row[0]) if row else 0
+    return int(row["n"]) if row else 0
 
 
 def survey(
@@ -94,13 +94,15 @@ def survey(
 ) -> Plan:
     """The state of every stage against one ontology version."""
     documents = _count(
-        conn, "SELECT COUNT(*) FROM documents WHERE session_id = ? AND held_out = 0",
+        conn, "SELECT COUNT(*) AS n FROM documents WHERE session_id = ? AND held_out = 0",
         (session_id,),
     )
-    blocks = _count(conn, "SELECT COUNT(*) FROM blocks WHERE session_id = ?", (session_id,))
-    mentions = _count(conn, "SELECT COUNT(*) FROM mentions WHERE session_id = ?", (session_id,))
+    blocks = _count(conn, "SELECT COUNT(*) AS n FROM blocks WHERE session_id = ?", (session_id,))
+    mentions = _count(
+        conn, "SELECT COUNT(*) AS n FROM mentions WHERE session_id = ?", (session_id,)
+    )
     grouped = _count(
-        conn, "SELECT COUNT(*) FROM mentions WHERE session_id = ? AND coref_group IS NOT NULL",
+        conn, "SELECT COUNT(*) AS n FROM mentions WHERE session_id = ? AND coref_group IS NOT NULL",
         (session_id,),
     )
     # Joined against `mentions`, not counted raw. A version matched before a re-extraction keeps
@@ -110,27 +112,27 @@ def survey(
             "JOIN mentions m ON m.id = t.mention_id AND m.session_id = ? "
             "WHERE t.version_id = ?")
     scope = (session_id, version_id)
-    typed = _count(conn, f"SELECT COUNT(*) {live}", scope)
-    grey = _count(conn, f"SELECT COUNT(*) {live} AND t.zone = 'grey'", scope)
-    orphans = _count(conn, f"SELECT COUNT(*) {live} AND t.iri IS NULL", scope)
+    typed = _count(conn, f"SELECT COUNT(*) AS n {live}", scope)
+    grey = _count(conn, f"SELECT COUNT(*) AS n {live} AND t.zone = 'grey'", scope)
+    orphans = _count(conn, f"SELECT COUNT(*) AS n {live} AND t.iri IS NULL", scope)
     stale = _count(
-        conn, "SELECT COUNT(*) FROM mention_typing WHERE version_id = ?", (version_id,)
+        conn, "SELECT COUNT(*) AS n FROM mention_typing WHERE version_id = ?", (version_id,)
     ) - typed
-    bridged = _count(conn, "SELECT COUNT(*) FROM bridges WHERE version_id = ?", (version_id,))
+    bridged = _count(conn, "SELECT COUNT(*) AS n FROM bridges WHERE version_id = ?", (version_id,))
     proposals = _count(
-        conn, "SELECT COUNT(*) FROM proposed_classes WHERE version_id = ?", (version_id,)
+        conn, "SELECT COUNT(*) AS n FROM proposed_classes WHERE version_id = ?", (version_id,)
     )
     axioms = _count(
-        conn, "SELECT COUNT(*) FROM proposed_axioms WHERE version_id = ?", (version_id,)
+        conn, "SELECT COUNT(*) AS n FROM proposed_axioms WHERE version_id = ?", (version_id,)
     )
     open_branches = _count(
-        conn, "SELECT COUNT(*) FROM branches WHERE version_id = ? AND status = 'proposed'",
+        conn, "SELECT COUNT(*) AS n FROM branches WHERE version_id = ? AND status = 'proposed'",
         (version_id,),
     )
-    open_reviews = _count(conn, "SELECT COUNT(*) FROM review_items WHERE status = 'open'")
+    open_reviews = _count(conn, "SELECT COUNT(*) AS n FROM review_items WHERE status = 'open'")
     questions = _count(
         conn,
-        "SELECT COUNT(*) FROM competency_questions WHERE session_id = ? AND status='accepted'",
+        "SELECT COUNT(*) AS n FROM competency_questions WHERE session_id = ? AND status='accepted'",
         (session_id,),
     )
 

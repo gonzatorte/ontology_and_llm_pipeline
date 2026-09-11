@@ -128,8 +128,8 @@ class Workspace:
         """La versión nombrada, o la más nueva **de esta sesión**.
 
         `created_at` tiene precisión de segundo, así que dos versiones del mismo segundo
-        empatan; `rowid` desempata por orden de inserción, que es lo que "la más nueva"
-        significa acá.
+        empatan; `seq` —el ordinal dentro de la sesión— desempata, que es lo que "la más
+        nueva" significa acá. Era `rowid`, que sólo existe en SQLite.
 
         El id de versión es `<sesión>:v<N>`, pero se acepta también la forma corta `v3`: es lo
         que alguien teclea, y calificarla con la sesión actual es lo que vuelve innecesario
@@ -140,7 +140,7 @@ class Workspace:
             version = f"{self.session_id}:{version}"
         row = self.conn.execute(
             "SELECT id FROM versions WHERE session_id = ? AND id = COALESCE(?, id) "
-            "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            "ORDER BY created_at DESC, seq DESC LIMIT 1",
             (self.session_id, version),
         ).fetchone()
         if row is None:
@@ -308,4 +308,4 @@ def table_exists(conn: Store, name: str) -> bool:
 
 def count(conn: Store, query: str, params: tuple = ()) -> int:
     row = conn.execute(query, params).fetchone()
-    return int(row[0]) if row else 0
+    return int(row["n"]) if row else 0

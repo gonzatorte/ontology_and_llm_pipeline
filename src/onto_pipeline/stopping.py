@@ -147,7 +147,8 @@ def processing_order(conn: Store, *, session_id: str) -> list[str]:
     """
     return [
         row["id"] for row in conn.execute(
-            "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 ORDER BY rowid",
+            "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 "
+            "ORDER BY ingested_at, id",
             (session_id,),
         )
     ]
