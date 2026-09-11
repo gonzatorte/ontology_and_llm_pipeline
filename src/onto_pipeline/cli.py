@@ -22,6 +22,7 @@ from rich.console import Console
 from . import orchestration, render, sessions, versioning
 from .providers import load_env_file
 from .services import StageError, Workspace, deliver, evaluate, iterate, prep
+from .telemetry import StageAborted
 
 app = typer.Typer(add_completion=False, help="LLM-assisted ontology enrichment pipeline.")
 console = Console()
@@ -1037,6 +1038,9 @@ def entrypoint() -> None:
     except StageError as exc:
         console.print(f"[red]{exc}[/]")
         raise SystemExit(2) from exc
+    except StageAborted as exc:
+        render.stage_aborted(console, exc)
+        raise SystemExit(3) from exc
 
 
 if __name__ == "__main__":

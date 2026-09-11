@@ -25,7 +25,31 @@ from .store import Store
 
 
 class StageAborted(RuntimeError):
-    """Raised when a stage's failure rate exceeds `stage_failure_rate_abort`."""
+    """La etapa superó `stage_failure_rate_abort` y se cortó.
+
+    **Lleva los errores que la causaron.** Sin ellos el mensaje dice «100% de 1 unidad» y no qué
+    pasó, que es lo único que permite arreglarlo: la tasa es la consecuencia, no la causa. Los
+    errores están en `work_units.error`, pero pedirle a alguien que abra el almacén para leer
+    por qué se cortó lo que acaba de correr es esconder la respuesta donde nadie la busca.
+    """
+
+    def __init__(
+        self, stage: str, *, total: int, threshold: float, failures: dict[str, str]
+    ) -> None:
+        self.stage = stage
+        self.total = total
+        self.threshold = threshold
+        self.failures = dict(failures)
+        self.rate = len(self.failures) / total if total else 0.0
+        distinct = list(dict.fromkeys(self.failures.values()))
+        detail = "; ".join(distinct[:3])
+        if len(distinct) > 3:
+            detail += f"; y {len(distinct) - 3} distinto(s) más"
+        super().__init__(
+            f"etapa {stage}: {len(self.failures)} de {total} unidades fallaron "
+            f"({self.rate:.0%}), por encima del {threshold:.0%} que aborta"
+            + (f". Lo que dijeron: {detail}" if detail else "")
+        )
 
 
 class BarrierViolation(RuntimeError):
@@ -261,8 +285,8 @@ class Ledger:
         rate = len(result.failures) / total
         if rate > self.execution.stage_failure_rate_abort:
             raise StageAborted(
-                f"stage {stage}: failure rate {rate:.0%} over {total} units "
-                f"exceeds {self.execution.stage_failure_rate_abort:.0%}"
+                stage, total=total, threshold=self.execution.stage_failure_rate_abort,
+                failures=result.failures,
             )
 
     def stage_report(self, stage: str) -> dict[str, Any]:

@@ -203,3 +203,43 @@ def test_one_sessions_unfinished_work_does_not_block_another(tmp_path):
     Ledger(conn, Execution(), session_id="b").barrier("etapa")   # no levanta
     with pytest.raises(BarrierViolation):
         Ledger(conn, Execution(), session_id="a").barrier("etapa")
+
+
+def test_an_aborted_stage_says_what_the_units_actually_said(tmp_path):
+    """La tasa es la consecuencia; la causa es lo único que permite arreglarlo.
+
+    El mensaje decía «failure rate 100% over 1 units» y nada más, y lo que había fallado quedaba
+    en `work_units.error` sin que ninguna interfaz lo mostrara. Quien lo veía tenía que abrir el
+    almacén para enterarse de que era un 401.
+    """
+    conn = connect(tmp_path)
+    ledger = Ledger(conn, Execution(stage_failure_rate_abort=0.10, max_retries=1),
+                    session_id="s", sleep=lambda _: None)
+
+    def explode(_payload):
+        raise RuntimeError("401 Unauthorized")
+
+    with pytest.raises(StageAborted) as raised:
+        ledger.run("iter_corefer", [("d1", {"x": 1})], explode)
+
+    aborted = raised.value
+    assert aborted.stage == "iter_corefer"
+    assert aborted.failures == {"d1": "RuntimeError: 401 Unauthorized"}
+    assert "401 Unauthorized" in str(aborted)
+    assert "iter_corefer" in str(aborted)
+
+
+def test_the_abort_message_does_not_repeat_the_same_error_ten_times(tmp_path):
+    """Diez unidades con el mismo 401 son un problema, no diez. Repetirlo entierra el resto."""
+    conn = connect(tmp_path)
+    ledger = Ledger(conn, Execution(stage_failure_rate_abort=0.10, max_retries=1),
+                    session_id="s", sleep=lambda _: None)
+
+    def explode(_payload):
+        raise RuntimeError("401 Unauthorized")
+
+    with pytest.raises(StageAborted) as raised:
+        ledger.run("iter_extract", [(f"d{i}", {"x": i}) for i in range(4)], explode)
+
+    assert str(raised.value).count("401 Unauthorized") == 1
+    assert len(raised.value.failures) >= 1

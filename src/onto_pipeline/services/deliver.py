@@ -16,7 +16,7 @@ from rdflib.namespace import OWL, RDF
 
 from .. import versioning
 from ..chunking import chunk_document
-from ..ingest import STAGE, load_block_objects
+from ..ingest import load_block_objects
 from ..report import build_report
 from ..store import Store
 from .workspace import Progress, StageError, Workspace, silent
@@ -148,7 +148,7 @@ def version_rows(workspace: Workspace) -> list[dict]:
 class Telemetry:
     stages: list[dict]
     page_classes: list[dict]
-    ingest_failures: list[dict]
+    failures: list[dict]
 
 
 def telemetry(workspace: Workspace) -> Telemetry:
@@ -173,12 +173,16 @@ def telemetry(workspace: Workspace) -> Telemetry:
         {"class": name, "reason": reason, "n": count}
         for (name, reason), count in sorted(tally.items(), key=lambda item: -item[1])
     ]
+    # Las fallas de **todas** las etapas, no sólo de la ingesta. Una unidad que falló y no se
+    # muestra en ningún lado es por lo que un `StageAborted` parecía no tener causa.
     failures = [
         dict(row) for row in workspace.conn.execute(
-            "SELECT key, error FROM work_units WHERE status = 'failed' AND stage = ?", (STAGE,)
+            "SELECT stage, key, error FROM work_units "
+            "WHERE session_id = ? AND status = 'failed' ORDER BY stage, key",
+            (session,),
         )
     ]
-    return Telemetry(stages=stages, page_classes=page_classes, ingest_failures=failures)
+    return Telemetry(stages=stages, page_classes=page_classes, failures=failures)
 
 
 def reports(workspace: Workspace, *, doc_id: str | None = None) -> list[Path]:

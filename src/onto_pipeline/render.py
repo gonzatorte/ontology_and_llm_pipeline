@@ -1016,8 +1016,14 @@ def telemetry(console: Console, result: deliver.Telemetry) -> None:
         classes.add_row(row["class"], str(row["n"]), row["reason"] or "")
     console.print(classes)
 
-    for row in result.ingest_failures:
-        console.print(f"[red]{row['key'][:12]}[/]: {row['error']}")
+    if not result.failures:
+        return
+    # Lo que dijo cada unidad que falló, con su etapa. Es lo que contesta «¿por qué se abortó?»,
+    # y estaba guardado en `work_units.error` sin que nada lo mostrara.
+    failures = Table("etapa", "unidad", "error")
+    for row in result.failures:
+        failures.add_row(row["stage"], row["key"][:12], (row["error"] or "")[:80])
+    console.print(failures)
 
 
 def chunks(console: Console, found: list) -> None:
@@ -1093,6 +1099,28 @@ def session_detail(console: Console, session, events: list, *, limit: int | None
     console.print(history)
     if len(events) > (limit or 20):
         console.print(f"[dim]… {len(events) - (limit or 20)} eventos más[/]")
+
+
+def stage_aborted(console: Console, aborted) -> None:
+    """Por qué se cortó la etapa, unidad por unidad.
+
+    La tasa es la consecuencia; lo que hace falta para arreglarlo es lo que dijo cada unidad que
+    falló. Antes el mensaje decía «100% de 1 unidad» y nada más, y la causa quedaba en
+    `work_units.error` sin que nada la mostrara.
+    """
+    console.print(f"[red]{aborted}[/]")
+    if not aborted.failures:
+        return
+    table = Table("unidad", "error")
+    for label, error in list(aborted.failures.items())[:10]:
+        table.add_row(label[:36], error[:90])
+    console.print(table)
+    if len(aborted.failures) > 10:
+        console.print(f"[dim]… {len(aborted.failures) - 10} más · `status` las muestra todas[/]")
+    console.print(
+        "[dim]`onto-pipeline status` lista las unidades fallidas de todas las etapas, con su "
+        "error completo.[/]"
+    )
 
 
 def plan(console: Console, survey, version_id: str) -> None:

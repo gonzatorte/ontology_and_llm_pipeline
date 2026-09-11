@@ -33,6 +33,7 @@ from . import orchestration, render
 from .config import Config
 from .providers import load_env_file
 from .services import StageError, Workspace, deliver, evaluate, iterate, prep
+from .telemetry import StageAborted
 
 ABORT = "q"      # «dejar de preguntar». No «a», que choca con «aceptar»
 SKIP = "s"
@@ -557,6 +558,10 @@ def _run_stage(console: Console, workspace: Workspace, step, stage: Stage) -> No
         # Un `StageError` es algo que el usuario tiene que arreglar, no un bug: se muestra y el
         # wizard sigue vivo, que es la diferencia con el CLI, que sale.
         console.print(f"[red]{exc}[/]")
+    except StageAborted as exc:
+        # La etapa se cortó por tasa de fallas. Lo que importa mostrar es **qué dijeron** las
+        # unidades, no el porcentaje: el porcentaje no se puede arreglar.
+        render.stage_aborted(console, exc)
 
 
 def _pass(console: Console, workspace: Workspace) -> None:
