@@ -20,14 +20,17 @@ normal, no un caso de borde — cuando vuelve, `orchestration.survey` dice dónd
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
+from rich.text import TextType
 
 from . import orchestration, render
 from .config import Config
@@ -35,7 +38,16 @@ from .providers import load_env_file
 from .services import StageError, Workspace, deliver, evaluate, iterate, prep
 from .telemetry import StageAborted
 
-ABORT = "q"      # «dejar de preguntar». No «a», que choca con «aceptar»
+try:
+    # Importarlo es lo que le da a `input()` edición de línea e historial. Sin él las flechas
+    # escriben `^[[D` en vez de mover el cursor.
+    import readline
+except ImportError:  # Windows no lo trae
+    readline = None
+
+# Corta la cola de este punto de decisión, no el wizard: lo que no se contestó queda abierto y
+# se sigue con la etapa siguiente. No «a», que choca con «aceptar».
+ABORT = "q"
 SKIP = "s"
 NONE = "n"
 
@@ -56,16 +68,53 @@ def _key(letter: str) -> str:
 # ─────────────────────────────  el diálogo mínimo  ─────────────────────────────
 
 
+# Las secuencias de color, que readline tiene que saber que no ocupan columnas.
+_ESCAPE = re.compile(r"(\x1b\[[0-9;]*m)")
+
+
+def _read_line(
+    console: Console, prompt: TextType, password: bool, stream: TextIO | None
+) -> str:
+    """El prompt se le entrega a `input()` en vez de imprimirse antes.
+
+    `rich` lo imprime por su cuenta y llama a `input()` sin prompt. Con readline cargado, cada
+    vez que readline redibuja la línea —subir en el historial, borrarla entera— vuelve al
+    margen, escribe el prompt que conoce, que es ninguno, y el de `rich` desaparece. Los colores
+    van entre \\001 y \\002 porque, si no, readline los cuenta como columnas y corre el cursor.
+    """
+    if readline is None or password or stream is not None or not console.is_terminal:
+        return console.input(prompt, password=password, stream=stream)
+    with console.capture() as capture:
+        console.print(prompt, end="")
+    return input(_ESCAPE.sub("\001\\1\002", capture.get()))
+
+
+class _LineEditing:
+    @classmethod
+    def get_input(
+        cls, console: Console, prompt: TextType, password: bool, stream: TextIO | None = None
+    ) -> str:
+        return _read_line(console, prompt, password, stream)
+
+
+class _Prompt(_LineEditing, Prompt):
+    pass
+
+
+class _Confirm(_LineEditing, Confirm):
+    pass
+
+
 def _ask(console: Console, question: str, *, default: str | None = None) -> str:
     try:
-        return Prompt.ask(question, default=default, console=console)
+        return _Prompt.ask(question, default=default, console=console)
     except (EOFError, KeyboardInterrupt) as exc:
         raise Abort from exc
 
 
 def _confirm(console: Console, question: str, *, default: bool = True) -> bool:
     try:
-        return Confirm.ask(question, default=default, console=console)
+        return _Confirm.ask(question, default=default, console=console)
     except (EOFError, KeyboardInterrupt) as exc:
         raise Abort from exc
 
@@ -380,7 +429,7 @@ def _decide_grey(console: Console, workspace: Workspace) -> None:
         for index, (label, _) in enumerate(options, start=1):
             console.print(f"  {_key(str(index))} {label}")
         console.print(f"  {_key(NONE)} ninguna — queda huérfana y la ve la inducción")
-        console.print(f"  {_key(SKIP)} saltear · {_key(ABORT)} dejar de preguntar")
+        console.print(f"  {_key(SKIP)} saltear · {_key(ABORT)} dejar el resto para después")
 
         choice = _ask(console, "¿Cuál es?", default=SKIP).strip().lower()
         if choice == ABORT:
@@ -462,7 +511,7 @@ def _decide_review(console: Console, workspace: Workspace) -> None:
         choice = _ask(
             console,
             f"{_key('a')}ceptar · {_key('r')}echazar · {_key(SKIP)} saltear · "
-            f"{_key(ABORT)} dejar de preguntar",
+            f"{_key(ABORT)} dejar el resto para después",
             default=SKIP,
         ).strip().lower()
         if choice == ABORT:

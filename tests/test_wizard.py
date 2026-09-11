@@ -7,6 +7,8 @@ default. Los tests de acá son las barandas de ese paso.
 
 from __future__ import annotations
 
+import io
+import re
 from pathlib import Path
 
 import pytest
@@ -183,3 +185,23 @@ def test_none_of_these_is_recorded_as_the_answer_it_is(tmp_path, console, monkey
     monkeypatch.setattr(wizard, "_ask", lambda *_args, **_kwargs: next(answers))
     wizard._decide_grey(console, _workspace(tmp_path))
     assert answered == [{"none_of_these": True}]
+
+
+# ─────────────────────────  escribir la respuesta  ─────────────────────────
+
+
+@pytest.mark.skipif(wizard.readline is None, reason="sin readline no hay línea que redibujar")
+def test_the_prompt_is_handed_to_readline_so_redrawing_the_line_keeps_it(monkeypatch):
+    """`rich` imprime el prompt por su cuenta y llama a `input()` sin prompt. Con readline
+    cargado, subir en el historial redibuja la línea desde el margen con el prompt que readline
+    conoce —ninguno—: en una terminal quedaba `first es?: aXbc` en vez de `¿Cuál es?: first`.
+    Y un color que readline no sabe invisible le corre el cursor."""
+    handed: list[str] = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": handed.append(prompt) or "x")
+    console = Console(file=io.StringIO(), force_terminal=True, color_system="standard")
+
+    assert wizard._ask(console, "[bold]¿Cuál es?[/]") == "x"
+
+    assert "¿Cuál es?" in handed[0]
+    assert "\x1b[" in handed[0]
+    assert "\x1b" not in re.sub("\001[^\002]*\002", "", handed[0])
