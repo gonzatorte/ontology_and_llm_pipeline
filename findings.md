@@ -53,7 +53,7 @@ sesión movió el contexto— está en la sección de coordinación de
 **El entregable es el sistema y su caracterización, sin dominio comprometido.** El spec lo dice
 en `SCOPE-PURPOSE` —"sin tarea downstream comprometida"— y conviene tenerlo a la vista porque durante un
 tiempo la documentación de este repositorio afirmó lo contrario: que había un "caso de
-aplicación" (la semilla de metodología cualitativa) al que el proyecto debía volver después de
+aplicación" (la ontología inicial de metodología cualitativa) al que el proyecto debía volver después de
 calibrar. **No lo hay.** Todos los casos de uso —cada uno un par (corpus, ontología)— son instrumentos, y lo que califica
 al sistema es cómo se comporta a través de ellos, no cómo le va en uno.
 
@@ -208,15 +208,16 @@ huérfanos casi no se movió** —18,0% contra 17,3% en 0,80— porque sólo 546
 cambiaron de lado: la cifra anterior era del orden correcto **por accidente**, no porque el
 holdout no importara.
 
-### FINDINGS-MEASURED-PAIR-MISMATCH — El par corpus/semilla no se corresponde — n = 495.213 caracteres
+### FINDINGS-MEASURED-PAIR-MISMATCH — El par corpus/ontología inicial no se corresponde — n = 495.213 caracteres
 
-La semilla es de metodología cualitativa; el corpus son papers de política de ciencia abierta.
+La ontología inicial es de metodología cualitativa; el corpus son papers de política de
+ciencia abierta.
 `field note`, `informant`, `ethnograph`, `coding scheme`, `thematic analysis`,
 `content analysis`, `grounded theory` y `theoretical framework` aparecen **cero veces**.
 
 Confirmado por segunda vía al construir `enrich`: sobre 1.000 bloques utilizables, el filtro de
 señales definitorias encuentra 5 pasajes en 3 documentos para "open science" y **cero** para las
-34 clases de la semilla. No es una falla de la etapa; es la etapa reportando el desajuste.
+34 clases de la ontología inicial. No es una falla de la etapa; es la etapa reportando el desajuste.
 
 Consecuencia: una tasa de falsos huérfanos medida sobre este caso de uso no sería mala, **sería sin
 significado**. Por eso el instrumento de calibración es un caso de uso publicado y separado.
@@ -277,7 +278,7 @@ Una de las preguntas, correcta, citaba un pasaje que anuncia las secciones del p
 
 ### FINDINGS-MEASURED-QUALITATIVE-PAIR — Estado del par cualitativo — retirado el 2026-09-09
 
-Estos números son de la dupla semilla cualitativa + corpus de ciencia abierta, que **ya no se
+Estos números son de la dupla ontología inicial cualitativa + corpus de ciencia abierta, que **ya no se
 usa**: el proyecto no tiene dominio comprometido y todos los casos de uso son instrumentos (ver
 [`technical_debt.md`](technical_debt.md), `DEBT-QUALITATIVE-PAIR`). Quedan acá porque son la única corrida de
 punta a punta que hubo hasta ahora, y porque el eco léxico que muestran es sobre el método.
@@ -296,7 +297,7 @@ contra qué versión.
 
 ### FINDINGS-MEASURED-LEXICAL-ECHO — Eco léxico, y dónde está de verdad el problema del homónimo
 
-**El eco léxico es el modo de falla que ningún umbral filtra.** Sobre la semilla, 24 de 34 clases
+**El eco léxico es el modo de falla que ningún umbral filtra.** Sobre la ontología inicial, 24 de 34 clases
 superan 0,70 y **11 de esas 24 son eco léxico**: la mención es la palabra corriente que da nombre
 a la clase, no una instanciación. Sobre el corpus real no mejora al cambiar de versión: en `v2`
 las 32 automáticas eran **todas** eco léxico (`question` 0.998, `information` 0.998,
@@ -452,7 +453,7 @@ Primera corrida completa contra una respuesta conocida. MaterioMiner, 4 publicac
 
 | Etapa | Resultado |
 |---|---|
-| normalize-seed | 447 entidades, 14 erratas · glosas sólo para las que no tenían |
+| normalize | 447 entidades, 14 erratas · glosas sólo para las que no tenían |
 | ingest | 476 bloques, 23 chunks |
 | extract | 1.309 menciones, 13 sin ubicar |
 | match | 124 automáticas, 305 zona gris, **880 huérfanas (67%)** |
@@ -546,7 +547,7 @@ aplicarlo igual requiere `--apply`, que el spec permite porque son advertencias 
 ### FINDINGS-DECIDED-VALIDATION — La cadena de validación (`ITER-BRANCH` `ITER-VALIDATE`)
 
 - **El filtro de evidencia se aplica a `textual` y a nada más.** "Todo axioma sin cita se descarta"
-  borraría justamente los puentes que hacen útil a la semilla: un axioma `world_knowledge` no
+  borraría justamente los puentes que hacen útil a la ontología inicial: un axioma `world_knowledge` no
   tiene cita por construcción, y eso es para lo que existe.
 - **El ITER-VALIDATE-5-PITFALLS es un subconjunto local del catálogo OOPS!, no OOPS!.** El scanner real es un
   servicio web, y mandarle la ontología de alguien a un tercero es una decisión de su dueño, no un

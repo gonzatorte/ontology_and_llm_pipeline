@@ -20,7 +20,7 @@ def config(tmp_path: Path) -> Config:
         {
             "paths": {
                 "corpus_root": tmp_path / "corpus",
-                "seed_ontology": tmp_path / "seed.rdf",
+                "initial_ontology": tmp_path / "seed.rdf",
                 "work_dir": tmp_path / "work",
             }
         }

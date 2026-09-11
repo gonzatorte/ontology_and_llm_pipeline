@@ -12,7 +12,7 @@ class Paths(BaseModel):
     # Los dos apuntan adentro de `use_cases/`, que es donde vive todo par (corpus, ontología).
     # Que el material sea un symlink a algo de afuera es asunto del caso de uso, no de acá.
     corpus_root: Path
-    seed_ontology: Path
+    initial_ontology: Path
     work_dir: Path = Path("data")
     reasoner_lib: Path = Path("lib")
     # Dónde viven los casos de uso: un directorio por (corpus, ontología), cada uno con su
@@ -128,7 +128,13 @@ class Axiomatization(BaseModel):
     n_candidates: int = 6
 
 
-class Seed(BaseModel):
+class InitialOntology(BaseModel):
+    """La ontología que se enriquece, y cómo se la normaliza (`PREP-NORMALIZE`).
+
+    Se llamaba «semilla». El nombre decía de dónde parte y no qué es: lo que entra es una
+    ontología a la que el corpus le agrega clases y glosas, y sale otra versión de ella.
+    """
+
     base_iri: str = "https://ontology.local/id/"
     label_divergence_threshold: float = 0.8
 
@@ -312,7 +318,7 @@ class Config(BaseModel):
     reasoner: Reasoner = Reasoner()
     upper_ontology: str = "none"
     parser: Parser = Parser()
-    seed: Seed = Seed()
+    initial_ontology: InitialOntology = InitialOntology()
     chunking: Chunking = Chunking()
     extraction: Extraction = Extraction()
     bridging: Bridging = Bridging()
@@ -338,7 +344,7 @@ class Config(BaseModel):
         # Relative paths resolve against the config file, so the CLI works from any cwd.
         base = Path(path).resolve().parent
         config.paths.corpus_root = (base / config.paths.corpus_root).resolve()
-        config.paths.seed_ontology = (base / config.paths.seed_ontology).resolve()
+        config.paths.initial_ontology = (base / config.paths.initial_ontology).resolve()
         config.paths.work_dir = (base / config.paths.work_dir).resolve()
         config.paths.reasoner_lib = (base / config.paths.reasoner_lib).resolve()
         config.paths.use_cases_root = (base / config.paths.use_cases_root).resolve()

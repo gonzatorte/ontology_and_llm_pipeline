@@ -29,7 +29,7 @@ ONTOLOGY = """
 
 
 def test_seed_classes_carry_label_and_gloss():
-    classes = annotate.seed_classes(Graph().parse(data=ONTOLOGY, format="turtle"))
+    classes = annotate.inventory_classes(Graph().parse(data=ONTOLOGY, format="turtle"))
     assert [c.label for c in classes] == ["Subject", "Technique"], "unlabelled ones are skipped"
     assert classes[1].gloss.startswith("A procedure")
     assert classes[0].gloss == ""
@@ -50,7 +50,7 @@ def test_the_tool_embeds_the_markdown_verbatim(tmp_path):
     markdown = 'A <table> & "quotes" — ünïcode\n\nsecond paragraph'
     target = annotate.build(
         doc_id="doc1", markdown=markdown, markdown_hash="sha256:abc",
-        classes=annotate.seed_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
+        classes=annotate.inventory_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
         pages=[[0, 46, 1]], target=tmp_path / "doc1.html",
     )
     html = target.read_text(encoding="utf-8")
@@ -62,7 +62,7 @@ def test_the_tool_embeds_the_markdown_verbatim(tmp_path):
 def test_the_payload_carries_what_the_export_has_to_reproduce(tmp_path):
     target = annotate.build(
         doc_id="doc1", markdown="text", markdown_hash="sha256:abc",
-        classes=annotate.seed_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
+        classes=annotate.inventory_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
         pages=[[0, 4, 1]], target=tmp_path / "doc1.html",
     )
 

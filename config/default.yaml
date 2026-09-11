@@ -6,7 +6,7 @@ paths:
   # cualquier otro los datos no se versionan: acá son dos symlinks a material que está fuera del
   # repo. Ver use_cases/qualitative/PROCEDENCIA.md.
   corpus_root: ../use_cases/qualitative/corpus
-  seed_ontology: ../use_cases/qualitative/ontology.rdf
+  initial_ontology: ../use_cases/qualitative/ontology.rdf
   work_dir: ../data              # SQLite stores, markdown, crops, reports
   reasoner_lib: ../lib           # OWL API, ELK, HermiT (scripts/fetch-jars.sh)
   # Casos de uso: corpus publicado anotado + su ontología, uno por subdirectorio con su
@@ -78,7 +78,9 @@ chunking:
   max_chars: 6000        # a table is atomic and may exceed this
 
 # ─── Seed normalization (PREP-NORMALIZE) ─────────────────────────────
-seed:
+# La ontología que se enriquece. Se llamaba «semilla»; el nombre decía de dónde parte y no
+# qué es — lo que entra es una ontología a la que el corpus le agrega clases y glosas.
+initial_ontology:
   base_iri: https://ontology.local/id/   # opaque IRIs; the original is kept as provenance
   label_divergence_threshold: 0.8        # below it, a label pair is flagged, not assumed
                                          # to be a translation

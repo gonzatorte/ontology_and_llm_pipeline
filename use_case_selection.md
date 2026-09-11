@@ -104,10 +104,10 @@ Existe además el **CRAFT Shared Task 2019**, con evaluador oficial y baselines 
 números tienen contra qué compararse.
 
 **Una trampa operativa, para cuando se corra el pipeline entero sobre éste:**
-`seed_ontology` tiene que apuntar a `ontology/cl-base.owl` y **no** al `.obo` — rdflib no parsea
+`initial_ontology` tiene que apuntar a `ontology/cl-base.owl` y **no** al `.obo` — rdflib no parsea
 OBO; el `.owl` trae 123.864 tripletas y 7.159 clases. El `.obo` lo lee `use_cases.py` con su
 propio reader, que es otra cosa. Consecuencia: `CL+extensions.obo` **no tiene equivalente en
-OWL**, así que la semilla del pipeline no incluye las extension classes que el banco sí usa. Hay
+OWL**, así que la ontología inicial del pipeline no incluye las extension classes que el banco sí usa. Hay
 que decidir si eso importa antes de leer los números.
 
 ### Segundo: MaterioMiner (verificado el 2026-09-09)
@@ -115,7 +115,7 @@ que decidir si eso importa antes de leer los números.
 428 clases, 4 publicaciones de mecánica de materiales y fatiga, 2.229 menciones gold anotadas por
 tres expertos contra la Materials Mechanics Ontology. Entra por dos razones y ninguna es que sea
 más rica que CL: es el **único dominio no biomédico** del conjunto, y con 428 clases es el
-análogo más cercano que hay a una semilla chica — mismo orden de inventario, misma profundidad
+análogo más cercano que hay a una ontología inicial chica — mismo orden de inventario, misma profundidad
 corta. Es el punto bajo de la curva de tamaño.
 
 Trajo dos cosas al banco: el lector `webanno`, y que `load_targets` lea inventarios en RDF además

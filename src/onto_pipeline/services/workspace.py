@@ -81,7 +81,7 @@ class Workspace:
         *,
         session_id: str | None = None,
         corpus_root: Path | None = None,
-        seed_ontology: Path | None = None,
+        initial_ontology: Path | None = None,
         work_dir: Path | None = None,
     ) -> Workspace:
         """Abrir el almacén y elegir sobre qué sesión de usuario se va a trabajar.
@@ -93,7 +93,7 @@ class Workspace:
         overrides: dict[str, Path] = {}
         for name, value in (
             ("corpus_root", corpus_root),
-            ("seed_ontology", seed_ontology),
+            ("initial_ontology", initial_ontology),
             ("work_dir", work_dir),
         ):
             if value is not None:
@@ -146,7 +146,7 @@ class Workspace:
         if row is None:
             raise StageError(
                 f"no version {version!r}" if version
-                else "no ontology version; run normalize-seed first"
+                else "no ontology version; run `normalize` first"
             )
         return row["id"]
 

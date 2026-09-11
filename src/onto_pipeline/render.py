@@ -47,7 +47,7 @@ def ingestion(console: Console, result: prep.Ingestion) -> None:
         console.print(f"[red]{label}[/]: {error}")
 
 
-def normalization(console: Console, result: prep.SeedNormalization) -> None:
+def normalization(console: Console, result: prep.Normalization) -> None:
     if result.committed is not None:
         console.print(
             f"[green]committed[/] version {result.committed.id} "
@@ -838,7 +838,7 @@ def brat_export(console: Console, result: evaluate.BratExport) -> None:
             table.add_row(document.doc_id, "", "", "", f"[red]{document.error}[/]")
             continue
         table.add_row(
-            document.doc_id, str(document.mentions), str(document.in_seed),
+            document.doc_id, str(document.mentions), str(document.in_inventory),
             str(document.relations), "[green]exported[/]",
         )
     console.print(table)
@@ -1047,7 +1047,7 @@ def delivery(console: Console, result: deliver.Delivery) -> None:
     table.add_row("TBox triples", str(result.tbox_triples))
     table.add_row("ABox quads", str(result.abox_quads) if result.abox_included else "not included")
     table.add_row("classes", str(result.classes))
-    table.add_row("  in the root version", str(result.seed_classes))
+    table.add_row("  in the root version", str(result.inventory_classes))
     table.add_row("  minted by the pipeline", str(result.minted_classes))
     console.print(table)
     for warning in result.warnings:

@@ -103,7 +103,7 @@ class GlossContext:
 
 
 @dataclass
-class NormalizedSeed:
+class NormalizedOntology:
     graph: Graph
     entities: list[Entity]
     typos: list[TypoFinding]
@@ -137,10 +137,10 @@ def load_ontology(path: Path, *, reasoner_lib: Path | None = None) -> Graph:
         ) from exc
 
 
-def normalize_seed(
+def normalize_initial_ontology(
     path: Path, base_iri: str, *, divergence_threshold: float,
     reasoner_lib: Path | None = None,
-) -> NormalizedSeed:
+) -> NormalizedOntology:
     source = load_ontology(path, reasoner_lib=reasoner_lib)
     mapping = _mint_opaque_iris(source, base_iri)
     graph = _rewrite(source, mapping)
@@ -152,7 +152,7 @@ def normalize_seed(
     entities.sort(key=lambda entity: entity.original_iri)
     _write_labels(graph, entities)
 
-    return NormalizedSeed(graph=graph, entities=entities, typos=detect_typos(entities))
+    return NormalizedOntology(graph=graph, entities=entities, typos=detect_typos(entities))
 
 
 def _mint_opaque_iris(graph: Graph, base_iri: str) -> dict[URIRef, str]:
@@ -417,7 +417,7 @@ def _naming_pattern(entities: list[Entity]) -> list[TypoFinding]:
     ]
 
 
-def gloss_contexts(seed: NormalizedSeed) -> list[GlossContext]:
+def gloss_contexts(seed: NormalizedOntology) -> list[GlossContext]:
     """El vecindario estructural de cada clase **que todavía no tiene definición**.
 
     PREP-NORMALIZE-GLOSSES es un *bootstrap*: escribe la glosa que falta, no reemplaza la que hay.

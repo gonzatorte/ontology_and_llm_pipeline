@@ -483,7 +483,7 @@ DECISIONS = {
 # ─────────────────────────────  la semilla  ─────────────────────────────
 
 
-def _normalize_seed(console: Console, workspace: Workspace) -> bool:
+def _normalize_initial(console: Console, workspace: Workspace) -> bool:
     """`PREP-NORMALIZE`, que no está en el survey porque pasa una sola vez y antes que todo.
 
     Sin versión no hay contra qué tipar, así que el wizard la trata como precondición y no
@@ -630,7 +630,7 @@ def run(
     """El wizard entero: elegir sesión, preparar, iterar, entregar."""
     try:
         workspace = _open(console, config_path, session_id, env_file)
-        if not _normalize_seed(console, workspace):
+        if not _normalize_initial(console, workspace):
             return
         while True:
             _pass(console, workspace)

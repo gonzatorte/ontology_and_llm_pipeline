@@ -208,7 +208,7 @@ def mint_iri(base_iri: str, label: str, proposal_id: str) -> str:
     """Opaque, like every other entity (PREP-NORMALIZE-IRIS), and derived so a re-run is stable."""
     import uuid
 
-    from .seed import _IRI_NAMESPACE
+    from .initial_ontology import _IRI_NAMESPACE
 
     return base_iri + str(uuid.uuid5(_IRI_NAMESPACE, f"induced:{proposal_id}:{label}"))
 

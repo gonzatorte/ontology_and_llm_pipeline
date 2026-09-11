@@ -112,7 +112,7 @@ def distribution(use_case: UseCase, ranking: Ranking) -> Distribution:
     result = Distribution()
     for document in use_case.documents:
         for mention in document.mentions:
-            if mention.gold_class is None or not mention.in_seed:
+            if mention.gold_class is None or not mention.in_inventory:
                 continue
             score = ranking.score.get(mention.id)
             if score is None:

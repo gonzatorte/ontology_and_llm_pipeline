@@ -167,7 +167,7 @@ def test_the_contributing_documents_are_recorded_in_the_graph_too():
 def test_every_annotation_it_writes_is_declared_by_the_seed():
     """An undeclared annotation property leaves OWL 2 DL, and the symptom is not an error —
     it is ELK quietly dropping to a fragment too small to filter with."""
-    from onto_pipeline.seed import DECLARED_ANNOTATIONS
+    from onto_pipeline.initial_ontology import DECLARED_ANNOTATIONS
 
     assert set(en._PREDICATES.values()) <= set(DECLARED_ANNOTATIONS)
 

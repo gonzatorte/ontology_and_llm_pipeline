@@ -20,11 +20,11 @@ cuál y cómo obtenerlo:
 |---|---|---|---|
 | [`craft-cl`](use_cases/craft-cl/PROCEDENCIA.md) | CRAFT v5.0.2 | Cell Ontology (OBO Foundry) | anotaciones CC BY 3.0; artículos del subconjunto Open Access de PMC; la ontología, CC BY 4.0 |
 | [`materiominer`](use_cases/materiominer/PROCEDENCIA.md) | MaterioMiner v1.0.1 | Materials Mechanics Ontology | CC BY 4.0, anotaciones y publicaciones |
-| `qualitative` | corpus de trabajo, no publicado | semilla de metodología cualitativa | no se distribuye |
+| `qualitative` | corpus de trabajo, no publicado | ontología inicial de metodología cualitativa | no se distribuye |
 
 Los jars del razonador (OWL API, ELK, HermiT) los baja `scripts/fetch-jars.sh` de Maven Central y
 tampoco se versionan: cada uno conserva su licencia.
 
 **Nada de lo que produce el pipeline hereda esta licencia automáticamente.** Una ontología
-enriquecida es obra derivada del corpus y de la ontología semilla que se le dieron de entrada;
+enriquecida es obra derivada del corpus y de la ontología inicial que se le dieron de entrada;
 qué se puede hacer con ella lo dicen las licencias de **esas** dos cosas, no ésta.

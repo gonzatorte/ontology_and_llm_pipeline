@@ -3,7 +3,7 @@
 The exporter is DELIVERABLES-PENDING-BRAT-EXPORTER; the format is EVAL-ANNOTATION-FORMAT.
 
 The format is the project's own JSONL for one reason: the annotation carries a field no
-standard contemplates — `in_seed` — and it is exactly the field that defines the false-orphan
+standard contemplates — `in_inventory` — and it is exactly the field that defines the false-orphan
 metric. `gold_class: null` is a third state, a valid mention with no assignable class, which
 is a different signal from `misextracted`.
 
@@ -43,7 +43,7 @@ class Mention:
     span: tuple[int, int]
     text: str
     gold_class: str | None = None
-    in_seed: bool = False
+    in_inventory: bool = False
     entity_id: str | None = None
 
 
@@ -110,7 +110,7 @@ def _document(entry: dict) -> AnnotatedDocument:
                 span=(mention["span"][0], mention["span"][1]),
                 text=mention["text"],
                 gold_class=mention.get("gold_class"),
-                in_seed=bool(mention.get("in_seed", False)),
+                in_inventory=bool(mention.get("in_inventory", False)),
                 entity_id=mention.get("entity_id"),
             )
             for mention in entry.get("mentions", [])
@@ -153,7 +153,7 @@ def score(document: AnnotatedDocument, predicted: dict[str, str | None]) -> Orph
             continue  # a valid mention with no assignable class: not the matcher's failure
         assigned = predicted.get(mention.id)
         if assigned is None:
-            target = report.false_orphans if mention.in_seed else report.genuine_orphans
+            target = report.false_orphans if mention.in_inventory else report.genuine_orphans
             target.append(mention.id)
         elif assigned == mention.gold_class:
             report.correct.append(mention.id)
@@ -165,7 +165,7 @@ def score(document: AnnotatedDocument, predicted: dict[str, str | None]) -> Orph
 def export_brat(document: AnnotatedDocument, markdown: str, out_dir: Path) -> list[Path]:
     """`.txt` + `.ann`, plus the `markdown_hash` the offsets belong to.
 
-    `in_seed` survives only as an ad-hoc attribute — the single loss against the standard
+    `in_inventory` survives only as an ad-hoc attribute — the single loss against the standard
     format, and the reason the project's own JSONL stays the source of truth.
     """
     out_dir = Path(out_dir)
@@ -185,8 +185,8 @@ def export_brat(document: AnnotatedDocument, markdown: str, out_dir: Path) -> li
 
     attribute = 1
     for mention in document.mentions:
-        if mention.in_seed:
-            lines.append(f"A{attribute}\tInSeed {term_of[mention.id]}")
+        if mention.in_inventory:
+            lines.append(f"A{attribute}\tInInventory {term_of[mention.id]}")
             attribute += 1
 
     # A shared entity_id is a coreference chain; BRAT writes those as equivalence groups.

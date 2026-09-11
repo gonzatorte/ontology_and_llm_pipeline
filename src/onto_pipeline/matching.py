@@ -449,7 +449,7 @@ class Matcher:
         if normalized_left in synonyms.get(normalized_right, set()) or (
             normalized_right in synonyms.get(normalized_left, set())
         ):
-            return Decision(left.id, right.id, MERGE, "synonym_declared_in_seed", 1.0)
+            return Decision(left.id, right.id, MERGE, "synonym_declared_in_ontology", 1.0)
 
         if _is_generic(left.text) or _is_generic(right.text):
             # A generic phrase says nothing about identity across documents, and asking about

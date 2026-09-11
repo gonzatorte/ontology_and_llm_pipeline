@@ -63,7 +63,7 @@ ya serializa correctamente.
 
 ### DEBT-CACHE-INFERRED-GRAPH — Cachear el grafo inferido por versión
 
-`cq eval --infer` materializa las entailments con HermiT en cada corrida. Sobre la semilla son
+`cq eval --infer` materializa las entailments con HermiT en cada corrida. Sobre la ontología inicial son
 1.087 → 1.426 tripletas y tarda poco, pero es determinista dado el estado de la ontología: la
 versión ya tiene un hash de estado, así que el grafo inferido se puede guardar contra él y
 recomputar solo cuando el estado cambia.
@@ -153,7 +153,7 @@ menciones (precisión 72,3%); ahora `auto_merge` está en 0,95 (precisión 97,9%
 usuario en vez de descartarla como huérfana.
 
 **Lo que sigue sin resolverse es transferirlos.** Se midieron contra un inventario de 3.418
-clases y la semilla de aplicación tiene 34: con más candidatos hay más chances de que algo
+clases y la ontología inicial de aplicación tiene 34: con más candidatos hay más chances de que algo
 espurio supere el umbral, así que el punto de operación se mueve con el tamaño y no se sabe
 cuánto. Esa curva es exactamente la tarea «más pares» del plan —179, 3.419 y ~40k clases— y hasta
 medirla, los valores de arriba son un punto de partida defendible, no un valor final.
@@ -215,7 +215,7 @@ agregar patrones de a uno sino medir el recall del filtro contra un corpus con d
 anotadas; hasta entonces, cuántos pasajes se pierden es desconocido, no cero.
 
 Verificado sobre el corpus real: 1.000 bloques utilizables, y "open science" da 5 pasajes en 3
-documentos con las señales `is a` y `means`. Sobre las 34 clases de la semilla da **cero**, que
+documentos con las señales `is a` y `means`. Sobre las 34 clases de la ontología inicial da **cero**, que
 es el desajuste temático de la `DEBT-QUALITATIVE-PAIR` y no una falla del filtro.
 
 Falta lo que cierra el bucle: **`match` no se re-ejecuta solo sobre las huérfanas cuando las
@@ -448,7 +448,7 @@ que hay que medir. Los pares de la tarea «más pares» son el banco para eso.
 
 ### DEBT-QUALITATIVE-PAIR — El par cualitativo, retirado — y lo que sí dejó
 
-La semilla de metodología cualitativa contra el corpus de política de ciencia abierta **está
+La ontología inicial de metodología cualitativa contra el corpus de política de ciencia abierta **está
 fuera de circulación** desde el 2026-09-09. No es un caso de aplicación al que haya que volver:
 el proyecto no tiene dominio comprometido —el entregable es el sistema y su caracterización a
 través de pares— y esa dupla fue el andamio para tener con qué probar mientras no existía un par
@@ -486,7 +486,7 @@ números que se citaron de ahí están fechados en [`findings.md`](findings.md).
 
 **Cerrada el 2026-09-10** con `wizard`, la segunda interfaz. Los cinco puntos de decisión del
 spec —rama (`ITER-BRANCH`), zona gris (`ITER-MATCH`), propiedad funcional (`ITER-APPLY`),
-validación de CQ (`PREP-CQ-GENERATED`), errata de la semilla (`PREP-NORMALIZE`)— ya tenían por
+validación de CQ (`PREP-CQ-GENERATED`), errata de la ontología inicial (`PREP-NORMALIZE`)— ya tenían por
 dónde contestarse desde el CLI de banderas; lo que faltaba era una interfaz encima, y ahora
 está: `wizard` recorre el plan de `orchestration.survey`, corre lo que se corre solo y pregunta
 en cada punto en vez de frenar.
@@ -521,9 +521,9 @@ por accidente:
 
 ### DEBT-RUN-PARAMETERS — Sobre qué corre el pipeline es un parámetro, y vive en la configuración
 
-`paths.corpus_root` y `paths.seed_ontology` están en `config/default.yaml`, junto a los
+`paths.corpus_root` y `paths.initial_ontology` están en `config/default.yaml`, junto a los
 umbrales. No son la misma clase de cosa: un umbral es una decisión sobre **cómo** se comporta
-el pipeline y el par (corpus, semilla) es **sobre qué** corre. Correr el mismo pipeline sobre
+el pipeline y el par (corpus, ontología inicial) es **sobre qué** corre. Correr el mismo pipeline sobre
 dos casos de uso hoy pide dos archivos de configuración que difieren en dos líneas.
 
 Como paliativo, `wizard` pregunta el par siempre —aunque el archivo lo tenga— y
@@ -593,7 +593,7 @@ valor no implementado en vez de aceptarlo. Ese es el patrón para las que quedan
 preguntas que **el spec mismo declara sin resolver**, y siguen sin resolverse — implementar la
 etapa no las contesta, sólo las vuelve alcanzables.
 
-- **Expiración de rechazos (`ITER-FEEDBACK`, riesgo `RISKS-REJECTION-EXPIRY`).** Con semilla reorganizable un rechazo no es
+- **Expiración de rechazos (`ITER-FEEDBACK`, riesgo `RISKS-REJECTION-EXPIRY`).** Con una ontología inicial reorganizable un rechazo no es
   permanente: lo rechazado en la iteración 3 puede ser correcto en la 9 porque la estructura
   cambió. Bloquearlo para siempre acorrala el proceso; no bloquearlo produce un loop. La
   política elegida —registrar el rechazo relativo al estado de la ontología y expirarlo cuando
@@ -627,7 +627,7 @@ Hoy el matcher rankea cada mención contra las clases como si fueran independien
 también puntúan, penalizar una cuyos hermanos puntúan idéntico— es el mecanismo natural contra
 el eco léxico, que es el modo de falla que ningún umbral filtra (punto 7).
 
-No se puede medir sobre la semilla actual: 34 clases, profundidad 3, seis raíces. Sí sobre un
+No se puede medir sobre la ontología inicial actual: 34 clases, profundidad 3, seis raíces. Sí sobre un
 caso de uso con jerarquía profunda, donde entra como una variable más del barrido de
 umbrales.
 
@@ -670,7 +670,7 @@ lugar equivocado:
 
 **Está en el tipado.** Nada impide que `cell` en sentido de célula clandestina tipe a la clase
 `Cell` de biología con coseno alto: es eco léxico puro, es el modo de falla que el barrido midió
-—11 de 24 clases sobre umbral en la semilla, y las 32 automáticas del corpus real— y ningún
+—11 de 24 clases sobre umbral en la ontología inicial, y las 32 automáticas del corpus real— y ningún
 umbral lo filtra, porque la palabra coincide con el nombre de la clase y **el contexto no entra
 en la comparación**.
 
@@ -764,15 +764,15 @@ categorías~~ → ~~recuperación por embedding~~ → ~~forma normal~~. Los cuat
 > re-parseo que les cambia el identificador a todos. Queda el registro de qué era, porque el
 > diagnóstico vale para la próxima etapa que se tope con lo mismo.
 
-Descubierto intentando usar la Cell Ontology como semilla.
+Descubierto intentando usar la Cell Ontology como ontología inicial.
 
 `versioning.logical_axioms` canonicaliza los nodos en blanco con `to_canonical_graph` de rdflib
-antes de hashear. Sobre la semilla de 34 clases es instantáneo. Sobre `cl-base.owl` —**123.864
+antes de hashear. Sobre la ontología inicial de 34 clases es instantáneo. Sobre `cl-base.owl` —**123.864
 tripletas, de las cuales el 73,2% involucra un nodo en blanco**, porque así se representan las
 restricciones OWL y las anotaciones de axioma— **no termina en 7 minutos**. Ordenar las mismas
 tripletas sin canonicalizar tarda **0,21 s**.
 
-Y `normalize-seed` lo llama **tres veces**: dos para el hash de estado y una más en el diff.
+Y `normalize` lo llama **tres veces**: dos para el hash de estado y una más en el diff.
 
 **No alcanza con sacarlo.** La canonicalización está por una razón: dos grafos que difieren sólo
 en los identificadores de sus nodos en blanco son el mismo estado, y de ese hash depende la

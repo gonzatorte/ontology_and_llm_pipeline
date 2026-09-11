@@ -1037,7 +1037,7 @@ def axiomatize(
         for proposal_id, answer in result.outputs.items()
     }
     assembly = axiomatization.assemble(
-        proposals, judgements, base_iri=config.seed.base_iri,
+        proposals, judgements, base_iri=config.initial_ontology.base_iri,
         label_to_iri=label_to_iri, support=support,
     )
     # `ITER-VALIDATE-6-EVIDENCE`, antes de guardar nada: un axioma `textual` tiene que citar las
@@ -1271,7 +1271,9 @@ def _situation(config, proposals: dict, axioms, labels: dict[str, str]):
     propuesta — la misma entrada da el mismo IRI, que es lo que hace estable un re-run.
     """
     minted = {
-        proposal_id: axiomatization.mint_iri(config.seed.base_iri, row["label"], proposal_id)
+        proposal_id: axiomatization.mint_iri(
+            config.initial_ontology.base_iri, row["label"], proposal_id
+        )
         for proposal_id, row in proposals.items()
     }
     parent_by_iri = {
@@ -1547,7 +1549,7 @@ def survey_conflicts(workspace: Workspace, *, version: str | None = None) -> Con
     graph = workspace.graph(version_id)
     labels = versioning.label_index(graph)
 
-    rules = mapping.rules_from_config(config.mapping, config.seed.base_iri)
+    rules = mapping.rules_from_config(config.mapping, config.initial_ontology.base_iri)
     rows, typings = mapping.load_inputs(conn, version_id, session_id=session)
     if not rows:
         raise StageError("no mentions; run extract first")
@@ -1789,9 +1791,9 @@ def regenerate(
     version_id = workspace.resolve_version(version)
     # Las marcas de falsedad viajan como excepciones por caso, así que una refutación llega al
     # hash de las reglas.
-    rules = mapping.rules_from_config(config.mapping, config.seed.base_iri).with_exceptions(
-        conflicts.as_exceptions(conn, session_id=session)
-    )
+    rules = mapping.rules_from_config(
+        config.mapping, config.initial_ontology.base_iri
+    ).with_exceptions(conflicts.as_exceptions(conn, session_id=session))
     rows, typings = mapping.load_inputs(conn, version_id, session_id=session)
     if not rows:
         raise StageError("no mentions; run extract first")

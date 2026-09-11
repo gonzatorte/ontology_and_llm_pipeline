@@ -5,6 +5,7 @@ import pytest
 from onto_pipeline import glosses
 from onto_pipeline.config import Execution, Llm
 from onto_pipeline.db import connect
+from onto_pipeline.initial_ontology import GlossContext
 from onto_pipeline.llm import (
     NoProvider,
     ProviderNotConfigured,
@@ -13,7 +14,6 @@ from onto_pipeline.llm import (
     settings,
 )
 from onto_pipeline.llm import run as run_stage
-from onto_pipeline.seed import GlossContext
 from onto_pipeline.telemetry import Ledger
 
 SESSION = "test-1"

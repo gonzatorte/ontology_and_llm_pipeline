@@ -9,7 +9,7 @@ entregable es el sistema y su caracterización *a través* de casos de uso (`SCO
 tarea downstream comprometida"). El de metodología cualitativa fue el andamio inicial, para
 tener con qué probar mientras no existía esto; **está retirado** y no es el destino de nada.
 
-Lo que hace posible medir acá: en un corpus anotado contra una ontología O, **`in_seed` es
+Lo que hace posible medir acá: en un corpus anotado contra una ontología O, **`in_inventory` es
 decidible por construcción** —la clase está en O o no está—, así que la tasa de falsos huérfanos
 que gobierna `BUILD-NO-GO-GATE` se obtiene sin campaña de anotación.
 
@@ -36,7 +36,7 @@ quedan afuera enteros.
 | [`materiominer/`](materiominer/PROCEDENCIA.md) | MaterioMiner v1.0.1, 4 publicaciones de mecánica de materiales, 2.229 menciones | Materials Mechanics Ontology | 428 clases, 420 con definición | **segundo**, listo |
 | `hpo-gsc-plus/` | GSC+, 228 abstracts, ~1.933 anotaciones | Human Phenotype Ontology | ~19k clases | pendiente |
 | `cafeteria/` | CafeteriaFCD + CafeteriaSA, recetas y abstracts | FoodOn | ~40k clases | pendiente |
-| [`qualitative/`](qualitative/PROCEDENCIA.md) | corpus de trabajo, sin anotar y sin publicar | semilla de metodología cualitativa | 34 clases | **el default del config**; retirado como instrumento |
+| [`qualitative/`](qualitative/PROCEDENCIA.md) | corpus de trabajo, sin anotar y sin publicar | ontología inicial de metodología cualitativa | 34 clases | **el default del config**; retirado como instrumento |
 
 `qualitative/` es el único **sin `use_case.yml`**, porque no tiene anotaciones gold y un
 descriptor que `load_use_case` no puede cargar haría creer que se lo puede pasar a `calibrate`.

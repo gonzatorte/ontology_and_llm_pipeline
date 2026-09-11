@@ -45,7 +45,7 @@ es lo único compatible con las dos afirmaciones a la vez.
 resolución de entidades juzgó que hablan de la misma cosa. Ese individuo necesita un IRI, y el
 IRI tiene que ser reproducible: regenerar dos veces el mismo estado tiene que dar el mismo
 ABox, o toda clave de caché aguas abajo se mueve. Por eso `uuid5` y nunca `uuid4`, igual que en
-la normalización de la semilla, que ya acuña así los IRIs de las clases (`seed.py:121`).
+la normalización de la ontología inicial, que ya acuña así los IRIs de las clases (`seed.py:121`).
 
 **Lo que hay que elegir no es el algoritmo, es el insumo del `uuid5`.** Dos candidatos: los ids
 de todas las menciones del grupo, o el id de una sola —la **ancla**, definida como la menor bajo

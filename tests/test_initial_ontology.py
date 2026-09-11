@@ -5,12 +5,12 @@ from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, SKOS
 
 from onto_pipeline import terms
-from onto_pipeline.seed import (
+from onto_pipeline.initial_ontology import (
     CLASS,
     OBJECT_PROPERTY,
     detect_typos,
     gloss_contexts,
-    normalize_seed,
+    normalize_initial_ontology,
 )
 
 BASE = "https://ontology.local/id/"
@@ -35,15 +35,15 @@ _SEED = f"""
 
 
 @pytest.fixture
-def seed_file(tmp_path):
+def initial_file(tmp_path):
     target = tmp_path / "seed.ttl"
     target.write_text(_SEED, encoding="utf-8")
     return target
 
 
 @pytest.fixture
-def seed(seed_file):
-    return normalize_seed(seed_file, BASE, divergence_threshold=0.8)
+def seed(initial_file):
+    return normalize_initial_ontology(initial_file, BASE, divergence_threshold=0.8)
 
 
 def test_iris_are_opaque_and_the_original_is_kept_as_provenance(seed):
@@ -53,10 +53,10 @@ def test_iris_are_opaque_and_the_original_is_kept_as_provenance(seed):
     assert f"{NS}Technique" in notes
 
 
-def test_normalization_is_reproducible(seed_file):
+def test_normalization_is_reproducible(initial_file):
     """Same seed, same IRIs: every downstream cache key is built on them."""
-    first = normalize_seed(seed_file, BASE, divergence_threshold=0.8)
-    second = normalize_seed(seed_file, BASE, divergence_threshold=0.8)
+    first = normalize_initial_ontology(initial_file, BASE, divergence_threshold=0.8)
+    second = normalize_initial_ontology(initial_file, BASE, divergence_threshold=0.8)
     assert [e.iri for e in first.entities] == [e.iri for e in second.entities]
 
 
@@ -126,7 +126,7 @@ def test_edit_distance_detector_finds_a_misspelling(tmp_path):
                       ("Sobre_el_marco", None)]).serialize(format="turtle"),
         encoding="utf-8",
     )
-    findings = normalize_seed(source, BASE, divergence_threshold=0.8).typos
+    findings = normalize_initial_ontology(source, BASE, divergence_threshold=0.8).typos
     assert any(
         finding.detector == "edit_distance" and finding.token == "subre"
         and finding.suggestion == "sobre"
@@ -134,7 +134,7 @@ def test_edit_distance_detector_finds_a_misspelling(tmp_path):
     )
 
 
-def test_translations_are_not_reported_as_typos(seed_file, tmp_path):
+def test_translations_are_not_reported_as_typos(initial_file, tmp_path):
     """`objective`/`objetivo` differ by one edit and are not a misspelling."""
     source = tmp_path / "bilingual.ttl"
     source.write_text(
@@ -142,12 +142,12 @@ def test_translations_are_not_reported_as_typos(seed_file, tmp_path):
         .serialize(format="turtle"),
         encoding="utf-8",
     )
-    findings = normalize_seed(source, BASE, divergence_threshold=0.8).typos
+    findings = normalize_initial_ontology(source, BASE, divergence_threshold=0.8).typos
     assert not [f for f in findings if {f.token, f.suggestion} == {"objetivo", "objective"}]
 
 
 def test_capitalization_anomaly_is_detected():
-    from onto_pipeline.seed import Entity, Label
+    from onto_pipeline.initial_ontology import Entity, Label
 
     entity = Entity(iri="x", original_iri="y", kind=CLASS,
                     labels=[Label(text="TIene respuesta", language="es", source="iri")])
@@ -157,7 +157,7 @@ def test_capitalization_anomaly_is_detected():
 
 
 def test_camel_case_and_title_case_are_not_anomalies():
-    from onto_pipeline.seed import Entity, Label
+    from onto_pipeline.initial_ontology import Entity, Label
 
     entities = [
         Entity(iri=str(index), original_iri=str(index), kind=CLASS,
@@ -179,7 +179,7 @@ def test_typo_detection_survives_a_real_sized_vocabulary():
     son cientos de millones de iteraciones y la etapa deja de terminar."""
     import time
 
-    from onto_pipeline.seed import CLASS, Entity, Label, detect_typos
+    from onto_pipeline.initial_ontology import CLASS, Entity, Label, detect_typos
 
     entities = [
         Entity(
@@ -200,7 +200,13 @@ def test_a_class_that_already_has_a_definition_is_not_re_glossed():
     from rdflib import Graph, Literal, URIRef
     from rdflib.namespace import OWL, RDF, SKOS
 
-    from onto_pipeline.seed import CLASS, Entity, Label, NormalizedSeed, gloss_contexts
+    from onto_pipeline.initial_ontology import (
+        CLASS,
+        Entity,
+        Label,
+        NormalizedOntology,
+        gloss_contexts,
+    )
 
     graph = Graph()
     entities = []
@@ -213,5 +219,5 @@ def test_a_class_that_already_has_a_definition_is_not_re_glossed():
         entities.append(Entity(iri=str(iri), original_iri=str(iri), kind=CLASS, preferred=name,
                                labels=[Label(text=name, language="en", source="derived")]))
 
-    contexts = gloss_contexts(NormalizedSeed(graph=graph, entities=entities, typos=[]))
+    contexts = gloss_contexts(NormalizedOntology(graph=graph, entities=entities, typos=[]))
     assert [c.label for c in contexts] == ["Sin"]

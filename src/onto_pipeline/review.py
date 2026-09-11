@@ -184,7 +184,7 @@ def counts(conn: Store) -> dict[tuple[str, str], int]:
     }
 
 
-def findings_from_seed(seed) -> list[Finding]:
+def findings_from_initial(seed) -> list[Finding]:
     """PREP-NORMALIZE's divergences and typos as reviewable items."""
     findings = []
     for entity in seed.entities:

@@ -11,7 +11,7 @@ desactualizado y no aplica acá.
 ## Qué es
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
-ontología semilla, y produce versiones sucesivas de la ontología con procedencia textual. Python
+ontología inicial, y produce versiones sucesivas de la ontología con procedencia textual. Python
 con `uv`, ~17.900 líneas en 54 módulos, 564 tests. **Dos interfaces sobre el mismo pipeline**:
 un CLI de ~40 comandos y `wizard`, que recorre el mismo plan preguntando en cada punto de
 decisión. Las dos llaman a `services/`.
@@ -83,7 +83,7 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
    explícita del spec para esa etapa. Los ejes salen del razonador y de un catálogo enumerado.
 3. **ELK nunca devuelve `OK`.** Su silencio sólo significa que el axioma ofensor pudo haber sido
    ignorado: `REJECTED` / `INCONCLUSIVE` / `SKIPPED`, jamás una aprobación.
-4. **Toda propiedad de anotación que se escriba tiene que estar en `seed.DECLARED_ANNOTATIONS`.**
+4. **Toda propiedad de anotación que se escriba tiene que estar en `initial_ontology.DECLARED_ANNOTATIONS`.**
    Escribir una que no está saca la ontología de OWL 2 DL, y el síntoma no es un error: es ELK
    salteándose en silencio. Ya pasó dos veces. Hay un test que lo fija por etapa.
 5. **Ningún umbral se escribe fuera de `config/default.yaml`.** Y todo umbral nuevo se documenta
@@ -151,7 +151,7 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 - **`technical_debt.md` es para mejoras a futuro, no para bugs.** Lo que está roto se arregla.
   Cada entrada lleva un id `DEBT-…`, así que dos sesiones en paralelo no colisionan como
   colisionaban los números.
-- **No leer fuera de `pipeline/` sin preguntar.** El corpus y la ontología semilla viven afuera
+- **No leer fuera de `pipeline/` sin preguntar.** El corpus y la ontología inicial viven afuera
   y el config los apunta; leer otra cosa del workspace es pedir permiso primero. Los casos de
   uso **ya no**: desde el 2026-09-10 están en `use_cases/`, adentro.
 - **Los tests describen el porqué.** Los nombres son frases (`test_a_forced_parent_is_worse...`)
@@ -198,8 +198,8 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 src/onto_pipeline/
   services/         **los cuerpos de las etapas, sin interfaz.** Una etapa, una función; recibe
                     un Workspace, devuelve un resultado tipado, y no importa typer ni rich
-    workspace.py    config + almacén + versión + modelo; StageError
-    prep.py         PREP: ingesta, semilla, glosas, alineación, CQ
+    workspace.py    config + almacén + **sesión** + versión + modelo; StageError
+    prep.py         PREP: ingesta, ontología inicial, glosas, alineación, CQ
     iterate.py      ITER: menciones, tipado, puentes, clases, axiomas, ramas, validación
     evaluate.py     EVAL: parada, CQ, retención, calibración, ajuste
     deliver.py      DELIVERABLES: diff, DAG, telemetría y `export`
@@ -207,7 +207,7 @@ src/onto_pipeline/
   cli.py            la interfaz de banderas: leer, llamar a un servicio, renderizar
   wizard.py         la interfaz guiada: el mismo plan, preguntando en vez de frenar
   config.py         la superficie de configuración; rechaza valores no implementados
-  seed.py           `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
+  initial_ontology.py  `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
   parse.py ingest.py classify.py boilerplate.py chunking.py     corpus -> bloques -> chunks
   extraction.py coreference.py                                   chunks -> menciones
   matching.py typing_store.py embeddings.py                      menciones -> clases + zona gris
@@ -225,6 +225,7 @@ src/onto_pipeline/
   use_cases.py                                                   cargar un caso de uso
   calibration.py                                                 el banco: barrer umbrales sobre uno
   llm.py providers.py telemetry.py                               proveedor, caché y costos
+  sessions.py                                                    la sesión de usuario: fase, historial
   store.py                                                       el almacén sin dialecto: sqlite | postgres
   db.py language.py terms.py report.py                           esquema y utilidades
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
@@ -281,7 +282,7 @@ ignoraron.
 - **Verificar contra el repo antes de contestar.** "Lee el estado del repositorio antes de
   modificar o contestar" — dicho tal cual, más de una vez, y en general porque la respuesta
   anterior había salido de la memoria y no de los archivos.
-- **Localidad.** No leer fuera de `pipeline/` sin preguntar primero. El corpus y la semilla
+- **Localidad.** No leer fuera de `pipeline/` sin preguntar primero. El corpus y la ontología inicial
   están afuera y el config los apunta; cualquier otra cosa se pide.
 - **Nada de correr trabajos de horas en esta máquina.** Si un ajuste o un barrido no termina
   en minutos, se propone y se espera: puede configurar un proveedor en la nube.

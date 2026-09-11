@@ -67,7 +67,7 @@ def _config(tmp_path: Path):
     return Config.model_validate({
         "paths": {
             "corpus_root": tmp_path / "corpus",
-            "seed_ontology": tmp_path / "seed.rdf",
+            "initial_ontology": tmp_path / "seed.rdf",
             "work_dir": tmp_path / "work",
         }
     })
@@ -84,7 +84,7 @@ def _workspace(tmp_path: Path) -> Workspace:
 BASE = "https://ontology.local/id/"
 
 
-def _seed_graph() -> Graph:
+def _initial_graph() -> Graph:
     graph = Graph()
     for name in ("A", "B"):
         iri = URIRef(BASE + name)
@@ -106,7 +106,7 @@ def test_the_newest_version_wins_ties_by_insertion_order(tmp_path):
     """`created_at` tiene precisión de segundo, así que dos versiones del mismo segundo empatan
     y el orden de inserción desempata. Sin eso, "la más nueva" es una lotería."""
     workspace = _workspace(tmp_path)
-    graph = _seed_graph()
+    graph = _initial_graph()
     versioning.commit(
         workspace.conn, graph, version_id=f"{SESSION}:v0", note="seed", session_id=SESSION
     )
@@ -127,7 +127,7 @@ def test_export_walks_the_lineage_and_says_what_each_version_contributed(tmp_pat
     que la cabeza ya es la acumulación. Lo que agrega el export es poder decir qué aportó cada
     iteración, y eso sólo se sabe recorriendo el linaje."""
     workspace = _workspace(tmp_path)
-    graph = _seed_graph()
+    graph = _initial_graph()
     versioning.commit(workspace.conn, graph, version_id=f"{SESSION}:v0", note="normalized seed",
         session_id=SESSION)
     graph.add((URIRef(BASE + "C"), RDF.type, OWL.Class))
@@ -142,7 +142,7 @@ def test_export_walks_the_lineage_and_says_what_each_version_contributed(tmp_pat
     assert [step.version_id for step in result.history] == [f"{SESSION}:v0", f"{SESSION}:v1"]
     assert result.history[0].parent_id is None          # la raíz se reporta entera
     assert result.history[1].added == 2                 # la clase y su subsunción
-    assert result.classes == 3 and result.seed_classes == 2
+    assert result.classes == 3 and result.inventory_classes == 2
     assert result.minted_classes == 1
 
 
@@ -150,11 +150,11 @@ def test_export_writes_no_annotation_property_the_seed_did_not_declare(tmp_path)
     """Una propiedad de anotación no declarada saca la ontología de OWL 2 DL, y el síntoma no
     es un error: es ELK salteándose en silencio. Por eso la procedencia del export va en un
     manifiesto al lado y no adentro de la ontología."""
-    from onto_pipeline.seed import DECLARED_ANNOTATIONS
+    from onto_pipeline.initial_ontology import DECLARED_ANNOTATIONS
 
     workspace = _workspace(tmp_path)
     versioning.commit(
-        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        workspace.conn, _initial_graph(), version_id=f"{SESSION}:v0", note="seed",
         session_id=SESSION,
     )
     result = deliver.export(workspace, version=f"{SESSION}:v0", include_abox=False)
@@ -173,7 +173,7 @@ def test_export_records_the_lineage_in_a_manifest_next_to_the_ontology(tmp_path)
     juntos, así que se escriben juntos."""
     workspace = _workspace(tmp_path)
     versioning.commit(
-        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        workspace.conn, _initial_graph(), version_id=f"{SESSION}:v0", note="seed",
         session_id=SESSION,
     )
     result = deliver.export(workspace, version=f"{SESSION}:v0", include_abox=False)
@@ -189,7 +189,7 @@ def test_exporting_to_turtle_says_that_it_flattened_the_provenance(tmp_path):
     perderla en silencio es exactamente lo que la capa de menciones existe para no hacer."""
     workspace = _workspace(tmp_path)
     versioning.commit(
-        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        workspace.conn, _initial_graph(), version_id=f"{SESSION}:v0", note="seed",
         session_id=SESSION,
     )
     result = deliver.export(
@@ -203,7 +203,7 @@ def test_export_says_when_there_is_no_abox_instead_of_pretending(tmp_path):
     instancias no lo es."""
     workspace = _workspace(tmp_path)
     versioning.commit(
-        workspace.conn, _seed_graph(), version_id=f"{SESSION}:v0", note="seed",
+        workspace.conn, _initial_graph(), version_id=f"{SESSION}:v0", note="seed",
         session_id=SESSION,
     )
     result = deliver.export(workspace, version=f"{SESSION}:v0", refresh_abox=False)

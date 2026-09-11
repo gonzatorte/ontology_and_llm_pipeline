@@ -29,7 +29,7 @@ def _workspace(tmp_path: Path) -> Workspace:
     config = Config.model_validate({
         "paths": {
             "corpus_root": tmp_path / "corpus",
-            "seed_ontology": tmp_path / "seed.rdf",
+            "initial_ontology": tmp_path / "seed.rdf",
             "work_dir": tmp_path / "work",
         }
     })

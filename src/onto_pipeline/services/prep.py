@@ -16,8 +16,8 @@ from ..alignment import check_terms
 from ..alignment import survey as alignment_survey
 from ..ingest import discover, markdown_path
 from ..ingest import ingest as ingest_documents
+from ..initial_ontology import NormalizedOntology, gloss_contexts, normalize_initial_ontology
 from ..parse import TEXT_SUFFIXES
-from ..seed import NormalizedSeed, gloss_contexts, normalize_seed
 from .workspace import Progress, StageError, Workspace, silent
 
 # ─────────────────────────────  PREP-CLASSIFY + PREP-PARSE  ─────────────────────────────
@@ -65,8 +65,8 @@ def ingest(
 
 
 @dataclass
-class SeedNormalization:
-    seed: NormalizedSeed
+class Normalization:
+    seed: NormalizedOntology
     target: Path
     kinds: dict[str, int]
     pending_glosses: int
@@ -82,7 +82,7 @@ class SeedNormalization:
         return (self.committed or self.same_state_as).id
 
 
-def normalize(workspace: Workspace) -> SeedNormalization:
+def normalize(workspace: Workspace) -> Normalization:
     """`PREP-NORMALIZE`: IRIs opacos, etiquetas derivadas, erratas, contextos de glosa.
 
     No genera glosas: eso es `generate_glosses`, que llama al modelo y por eso es una etapa
@@ -90,14 +90,14 @@ def normalize(workspace: Workspace) -> SeedNormalization:
     """
     session = workspace.require_session()
     config = workspace.config
-    seed = normalize_seed(
-        config.paths.seed_ontology,
-        config.seed.base_iri,
-        divergence_threshold=config.seed.label_divergence_threshold,
+    seed = normalize_initial_ontology(
+        config.paths.initial_ontology,
+        config.initial_ontology.base_iri,
+        divergence_threshold=config.initial_ontology.label_divergence_threshold,
         reasoner_lib=config.paths.reasoner_lib,
     )
 
-    target = workspace.ontology_dir() / "seed_normalized.ttl"
+    target = workspace.ontology_dir() / "initial_normalized.ttl"
     seed.graph.serialize(target, format="turtle")
 
     conn = workspace.conn
@@ -111,7 +111,7 @@ def normalize(workspace: Workspace) -> SeedNormalization:
     contexts = gloss_contexts(seed)
     current = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
     sync = review.sync(
-        conn, review.findings_from_seed(seed),
+        conn, review.findings_from_initial(seed),
         version_id=current.id if current else "v0",
         kinds=[review.DIVERGENT_LABEL, review.PENDING_SEMANTIC_CHECK, review.TYPO],
     )
@@ -120,7 +120,7 @@ def normalize(workspace: Workspace) -> SeedNormalization:
     for entity in seed.entities:
         kinds[entity.kind] = kinds.get(entity.kind, 0) + 1
 
-    return SeedNormalization(
+    return Normalization(
         seed=seed, target=target, kinds=kinds, pending_glosses=len(contexts),
         committed=committed, same_state_as=existing,
         review_added=sync.added, review_known=sync.already_known,
@@ -143,7 +143,7 @@ class GlossBootstrap:
 
 def generate_glosses(
     workspace: Workspace,
-    normalization: SeedNormalization,
+    normalization: Normalization,
     *,
     progress: Progress = silent,
 ) -> GlossBootstrap:
@@ -351,9 +351,9 @@ def decide_questions(
     return decision, cq.decide(workspace.conn, ids, decision, session_id=session)
 
 
-def seed_graph(workspace: Workspace) -> Graph:
+def initial_graph(workspace: Workspace) -> Graph:
     """La semilla normalizada tal como quedó en disco, para quien la necesite sin versión."""
-    path = workspace.config.paths.work_dir / "ontology" / "seed_normalized.ttl"
+    path = workspace.config.paths.work_dir / "ontology" / "initial_normalized.ttl"
     if not path.exists():
-        raise StageError(f"{path} not found; run normalize-seed first")
+        raise StageError(f"{path} not found; run `normalize` first")
     return Graph().parse(path)

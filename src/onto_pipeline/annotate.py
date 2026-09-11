@@ -8,7 +8,7 @@ what the mention layer anchors on and what `markdown_hash` validates. So the tex
 verbatim and selections are measured against it, rather than against a rendered view whose
 whitespace would not correspond.
 
-The field that justifies a bespoke format is `in_seed`, and the tool sets it structurally
+The field that justifies a bespoke format is `in_inventory`, and the tool sets it structurally
 rather than asking: choosing a class from the seed list sets it true, typing a name that is not
 in the seed sets it false. That is the distinction the false-orphan metric rests on, and it is
 too easy to get wrong if it is a checkbox.
@@ -25,13 +25,13 @@ from rdflib.namespace import OWL, RDF, SKOS
 
 
 @dataclass
-class SeedClass:
+class InventoryClass:
     iri: str
     label: str
     gloss: str = ""
 
 
-def seed_classes(graph: Graph) -> list[SeedClass]:
+def inventory_classes(graph: Graph) -> list[InventoryClass]:
     classes = []
     for subject in graph.subjects(RDF.type, OWL.Class):
         if not isinstance(subject, URIRef):
@@ -44,7 +44,7 @@ def seed_classes(graph: Graph) -> list[SeedClass]:
              if getattr(o, "language", None) == "en"),
             "",
         )
-        classes.append(SeedClass(iri=str(subject), label=label, gloss=gloss))
+        classes.append(InventoryClass(iri=str(subject), label=label, gloss=gloss))
     return sorted(classes, key=lambda item: item.label.lower())
 
 
@@ -62,7 +62,7 @@ def build(
     doc_id: str,
     markdown: str,
     markdown_hash: str,
-    classes: list[SeedClass],
+    classes: list[InventoryClass],
     pages: list[list[int]],
     target: Path,
 ) -> Path:
@@ -194,7 +194,7 @@ function render() {
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   for (const m of sorted) {
     if (m.span[0] < cursor) continue;                    // solapada: se ignora al pintar
-    const cls = m.gold_class === null ? "no-class" : (m.in_seed ? "in-seed" : "out-seed");
+    const cls = m.gold_class === null ? "no-class" : (m.in_inventory ? "in-seed" : "out-seed");
     html += esc(SOURCE.slice(cursor, m.span[0]));
     html += `<mark class="${cls}" data-id="${m.id}" title="${esc(m.gold_class || "sin clase")}">`
           + esc(SOURCE.slice(m.span[0], m.span[1])) + "</mark>";
@@ -203,9 +203,9 @@ function render() {
   html += esc(SOURCE.slice(cursor));
   textEl.innerHTML = html;
 
-  const inSeed = mentions.filter((m) => m.in_seed).length;
+  const inInventory = mentions.filter((m) => m.in_inventory).length;
   document.getElementById("counts").textContent =
-    `${mentions.length} menciones · ${inSeed} con clase de la semilla`;
+    `${mentions.length} menciones · ${inInventory} con clase de la semilla`;
 
   document.getElementById("list").innerHTML = sorted.map((m) =>
     `<div><span><b>${esc(m.gold_class || "—")}</b> `
@@ -230,12 +230,12 @@ document.addEventListener("mouseup", () => {
   document.getElementById("filter").focus();
 });
 
-function add(gold_class, in_seed) {
+function add(gold_class, in_inventory) {
   if (!pending) return;
   mentions.push({
     id: "m" + (mentions.length + 1) + "_" + Date.now().toString(36),
     page: pageFor(pending.start), span: [pending.start, pending.end], text: pending.text,
-    gold_class, in_seed, entity_id: null,
+    gold_class, in_inventory, entity_id: null,
   });
   pending = null;
   document.getElementById("sel").innerHTML = "<em>Seleccioná texto para anotar.</em>";
@@ -266,7 +266,7 @@ document.getElementById("filter").onkeydown = (e) => {
 };
 document.getElementById("custom").onkeydown = (e) => {
   if (e.key === "Enter" && e.target.value.trim()) {
-    add(e.target.value.trim(), false);       // no está en la semilla -> in_seed false
+    add(e.target.value.trim(), false);       // no está en la semilla -> in_inventory false
     e.target.value = "";
   }
 };

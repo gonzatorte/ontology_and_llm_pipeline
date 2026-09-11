@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import SKOS
 
+from .initial_ontology import GlossContext
 from .llm import Prompt
-from .seed import GlossContext
 
 STAGE = "prep_normalize_glosses"
 

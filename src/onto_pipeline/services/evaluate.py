@@ -187,10 +187,10 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
             "no held-out documents. Mark them first: onto-pipeline hold-out <doc_id> ..."
         )
 
-    ontology = config.paths.work_dir / "ontology" / "seed_normalized.ttl"
+    ontology = config.paths.work_dir / "ontology" / "initial_normalized.ttl"
     if not ontology.exists():
-        raise StageError(f"{ontology} not found; run normalize-seed first")
-    classes = annotate.seed_classes(Graph().parse(ontology))
+        raise StageError(f"{ontology} not found; run `normalize` first")
+    classes = annotate.inventory_classes(Graph().parse(ontology))
 
     written, missing = [], []
     for identifier in ids:
@@ -216,7 +216,7 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
 class ExportedDocument:
     doc_id: str
     mentions: int = 0
-    in_seed: int = 0
+    in_inventory: int = 0
     relations: int = 0
     error: str = ""
 
@@ -249,7 +249,7 @@ def export_annotations(workspace: Workspace, path: Path) -> BratExport:
         annotation.export_brat(document, markdown, out_dir)
         documents.append(ExportedDocument(
             doc_id=document.doc_id, mentions=len(document.mentions),
-            in_seed=sum(1 for mention in document.mentions if mention.in_seed),
+            in_inventory=sum(1 for mention in document.mentions if mention.in_inventory),
             relations=len(document.relations),
         ))
     return BratExport(out_dir=out_dir, documents=documents)
@@ -445,7 +445,7 @@ def tune(
     def retrieve(use_case, documents, top_k: int):
         mentions = [
             matching.Mention(id=m.id, text=m.text, document_id=d.doc_id, language=use_case.language)
-            for d in documents for m in d.mentions if m.in_seed and m.gold_class
+            for d in documents for m in d.mentions if m.in_inventory and m.gold_class
         ]
         gold = {m.id: m.gold_class for d in documents for m in d.mentions}
         for mention in mentions:

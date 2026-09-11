@@ -167,12 +167,9 @@ StaleAboxOption = typer.Option(
     True, "--refresh-abox/--no-refresh-abox",
     help="Regenerar el ABox antes de exportar. Es puro: no llama al modelo ni al razonador.",
 )
-CorpusOption = typer.Option(
-    None, "--corpus", help="Corpus de esta corrida. Reemplaza a paths.corpus_root."
-)
-SeedOntologyOption = typer.Option(
+InitialOntologyOption = typer.Option(
     None, "--seed-ontology",
-    help="Ontología semilla de esta corrida. Reemplaza a paths.seed_ontology.",
+    help="Ontología semilla de esta corrida. Reemplaza a paths.initial_ontology.",
 )
 
 
@@ -223,8 +220,8 @@ def report(config_path: Path = ConfigOption, doc_id: str | None = DocIdOption) -
         console.print(f"[green]wrote[/] {target}")
 
 
-@app.command("normalize-seed")
-def normalize_seed_cmd(config_path: Path = ConfigOption) -> None:
+@app.command("normalize")
+def normalize_cmd(config_path: Path = ConfigOption) -> None:
     """PREP-NORMALIZE: opaque IRIs, derived labels, typo detection, gloss contexts."""
     workspace = _workspace(config_path)
     result = prep.normalize(workspace)

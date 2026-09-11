@@ -248,7 +248,7 @@ class Delivery:
     tbox_triples: int
     abox_quads: int
     classes: int
-    seed_classes: int
+    inventory_classes: int
     minted_classes: int
     abox_included: bool
     abox_regenerated: bool
@@ -286,7 +286,7 @@ def export(
     **No se escribe ninguna anotación nueva en la ontología.** La procedencia —el linaje, qué
     hizo cada iteración, con qué reglas se derivó el ABox— va en un manifiesto JSON al lado.
     Escribirla adentro pediría propiedades de anotación que la semilla no declara, y eso saca
-    la ontología de OWL 2 DL sin dar ningún error (`seed.DECLARED_ANNOTATIONS`).
+    la ontología de OWL 2 DL sin dar ningún error (`initial_ontology.DECLARED_ANNOTATIONS`).
     """
     if fmt not in _SUFFIX:
         raise StageError(f"format is {TRIG} or {TURTLE}, not {fmt!r}")
@@ -351,7 +351,7 @@ def export(
     # IRIs bajo `base_iri` daría otra cosa: `PREP-NORMALIZE` acuña opacos para *toda* la
     # semilla, así que ese prefijo no distingue lo inducido de lo que ya venía.
     root = _root_classes(workspace, lineage)
-    seed_classes = len(root)
+    inventory_classes = len(root)
 
     manifest = target.with_suffix(target.suffix + ".manifest.json")
     manifest.write_text(
@@ -363,7 +363,7 @@ def export(
                 "tbox_triples": len(tbox),
                 "abox_quads": abox_quads,
                 "classes": len(classes),
-                "classes_in_the_root_version": seed_classes,
+                "classes_in_the_root_version": inventory_classes,
                 "abox_included": include_abox,
                 "format": fmt,
                 "warnings": warnings,
@@ -376,7 +376,7 @@ def export(
     return Delivery(
         version_id=version_id, path=target, manifest_path=manifest, fmt=fmt,
         history=history, tbox_triples=len(tbox), abox_quads=abox_quads,
-        classes=len(classes), seed_classes=seed_classes,
+        classes=len(classes), inventory_classes=inventory_classes,
         minted_classes=len(classes - root),
         abox_included=include_abox, abox_regenerated=regenerated, warnings=warnings,
     )

@@ -12,11 +12,11 @@ ENTRY = {
     "markdown_hash": "sha256:abc",
     "mentions": [
         {"id": "m1", "page": 3, "span": [0, 25], "text": "Empirical legal research",
-         "gold_class": "ResearchField", "in_seed": False, "entity_id": "e7"},
+         "gold_class": "ResearchField", "in_inventory": False, "entity_id": "e7"},
         {"id": "m2", "page": 3, "span": [33, 51], "text": "document analysis",
-         "gold_class": "Technique", "in_seed": True, "entity_id": "e12"},
+         "gold_class": "Technique", "in_inventory": True, "entity_id": "e12"},
         {"id": "m3", "page": 3, "span": [55, 68], "text": "court rulings",
-         "gold_class": None, "in_seed": False},
+         "gold_class": None, "in_inventory": False},
     ],
     "relations": [
         {"subject": "e7", "predicate": "hasMethodology", "object": "e12", "evidence_page": 3}
@@ -34,7 +34,7 @@ def document(tmp_path):
 def test_the_annotation_round_trips(document):
     assert document.doc_id == "chin_zeiler_2021"
     assert [mention.id for mention in document.mentions] == ["m1", "m2", "m3"]
-    assert document.mentions[1].in_seed is True
+    assert document.mentions[1].in_inventory is True
     assert document.mentions[2].gold_class is None
     assert document.relations[0].predicate == "hasMethodology"
 
@@ -81,7 +81,7 @@ def test_brat_export_keeps_types_relations_and_coreference(document, tmp_path):
     assert "T1\tResearchField 0 25\tEmpirical legal research" in ann
     assert "T3\tUnassigned 55 68\tcourt rulings" in ann
     assert "R1\thasMethodology Arg1:T1 Arg2:T2" in ann
-    assert "A1\tInSeed T2" in ann, "in_seed survives only as an ad-hoc attribute"
+    assert "A1\tInInventory T2" in ann, "in_inventory survives only as an ad-hoc attribute"
     assert next(path for path in paths if path.suffix == ".txt").read_text() == MARKDOWN
 
 

@@ -31,8 +31,8 @@ Este índice existe para encontrar las cosas, no para traducirlas: **no hay cód
 |---|---|---|
 | `PREP-CLASSIFY` | Decide por página: born-digital, escaneada o incierta | `classify` |
 | `PREP-PARSE` | Extrae bloques con procedencia y arma el Markdown | `parse` |
-| `PREP-NORMALIZE` | Deja la semilla en condiciones de recibir axiomas | — |
-| `PREP-NORMALIZE-PROFILE` | Detecta el perfil OWL de la semilla (EL/QL/RL/DL) | `profile` |
+| `PREP-NORMALIZE` | Deja la ontología inicial en condiciones de recibir axiomas | — |
+| `PREP-NORMALIZE-PROFILE` | Detecta el perfil OWL de la ontología inicial (EL/QL/RL/DL) | `profile` |
 | `PREP-NORMALIZE-IRIS` | Acuña IRIs opacos y guarda el original como procedencia | `normalize` |
 | `PREP-NORMALIZE-LABELS` | Deriva etiquetas es/en y marca las divergentes | `normalize` |
 | `PREP-NORMALIZE-TYPOS` | Cuatro detectores de erratas, sin modelo | `normalize` |
@@ -47,7 +47,7 @@ Este índice existe para encontrar las cosas, no para traducirlas: **no hay cód
 | `ITER-EXTRACT` | Saca menciones de concepto de cada chunk | `extract` |
 | `ITER-COREFER` | Agrupa las menciones que hablan del mismo individuo | `corefer` |
 | `ITER-MATCH` | Tipa cada mención contra una clase, y resuelve entidades | `match` · `grey` |
-| `ITER-BRIDGE` | Conecta huérfanas con la semilla por conocimiento del mundo | `bridge` |
+| `ITER-BRIDGE` | Conecta huérfanas con la ontología inicial por conocimiento del mundo | `bridge` |
 | `ITER-INDUCE` | Convierte huérfanas en clases nuevas | `induce` |
 | `ITER-TUNE` | Ajusta el matcher con las etiquetas acumuladas | `tune` |
 | `ITER-CONFLICTS` | Documentos que se contradicen; notarizar, forzar, refutar | `conflicts` · `mark` |
@@ -72,7 +72,7 @@ en vez de frenar), `export` (la ontología terminada, con toda la historia aplic
 | `SCOPE` | Qué construye, con qué entra y qué sale. Incluye `SCOPE-PURPOSE` (sin tarea downstream), `SCOPE-EXPRESSIVITY` y `SCOPE-SCALE` |
 | `DECISIONS` | Las 26 decisiones vinculantes, cada una con su nombre y la sección que la fundamenta. **Es la tabla que hay que mirar** antes de citar una: `BRANCH-ONLY-REVIEW`, `GRADED-FEEDBACK`, `SEPARATE-UNTIL-CONFIRMED`… |
 | `LAYERS` | Las cuatro capas y por qué no se mezclan. `LAYERS-ONTOLOGY-NOT-GRAPH` prohíbe los algoritmos de grafo sobre la TBox |
-| `REORG` | Por qué la semilla es reorganizable y qué cuesta: `REORG-PATH-DEPENDENCE` |
+| `REORG` | Por qué la ontología inicial es reorganizable y qué cuesta: `REORG-PATH-DEPENDENCE` |
 | `CONFIG` | Toda la superficie de configuración |
 | `SCHEMAS` | Las tablas: `SCHEMAS-MENTIONS`, `SCHEMAS-BRANCH`, `SCHEMAS-WORK-UNITS`, `SCHEMAS-DECISIONS` |
 | `REASONING` | `REASONING-STACK` y `REASONING-ELK-ASYMMETRY`, que es la que más se cita |
@@ -91,7 +91,7 @@ el pipeline completo antes de ver datos. **Los cinco pasos están dados**, con u
 | Paso | Qué pedía | Estado |
 |---|---|---|
 | `BUILD-STEP-1` | De `PREP-CLASSIFY` a `PREP-PARSE` sobre 5 documentos + script de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`) | **hecho** — `ingest`, `report` |
-| `BUILD-STEP-2` | `PREP-NORMALIZE`, `PREP-CQ-GENERATED` y `PREP-CQ-USER` | **hecho** — `normalize-seed`, `cq propose`, `cq import`. Falta llegar a las 40–60 CQ aceptadas que el paso pide: hay **5**, todas escritas a mano (`PREP-CQ-USER`), ninguna generada aún |
+| `BUILD-STEP-2` | `PREP-NORMALIZE`, `PREP-CQ-GENERATED` y `PREP-CQ-USER` | **hecho** — `normalize`, `cq propose`, `cq import`. Falta llegar a las 40–60 CQ aceptadas que el paso pide: hay **5**, todas escritas a mano (`PREP-CQ-USER`), ninguna generada aún |
 | `BUILD-STEP-3` | De `ITER-EXTRACT` a `ITER-MATCH`, con evaluación contra el conjunto de retención | **hecho, con la compuerta abierta** — ver abajo |
 | `BUILD-STEP-4` | De `ITER-AXIOMATIZE` a `ITER-VALIDATE` sin ramas, aplicación directa | **hecho** — `axiomatize` + la cadena de siete filtros |
 | `BUILD-STEP-5` | De `ITER-BRANCH` a `ITER-APPLY-REGENERATE`: ramas, scoring, DAG completo | **hecho** — `branch`, `versions`, `diff` |
@@ -134,7 +134,7 @@ existe para que no se pierdan entre las entradas.
 | ~~2~~ | ~~La variante con contexto~~ — **medida y descartada**: cuatro formas, las cuatro peores que el sintagma solo | El problema no es cómo se representa la mención sino el encoder | [`FINDINGS-MEASURED-RETRIEVAL-CEILING`](findings.md) |
 | ~~3~~ | ~~El registro de decisiones~~ — **cerrado entero**: una tabla, seis categorías fijas, `invalid` separado de `not_chosen`, la forma normal guardada, y los precedentes inyectados en el prompt de axiomatización | Lo rechazado no está en ningún otro lado, y guardarlo sólo rinde si vuelve al prompt | [`DEBT-FEEDBACK-HISTORY`](technical_debt.md) |
 | ~~4~~ | ~~`next --run`~~ — **hecho**: corre una etapa y frena; frente a una decisión no corre nada. Por subproceso, sin el refactor que parecía necesario | El comando que dice qué hacer ahora lo hace | [`DEBT-NEXT-RUNS`](technical_debt.md) |
-| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la semilla a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
+| ~~5~~ | ~~Terminar la tarea «corrida completa»~~ — **hecho**: el pipeline entero sobre MaterioMiner, de la ontología inicial a una versión con 45 clases inducidas | La debilidad de recuperación llega hasta el final: 44 de 45 clases quedan sin padre | [`FINDINGS-MEASURED-FULL-RUN`](findings.md) |
 | ~~6~~ | ~~Chequeo de desalineación~~ — **hecho** (`alignment`): decide con `--term`, 0/5 sobre el caso de uso roto y 5/5 sobre el bueno. La cobertura global resultó no servir de veredicto | Un corpus desalineado con su ontología era invisible en la tasa de huérfanas | [`DEBT-QUALITATIVE-PAIR`](technical_debt.md) |
 | ~~7~~ | ~~Comparación por forma normal~~ — **hecha**: `normal_form` nombra por etiquetas, saltea la glosa, y `already_rejected` la consulta antes de juzgar | Sin ella el mismo compromiso vuelve con otros IRIs y no se detecta como re-proposición | [`DEBT-FEEDBACK-HISTORY`](technical_debt.md) |
 
@@ -143,7 +143,7 @@ existe para que no se pierdan entre las entradas.
 | Etapa | Estado |
 |---|---|
 | `PREP-NORMALIZE-PROFILE` detección de perfil OWL | listo |
-| `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas | listo; la semilla puede venir en OWL, Turtle o **OBO** |
+| `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas | listo; la ontología inicial puede venir en OWL, Turtle o **OBO** |
 | `PREP-NORMALIZE-GLOSSES` glosas | listo (requiere proveedor LLM) |
 | `PREP-CLASSIFY` clasificación por página | listo |
 | `PREP-PARSE` parseo e ingesta | listo: PDF born-digital y **texto plano**; falta la ruta VLM |
@@ -181,14 +181,14 @@ existe para que no se pierdan entre las entradas.
 ```mermaid
 flowchart TB
   corpus[/"corpus PDF"/]
-  seed[/"ontología semilla"/]
+  seed[/"ontología inicial"/]
 
   subgraph FA["FASE A · preparación, una sola vez"]
     direction TB
     `PREP-CLASSIFY`["A1 · clasificación por página"]
     `PREP-PARSE`["A2 · parseo e ingesta"]
     CHK["chunking estructura-consciente"]
-    `PREP-NORMALIZE`["A0 · normalización de la semilla<br/>IRIs opacos · etiquetas · erratas · glosas"]
+    `PREP-NORMALIZE`["A0 · normalización de la ontología inicial<br/>IRIs opacos · etiquetas · erratas · glosas"]
     `PREP-CQ-GENERATED`["A3 · generación de CQ"]
     `PREP-CQ-USER`["A4 · CQ del usuario"]
   end
@@ -240,7 +240,7 @@ Verde: listo. Ámbar: parcial —`A2` sólo por la ruta born-digital, sin VLM—
 implementado, que hoy son el ajuste del matcher y la mitad que falta del registro de decisiones.
 **El camino de punta a punta está cerrado:** el corpus llega hasta axiomas aplicados y versionados
 —extraído, correferido, tipado, puenteado, inducido, axiomatizado, validado por siete filtros y
-ramificado— y la semilla hasta una TBox normalizada, glosada y enriquecida desde el corpus.
+ramificado— y la ontología inicial hasta una TBox normalizada, glosada y enriquecida desde el corpus.
 
 **Hay dos interfaces sobre el mismo pipeline.** El CLI de banderas —un comando por etapa, que
 es lo que documenta la sección Uso— y `wizard`, que recorre el plan preguntando en cada punto de
@@ -274,7 +274,7 @@ comandos funcionan desde cualquier directorio.
 ```yaml
 paths:
   corpus_root: ../../Corpus-08052026/General/files
-  seed_ontology: ../../qualitative_ontology.rdf
+  initial_ontology: ../../qualitative_ontology.rdf
   work_dir: ../data
   reasoner_lib: ../lib
   use_cases_root: ../use_cases        # los casos de uso; ver Calibración, en Uso
@@ -335,7 +335,7 @@ flowchart LR
   subgraph C["comandos"]
     direction TB
     i["ingest"]
-    n["normalize-seed"]
+    n["normalize"]
     v["validate"]
     q["cq import · cq eval"]
     r["report"]
@@ -347,7 +347,7 @@ flowchart LR
   db[("pipeline.sqlite3<br/>blocks · documents · mentions<br/>work_units · decisions · versions · CQs")]
   md[/"data/markdown/"/]
   as[/"data/assets/"/]
-  on[/"data/ontology/seed_normalized.ttl"/]
+  on[/"data/ontology/initial_normalized.ttl"/]
   rv[/"data/review/seed_review.json"/]
   rp[/"data/reports/ · `DELIVERABLES-PENDING-PARSER-EVAL`"/]
   an[/"data/annotate/ · data/brat/"/]
@@ -393,10 +393,10 @@ y, en vez de frenar, la hace.
 Qué hace, en orden:
 
 1. **Confirma la configuración** y dice que toda clave que el archivo no defina toma su default.
-2. **Pregunta el par (corpus, semilla) siempre**, aunque el archivo lo tenga: cuál se usa es
+2. **Pregunta el par (corpus, ontología inicial) siempre**, aunque el archivo lo tenga: cuál se usa es
    un parámetro de la corrida, no una decisión de configuración. Que hoy viva en `CONFIG` es
    deuda — [`DEBT-RUN-PARAMETERS`](technical_debt.md).
-3. **Normaliza la semilla** si todavía no hay ninguna versión, y ofrece escribir las glosas que
+3. **Normaliza la ontología inicial** si todavía no hay ninguna versión, y ofrece escribir las glosas que
    falten.
 4. **Recorre el plan** de `next` etapa por etapa: corre lo que se corre solo, pregunta en los
    puntos de decisión, y dice por qué no corre lo que está bloqueado.
@@ -432,17 +432,17 @@ extraída — el parser born-digital sólo ve tablas con líneas.
 Es cacheable: re-ingestar un documento sin cambios no reprocesa nada. Cambiar un umbral del
 config invalida el caché de esa etapa.
 
-### 2. Normalización de la semilla (`PREP-NORMALIZE`)
+### 2. Normalización de la ontología inicial (`PREP-NORMALIZE`)
 
 ```bash
-uv run onto-pipeline --env-file opencode.env normalize-seed
+uv run onto-pipeline --env-file opencode.env normalize
 ```
 
 Acuña IRIs opacos (uuid5, reproducible), deriva etiquetas, corre los cuatro detectores de
 erratas, arma los contextos de glosa y —si hay proveedor— genera las glosas. Commitea la
 ontología al DAG de versiones.
 
-Salida: `data/ontology/seed_normalized.ttl`. Los hallazgos que necesitan tu decisión
+Salida: `data/ontology/initial_normalized.ttl`. Los hallazgos que necesitan tu decisión
 —divergencias de etiqueta, pares sin verificar entre idiomas, erratas— van a la tabla
 `review_items`:
 
@@ -452,9 +452,9 @@ uv run onto-pipeline review list --kind typo --json    # para máquina
 uv run onto-pipeline review resolve <id> rejected --comment "es un término del dominio"
 ```
 
-Un hallazgo tiene identidad derivada de su contenido, así que re-correr `normalize-seed` no
+Un hallazgo tiene identidad derivada de su contenido, así que re-correr `normalize` no
 duplica nada ni reabre lo ya decidido: lo que rechazaste queda rechazado. Y si un hallazgo deja
-de aparecer porque cambiaste la semilla, pasa a `superseded` en vez de quedar colgado como
+de aparecer porque cambiaste la ontología inicial, pasa a `superseded` en vez de quedar colgado como
 pendiente.
 
 Sin proveedor configurado saltea `PREP-NORMALIZE-GLOSSES` y te dice cuántas glosas quedaron pendientes.
@@ -473,7 +473,7 @@ separa un consejo de una lista.
 **Una decisión pendiente le gana a cualquier etapa que podría correr**, porque todo lo que viene
 después estaría construido sobre una respuesta que nadie dio. Este diseño tiene cinco puntos que
 decide el usuario —zona gris del matcher (`ITER-MATCH`), rama (`ITER-BRANCH`), propiedad funcional (`ITER-APPLY`),
-validación de CQ (`PREP-CQ-GENERATED`), errata en la semilla (`PREP-NORMALIZE`)— y un runner que los pasara de largo los
+validación de CQ (`PREP-CQ-GENERATED`), errata en la ontología inicial (`PREP-NORMALIZE`)— y un runner que los pasara de largo los
 estaría decidiendo por default, que es la falla que `BRANCH-ONLY-REVIEW` y `AUTO-APPLY-WHEN-NO-AXES` nombran desde los dos lados: no
 preguntar nunca y que el sistema elija el modelado en silencio, o preguntar todo y volverse el
 trabajo manual que vino a reemplazar.
@@ -496,15 +496,15 @@ hace. Ver «La ruta guiada», arriba.
 ```bash
 uv run onto-pipeline --env-file opencode.env extract    # menciones por chunk
 uv run onto-pipeline --env-file opencode.env coref      # agrupar las del mismo individuo
-uv run onto-pipeline match                              # tipar contra la semilla
+uv run onto-pipeline match                              # tipar contra la ontología inicial
 uv run onto-pipeline --env-file opencode.env bridge     # puentear huérfanas (`ITER-BRIDGE`)
 uv run onto-pipeline --env-file opencode.env induce     # las que quedan, a clases nuevas
 ```
 
 **`bridge` no es opcional si vas a correr `induce`.** Antes de dar por huérfana una mención,
-pregunta si se relaciona con una clase que la semilla ya tiene *aunque ningún documento lo
-diga*: el corpus escribe "focus group" y la semilla tiene `Technique`. Sin esa etapa, cada
-mención que la semilla sí cubría pero el matcher no conectó se vuelve una clase inducida
+pregunta si se relaciona con una clase que la ontología inicial ya tiene *aunque ningún documento lo
+diga*: el corpus escribe "focus group" y la ontología inicial tiene `Technique`. Sin esa etapa, cada
+mención que la ontología inicial sí cubría pero el matcher no conectó se vuelve una clase inducida
 espuria — el falso huérfano alimentando al inductor, que es justo lo que la compuerta no-go de
 `BUILD-NO-GO-GATE` quiere evitar. `induce` avisa si no encuentra puentes para esa versión.
 
@@ -515,7 +515,7 @@ todo id agrupado exista.
 
 Los puentes quedan marcados `world_knowledge`, y esa marca tiene consecuencia: **el filtro de
 evidencia de `ITER-VALIDATE` no se les aplica**. Sin la distinción, "todo axioma sin cita se descarta"
-mataría exactamente los puentes que hacen útil a la semilla. Pasan igual por el razonador y por
+mataría exactamente los puentes que hacen útil a la ontología inicial. Pasan igual por el razonador y por
 OntoClean, y te llegan marcados como lo que son.
 
 Medido sobre las 686 huérfanas de `v2`: con `min_candidate_score: 0.45` son 403 preguntas que
@@ -637,9 +637,9 @@ evidencia independiente: la clase se describió usando ese documento, así que e
 parte el pipeline reconociendo su propia escritura. `circular` los cuenta. No son errores y no
 se tiran; son los que no hay que sumar como cobertura.
 
-Sobre el par actual el resultado es cero pasajes para las 34 clases de la semilla, que es
+Sobre el par actual el resultado es cero pasajes para las 34 clases de la ontología inicial, que es
 exactamente lo que predice el desajuste temático documentado más abajo: no es una falla de la
-etapa, es la etapa reportando que el corpus no define nada de lo que la semilla nombra.
+etapa, es la etapa reportando que el corpus no define nada de lo que la ontología inicial nombra.
 
 ### 6. Conflictos fácticos (`ITER-CONFLICTS`)
 
@@ -716,7 +716,7 @@ un axioma individual (`BRANCH-ONLY-REVIEW`): ve ramas, y la cadena decide qué e
 Tres cosas de la cadena que no son obvias:
 
 - **El ITER-VALIDATE-6-EVIDENCE se aplica a una procedencia y no a la otra.** La regla "todo axioma sin cita se
-  descarta" borraría justamente los puentes que hacen útil a la semilla: un axioma
+  descarta" borraría justamente los puentes que hacen útil a la ontología inicial: un axioma
   `world_knowledge` no tiene cita por construcción (`ITER-BRIDGE`), y eso es para lo que existe.
   Aplicárselo no es una política más estricta, es otra y equivocada.
 - **El ITER-VALIDATE-5-PITFALLS nunca rechaza.** Un pitfall es un olor —una clase sin definición, una propiedad
@@ -932,8 +932,8 @@ uno viejo, en cambio, entrega instancias que no corresponden a la TBox que va en
 archivo. `--no-refresh-abox` lo desactiva.
 
 **La procedencia va afuera de la ontología, en un manifiesto JSON.** Escribirla adentro pediría
-propiedades de anotación que la semilla no declara, y eso saca la ontología de OWL 2 DL sin dar
-ningún error: el síntoma sería ELK salteándose en silencio (`seed.DECLARED_ANNOTATIONS`). Hay un
+propiedades de anotación que la ontología inicial no declara, y eso saca la ontología de OWL 2 DL sin dar
+ningún error: el síntoma sería ELK salteándose en silencio (`initial_ontology.DECLARED_ANNOTATIONS`). Hay un
 test que fija que el export no escriba ninguna.
 
 `--format trig` —el default— conserva la procedencia por documento en grafos con nombre.
@@ -1025,15 +1025,15 @@ su propio insumo. La marca sobrevive a una re-ingesta.
 
 **La herramienta de anotación** (`BUILD-STEP-3`) es un HTML autocontenido por documento en
 `data/annotate/`. Se abre en el navegador —el corpus no sale de tu máquina— y tiene tres
-acciones: seleccionar texto y elegir una clase de la semilla, escribir una clase que la semilla
+acciones: seleccionar texto y elegir una clase de la ontología inicial, escribir una clase que la ontología inicial
 no tiene, o marcar la mención como válida sin clase asignable.
 
-`in_seed` no se pregunta: se deriva de por dónde elegiste la clase. Es la distinción sobre la
+`in_inventory` no se pregunta: se deriva de por dónde elegiste la clase. Es la distinción sobre la
 que descansa toda la métrica y es demasiado fácil de errar si es un checkbox.
 
-| Acción en la herramienta | `gold_class` | `in_seed` | Qué significa si el matcher no la tipa |
+| Acción en la herramienta | `gold_class` | `in_inventory` | Qué significa si el matcher no la tipa |
 |---|---|---|---|
-| Clase de la semilla | el label | `true` | **falso huérfano** — un error del matcher |
+| Clase de la ontología inicial | el label | `true` | **falso huérfano** — un error del matcher |
 | Clase nueva | lo que escribas | `false` | **huérfano genuino** — alimenta `ITER-INDUCE` |
 | Sin clase asignable | `null` | `false` | no cuenta: no es falla del matcher |
 
@@ -1041,9 +1041,9 @@ que descansa toda la métrica y es demasiado fácil de errar si es un checkbox.
 ```mermaid
 flowchart TB
   M["mención en un documento retenido"] --> Q{"¿de dónde salió la clase<br/>que elegiste en la herramienta?"}
-  Q -->|"la elegí de la semilla"| S["gold_class = label<br/>in_seed = true"]
-  Q -->|"la escribí yo"| N["gold_class = texto libre<br/>in_seed = false"]
-  Q -->|"no hay clase asignable"| X["gold_class = null<br/>in_seed = false"]
+  Q -->|"la elegí de la ontología inicial"| S["gold_class = label<br/>in_inventory = true"]
+  Q -->|"la escribí yo"| N["gold_class = texto libre<br/>in_inventory = false"]
+  Q -->|"no hay clase asignable"| X["gold_class = null<br/>in_inventory = false"]
 
   S --> R{"¿el matcher la tipó?"}
   R -->|"sí"| HIT["acierto"]
@@ -1067,13 +1067,13 @@ Va guardando en `localStorage` del navegador; exportá antes de cerrar. El JSONL
 valida los offsets contra el `markdown_hash`: si cambió el parser, se niega en vez de
 desalinear en silencio.
 
-El formato es propio porque `in_seed` no lo contempla ningún estándar; el exportador a
+El formato es propio porque `in_inventory` no lo contempla ningún estándar; el exportador a
 BRAT/INCEpTION lo degrada a atributo ad-hoc, que es la única pérdida.
 
 ### 16. Calibración contra un corpus publicado
 
 El conjunto de retención mide un corpus anotado a mano, documento por documento. Para fijar los
-umbrales hace falta otra cosa: un corpus **ya** anotado contra una ontología, donde `in_seed` es
+umbrales hace falta otra cosa: un corpus **ya** anotado contra una ontología, donde `in_inventory` es
 decidible por construcción —la clase gold está en la ontología o no está— y por lo tanto la
 métrica no necesita campaña de anotación. Todos los casos de uso, propios y publicados, son
 instrumentos: el proyecto no tiene un dominio objetivo al que "volver".
@@ -1117,7 +1117,7 @@ data/                 gitignoreado; todo es derivado y regenerable
   markdown/           un .md por documento; los spans de los bloques indexan esto
   assets/             recortes de figuras
   reports/            HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
-  ontology/           la semilla normalizada, el diff y el ABox de cada versión
+  ontology/           la ontología inicial normalizada, el diff y el ABox de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
   calibration/        resultados del barrido, un JSON por caso de uso
@@ -1155,10 +1155,10 @@ conversaciones que trabajan sobre este repo.
 
 ## Limitaciones conocidas
 
-- **El corpus y la semilla no se corresponden.** Medido sobre los 495.213 caracteres de los 10
+- **El corpus y la ontología inicial no se corresponden.** Medido sobre los 495.213 caracteres de los 10
   documentos parseados: `field note`, `informant`, `ethnograph`, `coding scheme`,
   `thematic analysis`, `content analysis`, `grounded theory` y `theoretical framework` aparecen
-  **cero veces**. La semilla es de metodología cualitativa; el corpus son papers de política de
+  **cero veces**. La ontología inicial es de metodología cualitativa; el corpus son papers de política de
   ciencia abierta, que hablan *sobre* investigación en vez de reportar estudios cualitativos.
   Una tasa de falsos huérfanos medida sobre este caso de uso no sería mala: sería sin significado,
   porque mediría el desajuste temático y no la calidad del matcher.
@@ -1166,7 +1166,7 @@ conversaciones que trabajan sobre este repo.
 - **Corrido sobre datos reales, `ITER-MATCH` tipa mal.** De 1.725 menciones: 32 automáticas, 219 en zona
   gris, 1.474 huérfanas (85%). Y las 32 automáticas son **todas** eco léxico — `question` 0.998,
   `information` 0.998, `support` 0.993, `subject` 0.992 — el nombre de la clase apareciendo como
-  palabra corriente, ninguna una instanciación real. Con el corpus y la semilla desalineados ese
+  palabra corriente, ninguna una instanciación real. Con el corpus y la ontología inicial desalineados ese
   85% no es un veredicto sobre el matcher.
 - **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice `ITER-MATCH`.**
   Ya no es provisional. Medido sobre CRAFT/CL —8.723 menciones gold contra 3.418 clases, 96% con
@@ -1185,7 +1185,7 @@ conversaciones que trabajan sobre este repo.
 - **Los umbrales 0.92/0.70 resultaron bien puestos, sobre otro par.** El barrido sobre CRAFT/CL
   pone el máximo de F1 en 0,774 con el corte en 0,90, así que 0,92 está casi en el óptimo. Dos
   salvedades: el óptimo de F1 deja la tasa de falsos huérfanos en 26,3%, y el punto de operación
-  depende del tamaño del inventario, que acá son 3.418 clases contra las 34 de la semilla.
+  depende del tamaño del inventario, que acá son 3.418 clases contra las 34 de la ontología inicial.
 - **El cross-encoder viene apagado, ahora con evidencia.** Re-rankeando el top-5 del bi-encoder
   sobre CRAFT/CL, el recall@1 cae de 6.090 a 2.220 y la separación se va a **−0,56**: no solo
   aplasta los puntajes a ~0,1–0,3 —que es el falso huérfano que nombra `RISKS-FALSE-ORPHANS`— sino que además

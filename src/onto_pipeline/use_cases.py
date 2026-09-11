@@ -7,7 +7,8 @@ instrumentos, y lo que califica al sistema es cómo se comporta *a través* de e
 contra una respuesta conocida es otra. Este módulo carga el instrumento; `calibration` lo usa
 para medir.
 
-Lo que un caso de uso da gratis: **`in_seed` es decidible por construcción**. La clase gold está
+Lo que un caso de uso da gratis: **`in_inventory` es decidible por construcción**. La clase gold
+está
 en la ontología o no está, así que la tasa de falsos huérfanos —la métrica que gobierna
 `BUILD-NO-GO-GATE`— no necesita campaña de anotación.
 
@@ -19,7 +20,8 @@ Tres cosas que esta carga **no** hace, a propósito:
                      propia referencia y ninguna versión del parser puede correr los offsets.
     sin ITER-EXTRACT el corpus ya trae las menciones. Pasarlas por el extractor mediría al
                      extractor y no al matcher.
-    sin normalizar   `seed.normalize_seed` acuña IRIs opacos y caza erratas, que es el
+    sin normalizar   `initial_ontology.normalize_initial_ontology` acuña IRIs opacos y caza
+    erratas, que es el
      la semilla      tratamiento correcto para una semilla que escribió una persona y el
                      equivocado para una ontología publicada: las anotaciones gold nombran
                      clases por su id propio, así que los ids tienen que sobrevivir intactos.
@@ -27,7 +29,7 @@ Tres cosas que esta carga **no** hace, a propósito:
 ## La retención de clases
 
 Un corpus anotado contra O no tiene huérfanas genuinas: toda clase gold está en O por
-construcción, así que `in_seed` es siempre verdadero y el carril de huérfanas genuinas de
+construcción, así que `in_inventory` es siempre verdadero y el carril de huérfanas genuinas de
 `EVAL-PIPELINE` queda vacío. Ese carril es la mitad de `BUILD-NO-GO-GATE`, y dejarlo sin probar
 calibraría medio instrumento.
 
@@ -77,7 +79,7 @@ class GoldMention:
     span: tuple[int, int]
     text: str
     gold_class: str | None
-    in_seed: bool = False
+    in_inventory: bool = False
 
 
 @dataclass
@@ -129,7 +131,7 @@ class UseCase:
                         span=mention.span,
                         text=mention.text,
                         gold_class=mention.gold_class,
-                        in_seed=mention.in_seed,
+                        in_inventory=mention.in_inventory,
                     )
                     for mention in document.mentions
                 ],
@@ -511,7 +513,7 @@ def load_use_case(
     for document in use_case.documents:
         for mention in document.mentions:
             mention.gold_class = curie(mention.gold_class) if mention.gold_class else None
-            mention.in_seed = mention.gold_class in inventory
+            mention.in_inventory = mention.gold_class in inventory
     return use_case
 
 

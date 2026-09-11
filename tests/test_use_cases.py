@@ -39,7 +39,7 @@ def test_in_seed_is_decided_by_the_inventory_not_by_a_human(use_case_dir):
     """El motivo entero de medir sobre un corpus publicado: el campo que define la métrica de
     falsos huérfanos no necesita campaña de anotación."""
     case = load(use_case_dir())
-    assert all(mention.in_seed for mention in case.documents[0].mentions)
+    assert all(mention.in_inventory for mention in case.documents[0].mentions)
 
 
 def test_obsolete_classes_never_become_targets(use_case_dir):
@@ -67,14 +67,14 @@ def test_withholding_classes_manufactures_genuine_orphans(tmp_path, use_case_dir
     mitad de `BUILD-NO-GO-GATE` queda sin probar salvo que se corte el inventario a propósito."""
     plain = load(use_case_dir(tmp_path / "plain"))
     assert all(
-        mention.in_seed for document in plain.documents for mention in document.mentions
+        mention.in_inventory for document in plain.documents for mention in document.mentions
     )
 
     withheld = load(use_case_dir(tmp_path / "cut", holdout_classes="[CL:0000233]"))
     assert withheld.withheld == ["CL:0000233"]
     assert "CL:0000233" not in withheld.inventory
     assert {
-        mention.gold_class: mention.in_seed
+        mention.gold_class: mention.in_inventory
         for document in withheld.documents for mention in document.mentions
     } == {"CL:0000540": True, "CL:0000233": False}
 

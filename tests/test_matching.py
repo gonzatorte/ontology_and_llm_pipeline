@@ -119,7 +119,7 @@ def test_a_declared_synonym_merges(matcher):
         [mention("m1", "Interview", "d1"), mention("m2", "Interviewing", "d2")],
         synonyms={"interview": {"interviewing"}},
     )
-    assert decisions[0].reason == "synonym_declared_in_seed"
+    assert decisions[0].reason == "synonym_declared_in_ontology"
 
 
 def test_a_generic_phrase_separates_without_asking(matcher):
