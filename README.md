@@ -426,10 +426,10 @@ flowchart LR
     e["export"]
   end
 
-  db[("pipeline.sqlite3<br/>blocks · documents · mentions<br/>work_units · decisions · versions · CQs")]
-  md[/"data/markdown/"/]
-  as[/"data/assets/"/]
-  on[/"data/ontology/initial_normalized.ttl"/]
+  db[("Postgres<br/>blocks · documents · mentions<br/>work_units · decisions · versions · CQs")]
+  md[/"markdown/ (bucket)"/]
+  as[/"assets/ (bucket)"/]
+  on[/"sessions/&lt;id&gt;/ontology/initial_normalized.ttl"/]
   rv[/"data/review/seed_review.json"/]
   rp[/"data/reports/ · `DELIVERABLES-PENDING-PARSER-EVAL`"/]
   an[/"data/annotate/ · data/brat/"/]
@@ -503,8 +503,8 @@ Dice con números qué queda atrás —versiones, menciones, decisiones— y pid
 borra: re-preparar commitea una raíz nueva y el linaje viejo sigue alcanzable, que es lo que el
 DAG ya hace con las ramas no elegidas (`ITER-APPLY`, `REORG-PATH-DEPENDENCE`).
 
-**Para correr dos en paralelo hace falta Postgres.** SQLite da un escritor y muchos lectores, que
-alcanza para una sesión por vez. Ver Configuración.
+**Dos sesiones en paralelo escriben a la vez**, que es para lo que el almacén es Postgres. Ver
+Configuración.
 
 ### La ruta guiada — `wizard`
 
@@ -554,7 +554,7 @@ uv run onto-pipeline ingest -d ruta/al.pdf # documentos puntuales
 ```
 
 Clasifica cada página (`born_digital` / `scan` / `uncertain`), parsea las born-digital, y
-puebla `blocks`, `documents` y `page_classification` en SQLite más un Markdown por documento.
+puebla `blocks`, `documents` y `page_classification` más un Markdown por documento.
 Las páginas `scan`/`uncertain` se registran como `unparsed`: son la ruta VLM, que no está
 implementada. La columna **table gap** cuenta páginas con caption de tabla pero sin tabla
 extraída — el parser born-digital sólo ve tablas con líneas.
@@ -578,7 +578,7 @@ renderiza esa propiedad— y para nada más; repetirla entre los `altLabel` hace
 **sea** el de los nombres del concepto, sin un segundo lugar donde mirar. El matcher los compara
 a todos (`ITER-MATCH`).
 
-Salida: `data/ontology/initial_normalized.ttl`. Los hallazgos que necesitan tu decisión
+Salida: `sessions/<id>/ontology/initial_normalized.ttl`, en el bucket. Los hallazgos que necesitan tu decisión
 —divergencias de etiqueta, pares sin verificar entre idiomas, erratas— van a la tabla
 `review_items`:
 
@@ -875,7 +875,7 @@ Tres cosas de la cadena que no son obvias:
   un **subconjunto local del catálogo OOPS!**, no OOPS!: el scanner real es un servicio web, y
   mandarle la ontología de alguien a un tercero es una decisión de su dueño, no un paso que un
   pipeline dé por su cuenta. Qué pitfalls quedan afuera está en la deuda técnica.
-- **Las shapes de SHACL se escriben a mano**, en `data/shapes.ttl`. No se derivan de la TBox: OWL
+- **Las shapes de SHACL se escriben a mano**, en `shapes.ttl` del bucket. No se derivan de la TBox: OWL
   dice qué tiene que ser verdad y SHACL qué tiene que estar dicho, y bajo mundo abierto son
   afirmaciones distintas. Generar una desde la otra convertiría cada silencio en una violación,
   que es exactamente la lectura de mundo cerrado que este proyecto no está haciendo. Sin shapes
@@ -1041,7 +1041,7 @@ uv run onto-pipeline regenerate --force          # reescribir aunque las reglas 
 ```
 
 Recomputa el ABox desde la capa de menciones y los tipados de una versión de ontología, y lo
-escribe en `data/ontology/<version>.abox.trig`. **No es una migración**: como el ABox se deriva
+escribe en `sessions/<id>/ontology/<version>.abox.trig`. **No es una migración**: como el ABox se deriva
 de las menciones y no de fuentes externas, reorganizar la TBox nunca necesita una — cambian las
 reglas y esto se corre de nuevo.
 
@@ -1068,7 +1068,7 @@ uv run onto-pipeline export --tbox-only --format ttl
 ```
 
 Lo que se entrega. Hasta acá la ontología estaba partida en dos: la TBox versionada vive en
-SQLite —cada versión guarda su Turtle entero— y el ABox en `data/ontology/<versión>.abox.trig`.
+el almacén —cada versión guarda su Turtle entero— y el ABox en el bucket, bajo la sesión.
 `export` junta las dos mitades en un archivo.
 
 **Qué quiere decir «aplicar toda la historia».** No hay deltas que reproducir: la cabeza de un
@@ -1107,7 +1107,7 @@ uv run onto-pipeline hold-out --help        # qué documentos están retenidos
 los blank nodes canonicalizados, así que reordenar la serialización no es un cambio y un
 renombre aparece como cambio de anotación, no como axiomas que van y vienen. En pantalla se lee
 por etiquetas —con IRIs opacos, un diff de IRIs crudos no es revisable— y el JSON que queda en
-`data/ontology/<origen>-to-<destino>.diff.json` conserva los IRIs completos.
+`sessions/<id>/ontology/<origen>-to-<destino>.diff.json` conserva los IRIs completos.
 
 Cada comando que commitea una versión lo emite solo: además de la ontología entera, deja el
 diff contra la versión inmediatamente anterior del DAG. Una versión raíz lo dice y no genera
