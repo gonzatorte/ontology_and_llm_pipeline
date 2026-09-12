@@ -81,63 +81,105 @@ Las etapas que llaman al modelo necesitan `--env-file opencode.env` **antes** de
 
 Cada uno costó un bug o está en el spec como decisión de diseño.
 
-1. **"El LLM clasifica y nombra. El código arma la lógica. El razonador rechaza."** Al modelo
-   nunca se le pide OWL: se le hace una pregunta atómica y el código escribe el axioma.
-2. **A un modelo nunca se le piden alternativas de rama** (`ITER-BRANCH`). Es la única prohibición
-   explícita del spec para esa etapa. Los ejes salen del razonador y de un catálogo enumerado.
-3. **ELK nunca devuelve `OK`.** Su silencio sólo significa que el axioma ofensor pudo haber sido
-   ignorado: `REJECTED` / `INCONCLUSIVE` / `SKIPPED`, jamás una aprobación.
-4. **Toda propiedad de anotación que se escriba tiene que estar en `initial_ontology.DECLARED_ANNOTATIONS`.**
-   Escribir una que no está saca la ontología de OWL 2 DL, y el síntoma no es un error: es ELK
-   salteándose en silencio. Ya pasó dos veces. Hay un test que lo fija por etapa.
-5. **Ningún umbral se escribe fuera de `config/default.yaml`.** Y todo umbral nuevo se documenta
-   ahí con lo que se midió o con que no se midió nada.
-6. **La capa de menciones es inmutable salvo por extensión.** El ABox se deriva; la TBox se
-   versiona en un DAG. `regenerate` es función pura de (menciones, tipados, reglas): no consulta
-   modelo ni razonador, y nunca escribe en la capa de menciones.
-7. **Nada de algoritmos de grafo sobre la serialización RDF de la TBox.** La disjointness invierte
-   el signo bajo similitud estructural: dos clases declaradas incompatibles se ven conectadas
-   (`LAYERS-ONTOLOGY-NOT-GRAPH`). Clustering sobre el grafo de menciones huérfanas sí está permitido.
-8. **Mundo abierto.** No asertar X y asertar ¬X son cosas distintas. Ausencia de contraejemplo no
-   es prueba; sólo el contraejemplo es conocimiento.
-9. **Ningún servicio importa `typer`, `rich`, `fastapi` ni `uvicorn` — ni nada de `interfaces/`.**
-   Hay más de una interfaz sobre el mismo pipeline y el cuerpo de una etapa no puede pertenecer
-   a ninguna: las de terminal son el CLI de banderas y `wizard`, y la de HTTP es la API REST.
-   Todas viven en `interfaces/`, que es la carpeta que traduce un protocolo a la capa de
-   servicios y no tiene lógica de dominio. El contrato está en `services/__init__.py`;
-   `tests/test_services.py` lo fija leyendo los imports, y prohíbe `interfaces` además de las
-   bibliotecas, porque importar `render` es importar `rich` con un rodeo. Etapa nueva: va en
-   `services/`, se muestra en `interfaces/render.py`, y la llaman todas las interfaces.
-10. **Ningún módulo sabe contra qué motor corre el almacén.** El SQL se escribe con `?` y las
-    filas se leen por nombre; lo que difiere entre SQLite y Postgres vive en `store.py` y en
-    ningún otro lado. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
-    `SUM(booleano)`, el JSON se lee en Python y no con `json_extract`. `tests/test_store.py`
-    corre el mismo contrato contra los dos.
-11. **Todo dato derivado pertenece a una sesión de usuario, y toda consulta lo filtra.** Los ids
-    de documento y de mención derivan del corpus, así que dos sesiones sobre el mismo generan
-    los mismos: sin el filtro, la segunda le **borra** las menciones a la primera. Las
-    excepciones son tres y están escritas: lo que cuelga de `version_id` —que es
-    `<sesión>:v<N>`, único globalmente—, el **resultado** de `work_units`, que es
-    content-addressed y se comparte para no pagar dos veces, y los **uploads**, que son material
-    de entrada y se comparten como cualquier caso de uso publicado (`API-SHARED-UPLOADS`).
-    `tests/test_session_scope.py` lee el código y falla si alguna consulta se olvida; la cola de
-    `jobs` es lo único que se mira entre sesiones, porque un worker reclama el más viejo de
-    cualquiera.
-12. **La fase de una sesión se deriva de los datos.** Hay una columna `phase`, pero es una
-    afirmación: `sessions.observed_phase` cuenta filas y `sync_phase` la corrige antes de que
-    alguien la lea. Volver a `PREP` desde `ITER` **no borra**: dice qué queda atrás y ramifica.
-13. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno, `wizard` lo
-    pregunta y la API no encola lo que el plan da como bloqueado: las tres cosas son la misma
-    regla. Correr lo que viene después de una decisión que nadie tomó es tomarla por default,
-    que es lo que `BRANCH-ONLY-REVIEW` nombra. Por lo mismo, una decisión no se registra
-    mientras la sesión tiene un job en vuelo: se estaría decidiendo sobre un estado que cambia
-    debajo.
-14. **Una conexión por unidad de trabajo** —un request, un job—, abierta y cerrada en el hilo
-    que la usa. Nunca una conexión global en el ciclo de vida de un proceso. En SQLite eso
-    explota por afinidad de hilo; en Postgres es peor, porque **no** explota: compartir conexión
-    es compartir transacción, y dos unidades terminan commiteándose mutuamente trabajo a medio
-    hacer. Lo mismo vale para lo efímero: lo que un job baja a disco lo borra al terminar.
 
+### `MODEL-NAMES-CODE-BUILDS`
+
+**"El LLM clasifica y nombra. El código arma la lógica. El razonador rechaza."** Al modelo
+nunca se le pide OWL: se le hace una pregunta atómica y el código escribe el axioma.
+
+### `NO-MODEL-BRANCHES`
+
+**A un modelo nunca se le piden alternativas de rama** (`ITER-BRANCH`). Es la única prohibición
+explícita del spec para esa etapa. Los ejes salen del razonador y de un catálogo enumerado.
+
+### `ELK-NEVER-APPROVES`
+
+**ELK nunca devuelve `OK`.** Su silencio sólo significa que el axioma ofensor pudo haber sido
+ignorado: `REJECTED` / `INCONCLUSIVE` / `SKIPPED`, jamás una aprobación.
+
+### `DECLARED-ANNOTATIONS-ONLY`
+
+**Toda propiedad de anotación que se escriba tiene que estar en `initial_ontology.DECLARED_ANNOTATIONS`.**
+Escribir una que no está saca la ontología de OWL 2 DL, y el síntoma no es un error: es ELK
+salteándose en silencio. Ya pasó dos veces. Hay un test que lo fija por etapa.
+
+### `THRESHOLDS-IN-CONFIG`
+
+**Ningún umbral se escribe fuera de `config/default.yaml`.** Y todo umbral nuevo se documenta
+ahí con lo que se midió o con que no se midió nada.
+
+### `MENTIONS-APPEND-ONLY`
+
+**La capa de menciones es inmutable salvo por extensión.** El ABox se deriva; la TBox se
+versiona en un DAG. `regenerate` es función pura de (menciones, tipados, reglas): no consulta
+modelo ni razonador, y nunca escribe en la capa de menciones.
+
+### `LAYERS-ONTOLOGY-NOT-GRAPH`
+
+**Nada de algoritmos de grafo sobre la serialización RDF de la TBox.** Lleva el nombre de la
+sección del spec que lo funda, porque es la misma idea y no dos. La disjointness invierte el
+signo bajo similitud estructural: dos clases declaradas incompatibles se ven conectadas.
+Clustering sobre el grafo de menciones huérfanas sí está permitido.
+
+### `OPEN-WORLD`
+
+**Mundo abierto.** No asertar X y asertar ¬X son cosas distintas. Ausencia de contraejemplo no
+es prueba; sólo el contraejemplo es conocimiento.
+
+### `SERVICES-NO-INTERFACE`
+
+**Ningún servicio importa `typer`, `rich`, `fastapi` ni `uvicorn` — ni nada de `interfaces/`.**
+Hay más de una interfaz sobre el mismo pipeline y el cuerpo de una etapa no puede pertenecer
+a ninguna: las de terminal son el CLI de banderas y `wizard`, y la de HTTP es la API REST.
+Todas viven en `interfaces/`, que es la carpeta que traduce un protocolo a la capa de
+servicios y no tiene lógica de dominio. El contrato está en `services/__init__.py`;
+`tests/test_services.py` lo fija leyendo los imports, y prohíbe `interfaces` además de las
+bibliotecas, porque importar `render` es importar `rich` con un rodeo. Etapa nueva: va en
+`services/`, se muestra en `interfaces/render.py`, y la llaman todas las interfaces.
+
+### `STORE-NO-DIALECT`
+
+**Ningún módulo sabe contra qué motor corre el almacén.** El SQL se escribe con `?` y las
+filas se leen por nombre; lo que difiere entre SQLite y Postgres vive en `store.py` y en
+ningún otro lado. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
+`SUM(booleano)`, el JSON se lee en Python y no con `json_extract`. `tests/test_store.py`
+corre el mismo contrato contra los dos.
+
+### `SESSION-SCOPED-DATA`
+
+**Todo dato derivado pertenece a una sesión de usuario, y toda consulta lo filtra.** Los ids
+de documento y de mención derivan del corpus, así que dos sesiones sobre el mismo generan
+los mismos: sin el filtro, la segunda le **borra** las menciones a la primera. Las
+excepciones son tres y están escritas: lo que cuelga de `version_id` —que es
+`<sesión>:v<N>`, único globalmente—, el **resultado** de `work_units`, que es
+content-addressed y se comparte para no pagar dos veces, y los **uploads**, que son material
+de entrada y se comparten como cualquier caso de uso publicado (`API-SHARED-UPLOADS`).
+`tests/test_session_scope.py` lee el código y falla si alguna consulta se olvida; la cola de
+`jobs` es lo único que se mira entre sesiones, porque un worker reclama el más viejo de
+cualquiera.
+
+### `PHASE-DERIVED`
+
+**La fase de una sesión se deriva de los datos.** Hay una columna `phase`, pero es una
+afirmación: `sessions.observed_phase` cuenta filas y `sync_phase` la corrige antes de que
+alguien la lea. Volver a `PREP` desde `ITER` **no borra**: dice qué queda atrás y ramifica.
+
+### `DECISION-NEVER-CROSSED`
+
+**Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno, `wizard` lo
+pregunta y la API no encola lo que el plan da como bloqueado: las tres cosas son la misma
+regla. Correr lo que viene después de una decisión que nadie tomó es tomarla por default,
+que es lo que `BRANCH-ONLY-REVIEW` nombra. Por lo mismo, una decisión no se registra
+mientras la sesión tiene un job en vuelo: se estaría decidiendo sobre un estado que cambia
+debajo.
+
+### `ONE-CONNECTION-PER-UNIT`
+
+**Una conexión por unidad de trabajo** —un request, un job—, abierta y cerrada en el hilo
+que la usa. Nunca una conexión global en el ciclo de vida de un proceso. En SQLite eso
+explota por afinidad de hilo; en Postgres es peor, porque **no** explota: compartir conexión
+es compartir transacción, y dos unidades terminan commiteándose mutuamente trabajo a medio
+hacer. Lo mismo vale para lo efímero: lo que un job baja a disco lo borra al terminar.
 ## Convenciones de trabajo
 
 - **Identificadores legibles — y siempre identificar.** No quedan códigos ni números de sección

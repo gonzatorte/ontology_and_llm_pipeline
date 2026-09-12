@@ -155,7 +155,7 @@ class Store:
     def integrity_error(self) -> type[Exception]:
         """La excepción de violación de restricción, que cada driver nombra a su modo.
 
-        Vive acá por la invariante 10: quien encola un job atrapa «esta sesión ya tiene uno» sin
+        Vive acá por `STORE-NO-DIALECT`: quien encola un job atrapa «esta sesión ya tiene uno» sin
         saber contra qué motor corre. Ojo con lo que dice `table_exists`: en Postgres la
         sentencia que falla aborta la transacción, así que quien la atrape tiene que hacer
         `rollback` antes de seguir usando la conexión.

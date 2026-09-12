@@ -1259,7 +1259,7 @@ proxy. Es síncrono lo que consulta el almacén y lo que registra una decisión.
 `services/catalog.py` —ninguna interfaz puede ser su dueña— y `GET /stages` la devuelve.
 
 **La compuerta del plan.** Una etapa que `orchestration.survey` da como bloqueada o esperando una
-decisión **no se encola**, y la respuesta dice qué falta. Es la invariante 13 sobre HTTP: `next`
+decisión **no se encola**, y la respuesta dice qué falta. Es `DECISION-NEVER-CROSSED` sobre HTTP: `next`
 frena ante un punto de decisión y `wizard` lo pregunta; encolar lo que viene después de una
 decisión que nadie tomó sería tomarla por default (`BRANCH-ONLY-REVIEW`). Por la misma razón, una
 decisión síncrona se rechaza con 409 mientras la sesión tiene un job en vuelo: se estaría

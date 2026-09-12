@@ -25,7 +25,7 @@ SESSION = "test-1"
 SERVICES = Path(__file__).resolve().parents[1] / "src" / "onto_pipeline" / "services"
 
 
-# ─────────────────────────  el invariante de la capa  ─────────────────────────
+# ─────────────────────  `SERVICES-NO-INTERFACE`: el corte de la capa  ─────────────────────
 
 
 # Lo de la terminal y lo de HTTP: una etapa que importa cualquiera de estos eligió por quién la

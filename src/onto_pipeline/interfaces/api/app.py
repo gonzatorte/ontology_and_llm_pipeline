@@ -220,7 +220,7 @@ def _install_routes(app: FastAPI, config_path: Path, protected: list) -> None:
     def run_stage(session_id: str, stage: str, body: RunStage | None = None) -> JSONResponse:
         """Lo que tarda se encola y devuelve un job; lo que no, contesta acá mismo.
 
-        La compuerta del plan es la invariante 13 sobre HTTP: una etapa que el plan da como
+        La compuerta del plan es `DECISION-NEVER-CROSSED` sobre HTTP: una etapa que el plan da como
         WAITING no se encola, y la respuesta dice qué decisión falta.
         """
         params = (body or RunStage()).params
@@ -326,7 +326,7 @@ def _install_routes(app: FastAPI, config_path: Path, protected: list) -> None:
         with workspace_for(config_path, session_id) as opened:
             store = opened.artifacts.store
             # Sólo lo de esta sesión: la clave la propone el cliente, y sin esto pediría la de
-            # otra. Es la invariante 11 en el borde de HTTP.
+            # otra. Es `SESSION-SCOPED-DATA` en el borde de HTTP.
             if not key.startswith(opened.artifacts.prefix + "/"):
                 key = f"{opened.artifacts.prefix}/{key}"
             artifact = artifacts_module.Artifact(store, key)

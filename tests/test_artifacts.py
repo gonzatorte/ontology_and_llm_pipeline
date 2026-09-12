@@ -51,8 +51,8 @@ def _workspace(tmp_path: Path) -> Workspace:
 
 
 def test_two_sessions_do_not_share_an_abox(tmp_path):
-    """La invariante 11 sobre los artefactos: el ABox es dato derivado, y el id de versión ya
-    lleva la sesión adentro, pero la clave lo dice igual para que se vea sin decodificar nada."""
+    """`SESSION-SCOPED-DATA` sobre los artefactos: el ABox es dato derivado, y el id de versión
+    ya lleva la sesión adentro, pero la clave lo dice igual para que se vea sin decodificar nada."""
     one = _artifacts(tmp_path, "s1").abox("s1:v1")
     other = _artifacts(tmp_path, "s2").abox("s2:v1")
 

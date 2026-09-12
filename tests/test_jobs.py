@@ -242,7 +242,7 @@ def test_progress_is_visible_before_the_job_finishes(conn):
 def test_two_sessions_run_at_once_and_each_counts_only_its_own(open_conn):
     """Dos sesiones corriendo a la vez, cada una con su conexión y su hilo. Lo que se fija es que
     el trabajo de una no aparezca en la contabilidad de la otra — la forma que tomó el bug que
-    la invariante 11 nombra."""
+    `SESSION-SCOPED-DATA` nombra."""
     from onto_pipeline import sessions
 
     setup = open_conn()

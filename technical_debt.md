@@ -504,7 +504,7 @@ en cada punto en vez de frenar.
 
 Lo que la hizo posible fue partir `cli.py` en `services/` + `render.py`: mientras el cuerpo de
 cada etapa estuvo pegado a Typer, cualquier segunda interfaz era una copia. El contrato de la
-capa está en `services/__init__.py` y hay un test que fija su invariante — **ningún servicio
+capa está en `services/__init__.py` y hay un test que fija `SERVICES-NO-INTERFACE` — **ningún servicio
 importa `typer` ni `rich`**.
 
 `review_items` sigue siendo donde viven las excepciones por caso de las reglas de mapeo — ver
@@ -953,7 +953,7 @@ No lo son: algunos se midieron con un barrido, otros vienen del spec de antes de
 otros son criterio, y algunos no los examinó nadie. Esa diferencia es la que hay que poder leer,
 porque decide si mover uno es ajustar o romper.
 
-El invariante 5 cubre la mitad: ningún umbral se escribe fuera de `config/default.yaml`. Falta
+El `THRESHOLDS-IN-CONFIG` cubre la mitad: ningún umbral se escribe fuera de `config/default.yaml`. Falta
 la otra mitad, y son dos cosas:
 
 1. **Por cada parámetro, cómo se fijó**: medido (con su n, su fecha y contra qué caso de uso),
@@ -1023,7 +1023,7 @@ una tarea fija de ECS es una conexión que hay que mantener viva, y el poleo no 
 
 La clave de un Markdown es `markdown/<doc_id>.md`, sin la sesión adentro, y lo mismo los recortes.
 Es correcto mientras el id de documento salga del corpus —dos sesiones sobre el mismo corpus
-escriben lo mismo—, y es la excepción escrita a la invariante 11. Donde se rompe es con dos
+escriben lo mismo—, y es la excepción escrita a `SESSION-SCOPED-DATA`. Donde se rompe es con dos
 corpus distintos cuyos ids coinciden: el segundo pisa al primero, y el síntoma es texto de otro
 documento, no un error.
 
@@ -1043,11 +1043,11 @@ duplican entre tareas.
 
 ### DEBT-API-CONNECTION-POOL — Cada unidad de trabajo paga un connect
 
-No es «falta un pool». Es que la invariante de conexión —una por request o por job, abierta y
+No es «falta un pool». Es que `ONE-CONNECTION-PER-UNIT` —una por request o por job, abierta y
 cerrada en el hilo que la usa— se paga con un connect por unidad, y contra Postgres administrado
 eso no es gratis. Mientras el tráfico sea de una persona poleando un job no se nota.
 
-Cuando moleste, el pool tiene que **respetar la invariante**, no reemplazarla: una conexión
+Cuando moleste, el pool tiene que **respetar `ONE-CONNECTION-PER-UNIT`**, no reemplazarla: una conexión
 prestada y devuelta por unidad de trabajo, nunca una compartida entre dos. Compartirla en
 Postgres es compartir transacción, y eso no explota — se commitean trabajo a medio hacer entre
 ellas, que es peor.

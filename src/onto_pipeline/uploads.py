@@ -7,7 +7,7 @@ que no se llaman `ontology.*` son el corpus, y el que sí es la ontología que s
 `API-UPLOADED-AND-PUBLISHED`.
 
 **Los uploads se comparten entre sesiones y borrarlos es global** (`API-SHARED-UPLOADS`). Es la
-excepción escrita a la invariante 11, no un olvido: subir dos veces el mismo corpus para dos
+excepción escrita a `SESSION-SCOPED-DATA`, no un olvido: subir dos veces el mismo corpus para dos
 sesiones sería pagar dos veces el almacenamiento de algo idéntico. La consecuencia —que borrar
 uno le saque el corpus a toda sesión que corra sobre él— es explícita, y por eso `delete` dice
 cuántas sesiones quedan apuntando a la nada.

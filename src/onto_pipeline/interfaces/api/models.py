@@ -57,7 +57,7 @@ class PlanOut(BaseModel):
     version: str
     steps: list[StepOut]
     # Lo que espera una decisión del usuario. Ninguna interfaz cruza un punto de decisión
-    # (invariante 13), así que esto es lo que hay que contestar antes de seguir.
+    # (`DECISION-NEVER-CROSSED`), así que esto es lo que hay que contestar antes de seguir.
     blocking: list[StepOut]
 
 

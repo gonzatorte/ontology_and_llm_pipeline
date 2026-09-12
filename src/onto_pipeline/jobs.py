@@ -12,7 +12,7 @@ sostienen, y las dos las arbitra la base y no la memoria del proceso:
    después insertar tiene una carrera; el índice no.
 2. **El reclamo es un compare-and-set**: gana el `UPDATE` que ve `status='queued'`, y lo dice
    `cursor.rowcount == 1`. Deliberadamente **sin** `FOR UPDATE SKIP LOCKED`, que metería
-   dialecto de Postgres fuera de `store.py` y rompería la invariante 10.
+   dialecto de Postgres fuera de `store.py` y rompería `STORE-NO-DIALECT`.
 
 El default es un worker porque cuesta menos, pero subirlo es configuración y no una apuesta: el
 mecanismo es el mismo para N hilos y para varias tareas. Lo que sí exige más de uno es Postgres,
@@ -286,8 +286,8 @@ def _message(exc: Exception) -> str:
 class Pool:
     """Los workers del proceso: hilos que reclaman, corren y cierran.
 
-    `open_conn` abre una conexión nueva **en el hilo que la usa**, que es la invariante de
-    conexión por unidad de trabajo. `run` recibe el job y una función de progreso.
+    `open_conn` abre una conexión nueva **en el hilo que la usa**, que es
+    `ONE-CONNECTION-PER-UNIT`. `run` recibe el job y una función de progreso.
     """
 
     def __init__(

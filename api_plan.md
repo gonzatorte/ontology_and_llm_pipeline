@@ -40,8 +40,7 @@ bloqueaban hitos enteros:
   El plan decía «un POST por etapa» y no clasificaba ninguna.
 
 **Generado por el modelo, sin aval explícito** — se puede discutir sin romper nada de lo
-anterior: el reclamo de jobs por compare-and-set y el índice parcial único; la invariante de
-conexión por unidad de trabajo; el rechazo con 409 de las decisiones síncronas mientras hay un
+anterior: el reclamo de jobs por compare-and-set y el índice parcial único; `ONE-CONNECTION-PER-UNIT`; el rechazo con 409 de las decisiones síncronas mientras hay un
 job en vuelo; la lista de tests; el orden de los hitos; los nombres (`artifacts`, `objectstore`,
 `uploads`, `jobs`, los ids `API-*` y `DEBT-API-*`).
 
@@ -68,8 +67,8 @@ usuario, no preferencias del plan.
 
 ## Lo que ya está verificado, y no hay que volver a investigar
 
-- `services/` no importa `typer` ni `rich`, y un test lo fija leyendo los imports (invariante 9).
-  Hay que extender esa lista a `fastapi` y `uvicorn`, y la invariante a tres interfaces.
+- `services/` no importa `typer` ni `rich`, y un test lo fija leyendo los imports (`SERVICES-NO-INTERFACE`).
+  Hay que extender esa lista a `fastapi` y `uvicorn`, y `SERVICES-NO-INTERFACE` a tres interfaces.
 - **No hay sistema de migraciones.** Las tablas nuevas siguen el patrón `install(conn: Store)` con
   `CREATE TABLE IF NOT EXISTS`. **No agregar columnas a `user_sessions`**: el upload se guarda en
   la columna existente `use_case`, con la forma `upload:<id>`.
@@ -145,7 +144,7 @@ del paquete.
 4. `tests/test_wizard.py`: `from onto_pipeline.interfaces import wizard`.
 5. Barrer el resto: `rg -n "onto_pipeline\.(cli|wizard|render)|from \.(cli|wizard|render)"` sobre
    código, tests y documentación (`README.md`, `CLAUDE.md`, `CONTRIBUTING.md`, los `*_plan.md`).
-6. `CLAUDE.md`: el mapa de "Dónde está cada cosa" y la invariante 9, que hoy dice «hay dos
+6. `CLAUDE.md`: el mapa de "Dónde está cada cosa" y `SERVICES-NO-INTERFACE`, que hoy dice «hay dos
    interfaces» y pasa a tres — y a prohibir también `fastapi` y `uvicorn`.
 
 **Verificación.** `uv run pytest -q`, `uv run ruff check .`, y **el efecto, no la ausencia de
@@ -256,10 +255,10 @@ sesión quede atada a `upload:<id>` y se lea de vuelta.
 
    Arbitra la base y no la memoria del proceso, así que el mismo mecanismo vale para N threads y
    para varias tareas. Deliberadamente **sin** `FOR UPDATE SKIP LOCKED`: metería dialecto de
-   Postgres fuera de `store.py` y rompería la invariante 10. La guardia `NOT EXISTS` es la segunda
+   Postgres fuera de `store.py` y rompería `STORE-NO-DIALECT`. La guardia `NOT EXISTS` es la segunda
    línea: el índice cubre el insert, la guardia cubre un almacén creado antes del índice.
 3. Compuerta del plan: un job se acepta sólo si `orchestration.survey` da la etapa READY. Si está
-   WAITING, la respuesta dice qué falta, con `orchestration.blocking`. Es la invariante 13
+   WAITING, la respuesta dice qué falta, con `orchestration.blocking`. Es `DECISION-NEVER-CROSSED`
    —ninguna interfaz cruza un punto de decisión— aplicada a HTTP.
 4. Worker: reclama, corre la función de servicio, va escribiendo progreso, y al final guarda
    resultado o error. `api.worker_count` workers como threads del proceso, default 1.
@@ -310,7 +309,7 @@ request y response).
 1. `auth.py`: `X-Auth-Key` contra un token estático de entorno. **Sin token configurado la app no
    arranca** — falla cerrado, no abre sin auth (`API-AUTH-KEY`).
 2. `deps.py`: una dependencia que abre el almacén y el objectstore por request y los cierra al
-   terminar, respetando la invariante de conexión del hito 5.
+   terminar, respetando `ONE-CONNECTION-PER-UNIT` del hito 5.
 3. Los endpoints. La lista de etapas sale de los ids de `orchestration.survey` y de los comandos
    de `interfaces/cli.py`, menos lo que `API-SCOPE-CORE` deja afuera:
    - `GET /healthz`, sin auth.
@@ -327,7 +326,7 @@ request y response).
    las advertencias que hoy el CLI pinta con `rich` tienen que llegar al cliente en el cuerpo.
    `cli.py:1029-1043` muestra qué distingue un error de usuario de uno interno; no filtrar trazas
    internas al cliente.
-5. Extender el test de la invariante 9 para que `services/` tampoco pueda importar `fastapi` ni
+5. Extender el test de `SERVICES-NO-INTERFACE` para que `services/` tampoco pueda importar `fastapi` ni
    `uvicorn`.
 
 **Tests.** `tests/test_api.py` con `TestClient`, objectstore local y SQLite: `healthz` sin auth,
@@ -346,7 +345,7 @@ un worker de un tiro, la compuerta que rechaza una etapa WAITING diciendo qué f
 1. `config.py` y `config/default.yaml`: secciones `storage` (backend, bucket, prefijo, región) y
    `api` (host, puerto, `worker_count`, vida de los pre-signed). **Overrides por entorno con
    prefijo**, que es lo que usa la imagen (`API-ENV-FIRST`); los archivos siguen sirviendo en
-   local. Ningún umbral nuevo fuera de `config/default.yaml` (invariante 5).
+   local. Ningún umbral nuevo fuera de `config/default.yaml` (`THRESHOLDS-IN-CONFIG`).
 2. `pyproject.toml`: extra `api` con fastapi, uvicorn y boto3.
 3. `Dockerfile` multi-etapa: build stage con JDK y curl para `scripts/fetch-jars.sh`; runtime con
    glibc —**nunca Alpine**, por `jpype.startJVM`— y `JAVA_HOME`. Nada específico de AWS adentro
@@ -374,15 +373,14 @@ un worker de un tiro, la compuerta que rechaza una etapa WAITING diciendo qué f
 2. `README.md`: la sección de la API, su lugar en el índice, y **el alta de los nombres nuevos**
    —`API-*` y `DEBT-API-*`— porque el índice del README es donde viven los identificadores.
    Actualizar "En cola" (línea 113): sale lo que este trabajo cierra, entra lo que queda.
-3. `CLAUDE.md`: el mapa con `interfaces/`, las invariantes 9, 11 y 13 al día, la invariante nueva
-   de conexión por unidad de trabajo, y `api` en los comandos si corresponde.
+3. `CLAUDE.md`: el mapa con `interfaces/`, `SERVICES-NO-INTERFACE`, `SESSION-SCOPED-DATA`, `DECISION-NEVER-CROSSED` al día, `ONE-CONNECTION-PER-UNIT`, y `api` en los comandos si corresponde.
 4. `technical_debt.md`:
    - `DEBT-API-CANCEL`, `DEBT-API-DOCUMENTS-PATH`, `DEBT-API-SSE`, `DEBT-API-USERS`: nuevas.
    - `DEBT-API-PARALLEL-WORKERS`: **no** es deuda de seguridad —eso queda probado en el hito 5—
      sino de operación: más de una tarea multiplica la memoria de JVM y encoders, y hay que
      dimensionar.
    - `DEBT-API-CONNECTION-POOL`: no es «falta un pool», es «cada unidad de trabajo paga un
-     connect, y cuando eso moleste, el pool tiene que respetar la invariante de conexión».
+     connect, y cuando eso moleste, el pool tiene que respetar `ONE-CONNECTION-PER-UNIT`».
    - **`DEBT-POSTGRES-UNTESTED` no se toca**: está resuelta, y este trabajo no la cierra ni le
      agrega nada.
 

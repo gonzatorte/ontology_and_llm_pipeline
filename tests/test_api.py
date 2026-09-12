@@ -2,7 +2,7 @@
 
 Cada test de acá mira una de las dos cosas que la API podría romper. La primera es la
 autenticación, que falla cerrado porque una API que queda abierta por una variable que nadie
-exportó no da ningún error. La segunda es la invariante 13: `next` frena ante un punto de
+exportó no da ningún error. La segunda es `DECISION-NEVER-CROSSED`: `next` frena ante un punto de
 decisión y `wizard` lo pregunta; por HTTP, encolar lo que viene después de una decisión que nadie
 tomó sería tomarla por default.
 
@@ -118,8 +118,8 @@ def test_the_plan_of_an_empty_session_says_what_to_run_first(client):
 
 
 def test_a_stage_the_plan_blocks_is_not_queued_and_says_what_is_missing(client):
-    """La invariante 13 sobre HTTP. `extract` sin nada parseado no es «falla después»: es que
-    todavía no corresponde, y la respuesta lo dice en vez de encolar algo que va a fallar."""
+    """`DECISION-NEVER-CROSSED` sobre HTTP. `extract` sin nada parseado no es «falla después»:
+    es que todavía no corresponde, y la respuesta lo dice en vez de encolar algo que va a fallar."""
     session_id = _session(client)
 
     response = client.post(f"/sessions/{session_id}/stages/match", json={}, headers=AUTH)
@@ -309,7 +309,7 @@ def test_an_artifact_is_downloaded_by_a_signed_url_and_not_through_the_api(
 
 
 def test_one_session_cannot_ask_for_the_artifact_of_another(client, config_path):
-    """La clave la propone el cliente. Es la invariante 11 en el borde de HTTP: sin esto, pedir
+    """La clave la propone el cliente. Es `SESSION-SCOPED-DATA` en el borde de HTTP: sin esto, pedir
     la de otra sesión es escribir otra ruta."""
     session_id = _session(client)
     other = _session(client)

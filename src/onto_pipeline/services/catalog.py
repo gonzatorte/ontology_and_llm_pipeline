@@ -123,7 +123,7 @@ def clean(spec: Stage, params: dict | None) -> dict:
 def blocked_by(workspace: Workspace, spec: Stage) -> str:
     """Qué impide correr esta etapa ahora, o vacío si nada.
 
-    Es la invariante 13 sobre HTTP: `next` frena ante un punto de decisión y `wizard` lo
+    Es `DECISION-NEVER-CROSSED` sobre HTTP: `next` frena ante un punto de decisión y `wizard` lo
     pregunta. Correr lo que viene después de una decisión que nadie tomó es tomarla por default,
     que es lo que `BRANCH-ONLY-REVIEW` nombra. El plan no opina sobre toda etapa; de las que
     opina, manda.
