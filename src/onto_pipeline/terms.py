@@ -5,6 +5,7 @@ PREP-NORMALIZE-LABELS/PREP-NORMALIZE-TYPOS).
 from __future__ import annotations
 
 import re
+import unicodedata
 from difflib import SequenceMatcher
 
 _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
@@ -41,10 +42,27 @@ def local_name(iri: str) -> str:
     return iri
 
 
+def fold(text: str) -> str:
+    """`día` and `dia` are one word written by two hands (PREP-NORMALIZE-LABELS/FOLD-DIACRITICS).
+
+    An ontology that spells its Spanish labels with accents and mints its identifiers without
+    them compares the same word against itself and scores 0,667 — below the divergence
+    threshold, so the pair is flagged. The accepted cost is the minimal pair: `año`/`ano` and
+    `término`/`terminó` fold together. It is contained because the comparison is between two
+    spellings of the *same* entity, where the same word is overwhelmingly likelier than a pair
+    that only an accent separates.
+    """
+    return "".join(
+        char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char)
+    )
+
+
 def tokens(text: str) -> list[str]:
     """Denormalizes first: a declared label is as likely to be `isGeneratedBy` as a phrase,
     and leaving it glued makes every lexicon comparison meaningless."""
-    return [token for token in _NON_WORD.sub(" ", denormalize(text).lower()).split() if token]
+    return [
+        token for token in _NON_WORD.sub(" ", fold(denormalize(text)).lower()).split() if token
+    ]
 
 
 FUNCTION_WORDS = _SPANISH_MARKERS | {
