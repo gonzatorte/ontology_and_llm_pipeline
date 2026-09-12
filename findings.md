@@ -115,6 +115,31 @@ corrida no terminaba. Resuelto con el mismo patrón numpy por bloques que ya usa
 `_neighbour_pairs`, con un test que fija que los dos caminos rankeen igual. Con 34 clases el
 problema no existía.
 
+### FINDINGS-MEASURED-LABEL-VERIFICATION — El idioma de las etiquetas, y qué falla cuando falla — n = 84 etiquetas
+
+Medido el 2026-09-12 sobre la semilla cualitativa (34 clases, 38 propiedades de objeto, 12 de
+datos; 84 etiquetas distintas entre las derivadas del identificador y las declaradas), con
+`PREP-NORMALIZE` recién corrido sobre un almacén vacío.
+
+**El falso positivo que la etapa existe para arreglar, contado.** De los 41 hallazgos abiertos
+sobre etiquetas, **14 son `divergent_label`** —«las dos están en el mismo idioma y no se
+parecen»— y 27 `pending_semantic_check`. Los 14 son de la forma `Valor (en) | value (en)`: el
+identificador está en castellano y `terms.guess_language` lo da por inglés porque decide por
+ortografía española o por palabras función, y un sustantivo común no tiene ninguna de las dos.
+O sea: el hallazgo afirma una divergencia real donde hay una traducción que nadie verificó.
+
+**El veredicto por traducción todavía no se midió.** La corrida contra el proveedor no llegó a
+completarse: `opencode.ai` contestó `429 GoUsageLimitError` («weekly usage limit reached»,
+2026-09-12). Así que `translation_verified_threshold: 0.95` sigue sin contraste contra las
+decisiones que el usuario ya tomó, y eso es lo que falta para saber si está bien puesto.
+
+**Lo que sí midió esa corrida fallida, y valió lo que costó:** con el proveedor rechazando todo,
+el reintento partido de `VERIFY-3-SPLIT` convirtió **4 unidades en 87**. Cada lote fallaba por
+transporte, se partía, y las dos mitades volvían a fallar y a partirse, multiplicando las
+llamadas contra un servicio que ya estaba rechazando. Partir es la respuesta a una respuesta
+mala, no a que no haya respuesta: hoy sólo se parte ante `MangledBatch` y hay un test que lo
+fija.
+
 ### FINDINGS-MEASURED-LABEL-COLLISION — Dos clases con la misma etiqueta: la mitad del error medido no era del matcher
 
 `CL:0000000` está etiquetada *cell*. Los anotadores de CRAFT no la usan nunca: usan la extension

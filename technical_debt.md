@@ -604,6 +604,21 @@ extraer. El pipeline lo registra en vez de fingir que las procesó.
 tabla. El hueco se **mide** —columna "table gap"— pero no se cubre. La respuesta del spec es
 rutear esas páginas a MinerU.
 
+### DEBT-BILINGUAL-LABELS — Las traducciones están calculadas y no se escriben
+
+`PREP-NORMALIZE-LABELS` pide emitir `rdfs:label@es` y `@en` para toda entidad.
+`PREP-NORMALIZE-LABELS-VERIFY` ya produce el material —el modelo devuelve las dos formas de cada
+etiqueta y el ledger las tiene cacheadas— pero sólo las usa para el veredicto: al grafo no va
+ninguna etiqueta nueva.
+
+No es un olvido. Las etiquetas son la superficie contra la que compara el matcher: agregarle una
+en castellano a cada clase cambia el volumen de zona gris y los resultados de tipado, y eso
+merece su propia medición antes que su propia línea de código. Es prometedor en una dirección
+concreta: con las dos lenguas presentes, una mención en castellano deja de chocar contra
+`cross_language_always_grey` — que además nunca se midió (`DEBT-CROSS-LANGUAGE-GREY`).
+
+Escribirlas es barato; medirlas es el trabajo.
+
 ### DEBT-LANGUAGE-HARDCODED — `language.py` está cableado a es/en
 
 Los marcadores de palabras función están hardcodeados. Otro idioma son ~10 líneas más, o
