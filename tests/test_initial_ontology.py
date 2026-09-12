@@ -13,6 +13,7 @@ from onto_pipeline.initial_ontology import (
     gloss_contexts,
     normalize_initial_ontology,
 )
+from onto_pipeline.label_overrides import MODEL, UNDETERMINED, USER, Override
 
 BASE = "https://ontology.local/id/"
 NS = "http://example.org/onto#"
@@ -85,6 +86,119 @@ def test_a_label_that_omits_what_the_identifier_says_is_flagged_not_translated(s
     entity = by_original[f"{NS}Aplica_una_o_varias"]
     assert entity.divergent
     assert entity.divergence_reason == "cross_language_unverified"
+
+
+_LANGUAGE_SEED = f"""
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix : <{NS}> .
+
+:Valor a owl:Class ; rdfs:label "value" .
+:Interpretacion a owl:Class ; rdfs:label "interpretation" .
+:Nanog a owl:Class ; rdfs:label "transcription factor" .
+:Declarada a owl:Class ; rdfs:label "objetivo"@en .
+"""
+
+
+@pytest.fixture
+def language_seed(tmp_path):
+    target = tmp_path / "languages.ttl"
+    target.write_text(_LANGUAGE_SEED, encoding="utf-8")
+    return target
+
+
+def _by_original(seed):
+    return {entity.original_iri: entity for entity in seed.entities}
+
+
+def _language_of(entity, text):
+    return next(label.language for label in entity.labels if label.text == text)
+
+
+def test_an_override_beats_the_guess_that_could_not_see_the_word(language_seed):
+    """`valor` no tiene terminación española ni acento, así que la regla lo da por inglés y el
+    par queda como divergencia real en vez de traducción sin verificar. La corrección entra como
+    insumo de la normalización, que es lo único que la hace durar."""
+    seed = normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(languages={"Valor": Override("es", MODEL)}),
+    )
+    assert _language_of(_by_original(seed)[f"{NS}Valor"], "Valor") == "es"
+
+
+def test_an_overridden_language_moves_the_divergence_across_languages(language_seed):
+    """El caso que abrió esto: `Valor (en) | value (en)` afirmaba una divergencia en el mismo
+    idioma. Con el idioma corregido el par pasa a ser una traducción que nadie verificó, que es
+    lo único que se sabe de él."""
+    without = _by_original(normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8
+    ))[f"{NS}Valor"]
+    assert without.divergence_reason == "same_language_mismatch"
+
+    with_override = _by_original(normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(languages={"Valor": Override("es", MODEL)}),
+    ))[f"{NS}Valor"]
+    assert with_override.divergence_reason == "cross_language_unverified"
+
+
+def test_a_declared_language_tag_is_not_overwritten_by_the_model(language_seed):
+    """El tag del literal es dato de la fuente y no conjetura: pisarlo con lo que dice el modelo
+    es contradecir a quien publicó la ontología. Sólo la corrección del usuario está por
+    encima."""
+    decisions = LabelDecisions(languages={"objetivo": Override("es", MODEL)})
+    entity = _by_original(normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8, decisions=decisions
+    ))[f"{NS}Declarada"]
+    assert _language_of(entity, "objetivo") == "en", "el tag declarado gana"
+
+    decisions = LabelDecisions(languages={"objetivo": Override("es", USER)})
+    entity = _by_original(normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8, decisions=decisions
+    ))[f"{NS}Declarada"]
+    assert _language_of(entity, "objetivo") == "es", "y la corrección del usuario le gana al tag"
+
+
+def test_a_name_that_belongs_to_no_language_takes_the_ontologys(language_seed):
+    """Un nombre propio no tiene idioma que decidir, pero el literal necesita un tag igual: va
+    el mayoritario de la ontología. Y el par no puede afirmarse como divergencia en el mismo
+    idioma, porque el idioma nunca se estableció (OPEN-WORLD)."""
+    seed = normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(languages={
+            "Nanog": Override(UNDETERMINED, MODEL),
+            "Valor": Override("es", MODEL),
+            "Interpretacion": Override("es", MODEL),
+        }),
+    )
+    entity = _by_original(seed)[f"{NS}Nanog"]
+    others = [
+        label.language
+        for other in seed.entities for label in other.labels if label.text != "Nanog"
+    ]
+    assert _language_of(entity, "Nanog") == max(set(others), key=others.count)
+    assert UNDETERMINED not in {
+        str(literal.language) for literal in seed.graph.objects(None, RDFS.label)
+    }, "`und` no se escribe en el grafo"
+    assert entity.divergence_reason == "cross_language_unverified"
+
+
+def test_retagging_a_label_separates_the_typo_lexicons(language_seed):
+    """Los léxicos de erratas son por idioma justamente para que una traducción no se lea como
+    una palabra mal escrita. `Valor` y `value` mal taggeadas las dos como inglés caen en el
+    mismo léxico, donde el detector de erratas las compara entre sí."""
+    mixed = _by_original(
+        normalize_initial_ontology(language_seed, BASE, divergence_threshold=0.8)
+    )[f"{NS}Valor"]
+    assert {label.language for label in mixed.labels} == {"en"}, "el par entero en un léxico"
+
+    split = _by_original(normalize_initial_ontology(
+        language_seed, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(languages={"Valor": Override("es", MODEL)}),
+    ))[f"{NS}Valor"]
+    assert {label.text: label.language for label in split.labels} == {
+        "Valor": "es", "value": "en",
+    }
 
 
 def test_an_agreeing_pair_is_not_flagged(seed):

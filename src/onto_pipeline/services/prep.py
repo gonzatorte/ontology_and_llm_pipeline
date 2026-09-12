@@ -11,7 +11,16 @@ from pathlib import Path
 
 from rdflib import Graph
 
-from .. import cq, cq_generation, glosses, llm, review, typing_store, versioning
+from .. import (
+    cq,
+    cq_generation,
+    glosses,
+    label_overrides,
+    llm,
+    review,
+    typing_store,
+    versioning,
+)
 from ..alignment import check_terms
 from ..alignment import survey as alignment_survey
 from ..artifacts import Artifact
@@ -120,7 +129,14 @@ def label_decisions(workspace: Workspace) -> LabelDecisions:
             workspace.conn, status=review.ACCEPTED, kind=kind, session_id=session
         )
     }
-    return LabelDecisions(typo_fixes=fixes, dropped_derived=frozenset(dropped))
+    return LabelDecisions(
+        typo_fixes=fixes,
+        dropped_derived=frozenset(dropped),
+        # El idioma corregido entra por el mismo lugar y por la misma razón: sin eso, la corrida
+        # siguiente vuelve a etiquetar con el guess y levanta otro hallazgo —otro id, porque el
+        # id deriva de los idiomas— idéntico al que se acaba de resolver.
+        languages=label_overrides.load(workspace.conn, session_id=session),
+    )
 
 
 def normalize(workspace: Workspace) -> Normalization:

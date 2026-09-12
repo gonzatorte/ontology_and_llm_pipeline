@@ -27,6 +27,7 @@ from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, SKOS
 
 from . import terms
+from .label_overrides import MODEL, UNDETERMINED, USER, Override
 
 CLASS = "class"
 OBJECT_PROPERTY = "object_property"
@@ -59,6 +60,10 @@ class Label:
     text: str
     language: str
     source: str  # iri | declared
+    # The language was not determined: a proper name, an acronym, or a word spelled the same in
+    # both languages. `language` still carries a value because a literal needs a tag, but a pair
+    # with an undetermined side is never asserted as a same-language divergence.
+    undetermined: bool = False
 
 
 @dataclass
@@ -154,10 +159,15 @@ class LabelDecisions:
     `dropped_derived`    una divergencia aceptada: el nombre que sale del identificador **no** es
                          otro nombre de este concepto, así que se descarta en vez de quedar como
                          una etiqueta más contra la que el matcher compara.
+    `languages`          el idioma de una etiqueta cuando la regla de terminaciones no alcanza,
+                         por texto y con su fuente (`label_overrides`). Entra por acá y no por
+                         un parámetro aparte: dos canales que dicen lo mismo se desincronizan, y
+                         el que se olvide de pasar uno no rompe nada visible.
     """
 
     typo_fixes: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
     dropped_derived: frozenset[str] = frozenset()
+    languages: dict[str, Override] = field(default_factory=dict)
 
 
 def _corrected(text: str, fixes: list[tuple[str, str]]) -> str:
@@ -189,10 +199,21 @@ def normalize_initial_ontology(
     graph = _rewrite(source, mapping)
     decisions = decisions or LabelDecisions()
 
-    entities = [
-        _entity(graph, URIRef(new), str(old), divergence_threshold, decisions)
-        for old, new in mapping.items()
-    ]
+    # La divergencia se evalúa después de resolver los idiomas indeterminados, no adentro de
+    # `_entity`: el default de UNDETERMINED-LANGUAGE es el idioma mayoritario de la ontología, y
+    # ése no se conoce hasta haber leído todas las etiquetas.
+    entities, derived_names = [], {}
+    for old, new in mapping.items():
+        entity, derived = _entity(graph, URIRef(new), str(old), decisions)
+        entities.append(entity)
+        if derived is not None:
+            derived_names[entity.iri] = derived
+    _resolve_undetermined(entities)
+    for entity in entities:
+        derived = derived_names.get(entity.iri)
+        if derived is not None:
+            declared = [label for label in entity.labels if label.source == "declared"]
+            _assess_divergence(entity, derived, declared, divergence_threshold)
     entities.sort(key=lambda entity: entity.original_iri)
     _write_labels(graph, entities)
 
@@ -231,9 +252,14 @@ def _rewrite(graph: Graph, mapping: dict[URIRef, str]) -> Graph:
 
 
 def _entity(
-    graph: Graph, iri: URIRef, original_iri: str, threshold: float,
+    graph: Graph, iri: URIRef, original_iri: str,
     decisions: LabelDecisions | None = None,
-) -> Entity:
+) -> tuple[Entity, Label | None]:
+    """La entidad y la etiqueta derivada del identificador, o `None` si se descartó.
+
+    Devuelve la derivada porque la divergencia se evalúa afuera, cuando ya se sabe el idioma
+    mayoritario de la ontología (`UNDETERMINED-LANGUAGE`).
+    """
     decisions = decisions or LabelDecisions()
     kind = next(
         (_KINDS[obj] for obj in graph.objects(iri, RDF.type) if obj in _KINDS), CLASS
@@ -242,36 +268,81 @@ def _entity(
 
     fixes = decisions.typo_fixes.get(str(iri), [])
     derived = _corrected(terms.denormalize(terms.local_name(original_iri)), fixes)
-    declared = [
-        Label(
-            text=_corrected(str(literal), fixes),
-            language=str(literal.language) if literal.language else
-            terms.guess_language(_corrected(str(literal), fixes)),
-            source="declared",
-        )
-        for literal in graph.objects(iri, RDFS.label)
-        if isinstance(literal, Literal)
-    ]
+    declared = []
+    for literal in graph.objects(iri, RDFS.label):
+        if not isinstance(literal, Literal):
+            continue
+        text = _corrected(str(literal), fixes)
+        declared.append(Label(
+            text=text, source="declared",
+            **_language_of(text, decisions, declared_tag=literal.language),
+        ))
 
     # Una divergencia aceptada dice que el nombre del identificador no es un nombre de este
     # concepto: se descarta, y con él se va el hallazgo, porque volver a preguntar lo ya
     # contestado es lo que esta entrada evita. Salvo que sea el único nombre que hay — una
     # entidad sin etiqueta desaparece del matcher, que es peor que una etiqueta discutida.
     dropped = str(iri) in decisions.dropped_derived and bool(declared)
+    derived_label = None
     if not dropped:
-        entity.labels.append(
-            Label(text=derived, language=terms.guess_language(derived), source="iri")
-        )
+        derived_label = Label(text=derived, source="iri", **_language_of(derived, decisions))
+        entity.labels.append(derived_label)
     entity.labels.extend(declared)
 
     entity.preferred = declared[0].text if declared else derived
-    if not dropped:
-        _assess_divergence(entity, derived, declared, threshold)
-    return entity
+    return entity, derived_label
+
+
+def _language_of(
+    text: str, decisions: LabelDecisions, *, declared_tag: str | None = None
+) -> dict:
+    """`LANGUAGE-PRECEDENCE`: `user > declarado > model > guess`.
+
+    El tag declarado es dato de la fuente y no conjetura, así que le gana al modelo: pisarlo
+    sería contradecir a quien publicó la ontología. Sólo la corrección del usuario está por
+    encima, porque es lo único que no se puede recomputar.
+    """
+    override = decisions.languages.get(text)
+    if override is not None and override.source == USER:
+        return _tagged(override.language)
+    if declared_tag:
+        return {"language": str(declared_tag), "undetermined": False}
+    if override is not None and override.source == MODEL:
+        return _tagged(override.language)
+    return {"language": terms.guess_language(text), "undetermined": False}
+
+
+def _tagged(language: str) -> dict:
+    """Un `und` no es un idioma con el que escribir un literal: se recuerda como
+    indeterminado y el idioma se completa después, con el de la ontología."""
+    if language == UNDETERMINED:
+        return {"language": UNDETERMINED, "undetermined": True}
+    return {"language": language, "undetermined": False}
+
+
+def _resolve_undetermined(entities: list[Entity]) -> str:
+    """El idioma con el que se escribe lo que no tiene idioma propio (`UNDETERMINED-LANGUAGE`).
+
+    Un nombre propio, una sigla o una palabra que se escribe igual en los dos idiomas no tiene
+    idioma que decidir, pero el literal necesita un tag igual. Va el mayoritario de la ontología,
+    contado sobre las etiquetas que sí se resolvieron, para que la elección sea pareja y no al
+    azar. La marca de indeterminado queda en la etiqueta.
+    """
+    counts: dict[str, int] = {}
+    for entity in entities:
+        for label in entity.labels:
+            if not label.undetermined:
+                counts[label.language] = counts.get(label.language, 0) + 1
+    majority = max(counts, key=lambda language: (counts[language], language)) if counts else "en"
+    for entity in entities:
+        for label in entity.labels:
+            if label.undetermined:
+                label.language = majority
+    return majority
 
 
 def _assess_divergence(
-    entity: Entity, derived: str, declared: list[Label], threshold: float
+    entity: Entity, derived: Label, declared: list[Label], threshold: float
 ) -> None:
     """An identifier in one language with a label in another is usually the same term, but not
     always: `Aplica_una_o_varias` against `appliesTechnique` drops information the label
@@ -280,14 +351,17 @@ def _assess_divergence(
     Two outcomes, and they are not the same finding: a same-language mismatch is a real
     divergence to review, while a cross-language pair is only unverified — string similarity
     cannot judge it, and the semantic comparison the spec asks for needs a model.
+
+    An undetermined side lands on the second: the languages were never established, and
+    asserting a real divergence on top of that asserts what nobody knows (OPEN-WORLD).
     """
     if not declared:
         return
-    if any(terms.similarity(derived, label.text) >= threshold for label in declared):
+    if any(terms.similarity(derived.text, label.text) >= threshold for label in declared):
         return
     entity.divergent = True
-    derived_language = terms.guess_language(derived)
-    if all(label.language != derived_language for label in declared):
+    undetermined = derived.undetermined or any(label.undetermined for label in declared)
+    if undetermined or all(label.language != derived.language for label in declared):
         entity.divergence_reason = "cross_language_unverified"
     else:
         entity.divergence_reason = "same_language_mismatch"
@@ -304,7 +378,13 @@ def _write_labels(graph: Graph, entities: list[Entity]) -> None:
     for entity in entities:
         iri = URIRef(entity.iri)
         graph.remove((iri, RDFS.label, None))
-        preferred_language = terms.guess_language(entity.preferred)
+        # El idioma de la preferida sale de la etiqueta que ya se resolvió, no de adivinarlo de
+        # nuevo: volver a adivinar acá tira el override y deja el `prefLabel` contradiciendo al
+        # `rdfs:label` que dice el mismo texto.
+        preferred_language = next(
+            (label.language for label in entity.labels if label.text == entity.preferred),
+            terms.guess_language(entity.preferred),
+        )
         names = [(label.text, label.language) for label in entity.labels]
         for text, language in names:
             graph.add((iri, RDFS.label, Literal(text, lang=language)))

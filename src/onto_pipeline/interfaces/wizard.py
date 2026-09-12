@@ -533,9 +533,11 @@ def _decide_review(console: Console, workspace: Workspace) -> None:
         if meaning:
             console.print(f"  [dim]aceptar: {meaning[0]}[/]")
             console.print(f"  [dim]rechazar: {meaning[1]}[/]")
+        labels = item["payload"].get("labels", [])
+        language = f" · {_key('i')}dioma mal detectado" if labels else ""
         choice = _ask(
             console,
-            f"{_key('a')}ceptar · {_key('r')}echazar · {_key(SKIP)} saltear · "
+            f"{_key('a')}ceptar · {_key('r')}echazar{language} · {_key(SKIP)} saltear · "
             f"{_key(ABORT)} dejar el resto para después",
             default=SKIP,
         ).strip().lower()
@@ -547,12 +549,41 @@ def _decide_review(console: Console, workspace: Workspace) -> None:
         elif choice.startswith("r"):
             comment = _ask(console, "¿Por qué? (opcional)", default="")
             evaluate.resolve_review(workspace, item["id"], "rejected", comment=comment)
+        elif choice.startswith("i") and labels:
+            decided_on_the_ontology += _correct_language(console, workspace, item, labels)
+            continue
         else:
             continue
         decided_on_the_ontology += bool(meaning)
 
     if decided_on_the_ontology:
         _apply_to_the_ontology(console, workspace, decided_on_the_ontology)
+
+
+def _correct_language(console: Console, workspace: Workspace, item: dict, labels: list) -> int:
+    """Decir en qué idioma está una etiqueta cuando la detección se equivocó.
+
+    No resuelve el hallazgo: corrige el dato con el que se construyó. `Valor (en)` era el
+    síntoma que abrió todo esto — el par se veía como una divergencia real cuando es una
+    traducción sin verificar.
+    """
+    for index, label in enumerate(labels, start=1):
+        console.print(f"  [{index}] {label['text']} [dim]({label['language']})[/]")
+    answer = _ask(console, "¿Cuál? (número, o enter para volver)", default="").strip()
+    if not answer.isdigit() or not 1 <= int(answer) <= len(labels):
+        return 0
+    text = labels[int(answer) - 1]["text"]
+    # El código entero y no una inicial: `es` y `en` empiezan con la misma letra, y una tecla
+    # que elige el idioma equivocado sin decirlo es peor que escribir dos caracteres.
+    language = _ask(
+        console, "¿En qué idioma está? es · en · und (nombre propio, sigla o palabra igual en "
+        "los dos)", default="",
+    ).strip().lower()
+    if language not in ("es", "en", "und"):
+        return 0
+    evaluate.correct_label_language(workspace, item["id"], text, language)
+    console.print(f"  [green]{language}[/] · {text}")
+    return 1
 
 
 def _apply_to_the_ontology(console: Console, workspace: Workspace, decided: int) -> None:

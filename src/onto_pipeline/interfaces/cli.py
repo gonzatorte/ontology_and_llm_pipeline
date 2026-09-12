@@ -744,6 +744,23 @@ def review_resolve(
     console.print(f"[green]{decision}[/] {item_id}")
 
 
+@review_app.command("correct-language")
+def review_correct_language(
+    item_id: str,
+    label_text: str,
+    language: str,
+    config_path: Path = ConfigOption,
+) -> None:
+    """Say what language a label is in: es, en, or und for a name that has none.
+
+    It does not resolve the finding, it corrects what the finding was built on. The pair changes
+    nature — a same-language mismatch becomes an unverified translation — so the old finding is
+    superseded and the right one is raised the next time the seed is normalized.
+    """
+    evaluate.correct_label_language(_workspace(config_path), item_id, label_text, language)
+    console.print(f"[green]{language}[/] {label_text!r} · run [bold]normalize[/] to re-derive")
+
+
 cq_app = typer.Typer(help="Competency questions: the primary stopping criterion.")
 app.add_typer(cq_app, name="cq")
 

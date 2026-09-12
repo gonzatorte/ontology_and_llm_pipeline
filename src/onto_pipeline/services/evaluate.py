@@ -17,6 +17,7 @@ from .. import (
     annotation,
     calibration,
     cq,
+    label_overrides,
     matching,
     review,
     sessions,
@@ -294,6 +295,44 @@ def resolve_review(
     workspace.note("decision", f"revisión: {item_id} → {decision}", {"item": item_id})
 
 
+def correct_label_language(
+    workspace: Workspace, item_id: str, label_text: str, language: str
+) -> None:
+    """El idioma de una etiqueta, dicho por el usuario (`LANGUAGE-PRECEDENCE`).
+
+    No resuelve el hallazgo: lo corrige de raíz. Re-taggear cambia la naturaleza del par —una
+    divergencia en el mismo idioma pasa a ser una traducción sin verificar—, y como el id de un
+    hallazgo deriva de su contenido, el viejo queda `superseded` y aparece otro con el kind
+    correcto en la próxima normalización. Eso es lo buscado, no un efecto colateral.
+
+    El texto se valida contra las etiquetas del hallazgo: corregir el idioma de una cadena que
+    no está en ninguna etiqueta escribe una fila que no se va a aplicar nunca.
+    """
+    session = workspace.require_session()
+    if language not in label_overrides.LANGUAGES:
+        raise StageError(
+            f"el idioma de una etiqueta es uno de {', '.join(label_overrides.LANGUAGES)}, "
+            f"no {language!r}"
+        )
+    items = review.load(workspace.conn, status=None, session_id=session)
+    item = next((row for row in items if row["id"] == item_id), None)
+    if item is None:
+        raise StageError(f"no review item {item_id!r}")
+    texts = [label["text"] for label in item["payload"].get("labels", [])]
+    if label_text not in texts:
+        raise StageError(
+            f"{label_text!r} no es una etiqueta de {item_id}; son: {', '.join(texts) or 'ninguna'}"
+        )
+    label_overrides.record(
+        workspace.conn, {label_text: language},
+        source=label_overrides.USER, session_id=session,
+    )
+    workspace.note(
+        "decision", f"idioma de etiqueta: {label_text!r} → {language}",
+        {"item": item_id, "label": label_text, "language": language},
+    )
+
+
 # ─────────────────────────────  calibración  ─────────────────────────────
 
 
@@ -521,7 +560,8 @@ def tune(
 __all__ = [
     "AnnotationTool", "BratExport", "ExportedDocument", "QuestionRun", "Retention",
     "Stopping", "Sweep", "Tuning",
-    "assess", "build_annotation_tool", "calibrate", "evaluate_questions",
+    "assess", "build_annotation_tool", "calibrate", "correct_label_language",
+    "evaluate_questions",
     "export_annotations", "hold_out", "resolve_review", "review_counts", "review_items",
     "tune",
 ]

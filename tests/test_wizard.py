@@ -212,7 +212,8 @@ def test_the_prompt_is_handed_to_readline_so_redrawing_the_line_keeps_it(monkeyp
 
 
 def _one_typo(*_args, **_kwargs):
-    return [{"id": "f1", "kind": "typo", "summary": "subre -> sobre"}]
+    return [{"id": "f1", "kind": "typo", "summary": "subre -> sobre",
+             "payload": {"token": "subre", "suggestion": "sobre"}}]
 
 
 def test_deciding_on_the_initial_ontology_offers_to_apply_it(tmp_path, console, monkeypatch):
