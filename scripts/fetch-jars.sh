@@ -28,8 +28,16 @@ else
   if [[ ! -x "$mvn_bin" ]]; then
     echo "Maven not found; downloading $maven_version into .tools/"
     mkdir -p "$tools"
-    curl -sSL -o "$tools/maven.tgz" \
-      "https://dlcdn.apache.org/maven/maven-3/$maven_version/binaries/apache-maven-$maven_version-bin.tar.gz"
+    # El mirror sólo tiene la versión corriente: dlcdn rota las viejas y devuelve un 404 que
+    # `curl -sSL` guarda como si fuera el tarball, y lo que falla después es `tar`. Con la
+    # versión fijada, el que siempre la tiene es el archivo, así que se cae a él.
+    for base in "https://dlcdn.apache.org/maven" "https://archive.apache.org/dist/maven"; do
+      url="$base/maven-3/$maven_version/binaries/apache-maven-$maven_version-bin.tar.gz"
+      if curl -fsSL -o "$tools/maven.tgz" "$url"; then
+        break
+      fi
+      echo "no está en $base, probando el siguiente"
+    done
     tar xzf "$tools/maven.tgz" -C "$tools"
     rm "$tools/maven.tgz"
   fi

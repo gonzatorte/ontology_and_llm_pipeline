@@ -1,0 +1,15 @@
+# Lo que no tiene por qué viajar al contexto de build. Los jars no: los baja la etapa `jars`
+# desde Maven, para que la imagen no dependa de qué hay en la máquina que la construye.
+.venv/
+.tools/
+lib/
+data/
+use_cases/
+checkpoints/
+.git/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.env
+!example.env
