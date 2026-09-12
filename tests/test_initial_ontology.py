@@ -98,6 +98,18 @@ def test_preferred_label_is_written_as_skos_preflabel(seed):
     assert "Technique" in prefs  # no declared label, so the derived one is preferred
 
 
+def test_every_name_is_also_an_altlabel_including_the_preferred_one(seed):
+    """La preferida existe para que una herramienta tenga qué mostrar —Protégé renderiza
+    `skos:prefLabel`— y nada más que para eso. Repetirla entre los `altLabel` hace que ese
+    conjunto **sea** el de los nombres del concepto, sin un segundo lugar donde mirar."""
+    by_original = {entity.original_iri: entity for entity in seed.entities}
+    applies = URIRef(by_original[f"{NS}Aplica_una_o_varias"].iri)
+
+    alternatives = {str(literal) for literal in seed.graph.objects(applies, SKOS.altLabel)}
+
+    assert alternatives == {"appliesTechnique", "Aplica una o varias"}
+
+
 def test_gloss_context_is_the_neighbourhood_not_the_name(seed):
     contexts = {context.label: context for context in gloss_contexts(seed)}
     technique = contexts["Technique"]

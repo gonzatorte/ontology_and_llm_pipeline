@@ -75,7 +75,13 @@ class Reranker(Protocol):
 
 @dataclass
 class Target:
-    """A seed class as the matcher sees it: the gloss when there is one, the label until then."""
+    """A seed class as the matcher sees it: every name it has, plus the gloss when there is one.
+
+    `label` is the preferred one only in the sense that a tool has to render something —
+    Protégé shows `skos:prefLabel`. For matching it carries no privilege: which of a concept's
+    names happens to be preferred is an accident of how the ontology was written, and comparing
+    against that one alone would make the mapping depend on that accident.
+    """
 
     iri: str
     label: str
@@ -86,8 +92,13 @@ class Target:
     match_against: str = "label"
 
     @property
-    def text(self) -> str:
-        """What a mention is compared against.
+    def names(self) -> list[str]:
+        """Every name of the concept, the preferred one first and without repeats."""
+        return [name for name in dict.fromkeys([self.label, *self.alt_labels]) if name]
+
+    @property
+    def texts(self) -> list[str]:
+        """What a mention is compared against — all of them, and the best one wins.
 
         The spec matches against the gloss, on the reasoning that a definition captures the
         concept where a name may not. Over ten hand-built unambiguous pairs the bi-encoder
@@ -102,10 +113,10 @@ class Target:
         to decide, not another handful of pairs.
         """
         if self.match_against == "gloss" and self.gloss:
-            return self.gloss
+            return [self.gloss]
         if self.match_against == "label_and_gloss" and self.gloss:
-            return f"{self.label}: {self.gloss}"
-        return self.label
+            return [f"{name}: {self.gloss}" for name in self.names]
+        return self.names
 
     @property
     def grounded_in_gloss(self) -> bool:
@@ -214,10 +225,14 @@ class Matcher:
         self, mentions: Sequence[Mention], targets: Sequence[Target], *, top_k: int = 5
     ) -> list[Typing]:
         """Bi-encoder retrieval then cross-encoder re-ranking, over the targets' glosses."""
+        targets = [target for target in targets if target.texts]
         if not targets:
             return [Typing(m.id, None, 0.0, DISCARDED) for m in mentions]
 
-        target_vectors = self.vectors_for([t.text for t in targets])
+        # Un vector por **nombre**, no por clase: una clase con tres nombres entra tres veces y
+        # se queda con el mejor de los tres. Encontrarla por cualquiera de sus nombres es el
+        # punto; cuál de ellos sea el preferido no puede cambiar a qué se mapea una mención.
+        target_vectors = self.vectors_for([text for t in targets for text in t.texts])
         mention_vectors = self.vectors_for(
             [mention_text(m, self.context_mode) for m in mentions]
         )
@@ -236,11 +251,16 @@ class Matcher:
     ) -> list[list[tuple[float, Target]]]:
         """Top-k targets per mention, by cosine.
 
-        Two paths for one calculation. The Python one is O(mentions x targets) dot products in
+        A target holds as many vectors as it has names, and its score is the best of them: a
+        concept is as close as its closest name. Taking the mean instead would punish a class
+        for having a synonym the corpus never uses, which is the opposite of what declaring one
+        is for.
+
+        Two paths for one calculation. The Python one is O(mentions x names) dot products in
         the interpreter, which is fine at the thirty-four classes of the seed and stops being
         fine immediately after: against CRAFT's 3,419-class inventory the same loop is 30
         million dot products of 384 dimensions, hours of work for a number numpy produces in
-        seconds. Chunked in rows like `_neighbour_pairs`, so peak memory is chunk x targets.
+        seconds. Chunked in rows like `_neighbour_pairs`, so peak memory is chunk x names.
 
         Both paths order the candidates identically, ties broken by IRI. The scores are not
         bit-identical: numpy works in float32, like `_neighbour_pairs`, so they differ around
@@ -248,13 +268,20 @@ class Matcher:
         means a score is reproducible to a display precision, not to the last bit.
         """
         width = min(top_k, len(targets))
+        # Dónde empieza cada clase dentro de la lista plana de nombres.
+        spans, cursor = [], 0
+        for target in targets:
+            spans.append((cursor, len(target.texts)))
+            cursor += len(target.texts)
+
         try:
             import numpy as np
         except ImportError:  # pragma: no cover - depends on the install
             return [
                 sorted(
-                    ((dot(vector, tv), target)
-                     for tv, target in zip(target_vectors, targets, strict=True)),
+                    ((max(dot(vector, target_vectors[start + offset]) for offset in range(count)),
+                      target)
+                     for target, (start, count) in zip(targets, spans, strict=True)),
                     key=lambda pair: (-pair[0], pair[1].iri),
                 )[:width]
                 for vector in mention_vectors
@@ -262,9 +289,12 @@ class Matcher:
 
         mention_matrix = np.asarray(mention_vectors, dtype="float32")
         target_matrix = np.asarray(target_vectors, dtype="float32").T
+        starts = [start for start, _ in spans]
         ranked: list[list[tuple[float, Target]]] = []
         for start in range(0, len(mention_matrix), _CHUNK):
-            block = mention_matrix[start:start + _CHUNK] @ target_matrix
+            names = mention_matrix[start:start + _CHUNK] @ target_matrix
+            # De un puntaje por nombre a uno por clase, sin materializar los grupos.
+            block = np.maximum.reduceat(names, starts, axis=1)
             # argpartition is O(targets) against the O(targets log targets) of a full sort,
             # and only the top-k order matters; the exact order comes from the sort below.
             top = np.argpartition(-block, width - 1, axis=1)[:, :width]
@@ -291,9 +321,18 @@ class Matcher:
         it is tuned on accumulated accept/reject labels (ITER-TUNE).
         """
         if self.reranker is not None:
-            scores = self.reranker.score([(mention.text, target.text) for _, target in ranked])
+            # El re-ranker puntúa cada nombre y la clase se queda con el mejor, igual que la
+            # recuperación: si el bi-encoder encontró la clase por un sinónimo, re-rankear sólo
+            # la etiqueta preferida la volvería a perder acá.
+            candidates = [target for _, target in ranked]
+            pairs = [(mention.text, text) for target in candidates for text in target.texts]
+            scores = iter(self.reranker.score(pairs))
+            best = [
+                max(next(scores) for _ in target.texts)
+                for target in candidates
+            ]
             ranked = sorted(
-                zip(scores, (target for _, target in ranked), strict=True),
+                zip(best, candidates, strict=True),
                 key=lambda pair: (-pair[0], pair[1].iri),
             )
         best_score, best = ranked[0]

@@ -237,16 +237,23 @@ def _assess_divergence(
 
 
 def _write_labels(graph: Graph, entities: list[Entity]) -> None:
+    """Every name as `rdfs:label` and as `skos:altLabel`, the preferred one included.
+
+    The preferred label exists so a tool has something to render (Protégé renders
+    `skos:prefLabel`), and that is its whole job: nothing downstream may depend on which name
+    happened to be preferred. Repeating it among the `skos:altLabel`s means the set of
+    `altLabel`s *is* the set of names the concept has, with no second place to look.
+    """
     for entity in entities:
         iri = URIRef(entity.iri)
         graph.remove((iri, RDFS.label, None))
-        for label in entity.labels:
-            graph.add((iri, RDFS.label, Literal(label.text, lang=label.language)))
-        graph.add((
-            iri,
-            SKOS.prefLabel,
-            Literal(entity.preferred, lang=terms.guess_language(entity.preferred)),
-        ))
+        preferred_language = terms.guess_language(entity.preferred)
+        names = [(label.text, label.language) for label in entity.labels]
+        for text, language in names:
+            graph.add((iri, RDFS.label, Literal(text, lang=language)))
+        graph.add((iri, SKOS.prefLabel, Literal(entity.preferred, lang=preferred_language)))
+        for text, language in dict.fromkeys([*names, (entity.preferred, preferred_language)]):
+            graph.add((iri, SKOS.altLabel, Literal(text, lang=language)))
 
 
 def detect_typos(entities: list[Entity]) -> list[TypoFinding]:

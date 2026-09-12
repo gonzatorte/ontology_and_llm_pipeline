@@ -85,7 +85,7 @@ def test_a_target_without_a_gloss_has_only_its_label():
     the label is what there is.
     """
     target = Target(iri="c:Technique", label="Technique")
-    assert target.text == "Technique" and not target.grounded_in_gloss
+    assert target.texts == ["Technique"] and not target.grounded_in_gloss
 
 
 def test_identical_proper_names_of_the_same_class_merge_automatically(matcher):
@@ -248,15 +248,38 @@ def test_what_a_mention_is_compared_against_is_configurable():
     """The spec matches against the gloss; measured on the real seed the label wins, so the
     default moved and the choice became explicit rather than hard-coded."""
     target = Target(iri="c:T", label="Technique", gloss="A systematic procedure.")
-    assert target.text == "Technique"
+    assert target.texts == ["Technique"]
     assert Target(iri="c:T", label="Technique", gloss="A systematic procedure.",
-                  match_against="gloss").text == "A systematic procedure."
+                  match_against="gloss").texts == ["A systematic procedure."]
     assert Target(iri="c:T", label="Technique", gloss="A systematic procedure.",
-                  match_against="label_and_gloss").text == "Technique: A systematic procedure."
+                  match_against="label_and_gloss").texts == \
+        ["Technique: A systematic procedure."]
 
 
 def test_a_target_with_no_gloss_falls_back_to_the_label_whatever_the_setting():
-    assert Target(iri="c:T", label="Technique", match_against="gloss").text == "Technique"
+    assert Target(iri="c:T", label="Technique", match_against="gloss").texts == ["Technique"]
+
+
+def test_a_mention_finds_the_class_by_any_of_its_names(matcher):
+    """La clase puntúa como su nombre más cercano. Comparando sólo contra la etiqueta preferida,
+    una mención que usa el sinónimo —o el nombre en el otro idioma— quedaba huérfana, y el
+    huérfano falso induce una clase espuria en `ITER-INDUCE`."""
+    target = Target(iri="c:I", label="Informant", alt_labels=["Interview", "Entrevista"])
+
+    typing = matcher.type_mentions([mention("m1", "interview")], [target])[0]
+
+    assert (typing.iri, typing.zone) == ("c:I", matching.AUTO)
+
+
+def test_a_synonym_nobody_uses_does_not_dilute_the_class(matcher):
+    """El puntaje es el máximo entre los nombres y no el promedio: declarar un sinónimo que el
+    corpus no usa no puede empeorar el mapeo, o declararlo saldría caro."""
+    plain = Target(iri="c:I", label="Interview")
+    with_extra = Target(iri="c:I", label="Interview", alt_labels=["Commercialization policy"])
+    subject = [mention("m1", "interview")]
+
+    assert matcher.type_mentions(subject, [plain])[0].score == \
+        matcher.type_mentions(subject, [with_extra])[0].score
 
 
 def test_the_config_refuses_a_blocking_strategy_that_is_not_built():
@@ -311,10 +334,18 @@ def test_the_numpy_and_python_ranking_paths_agree(monkeypatch):
     class won just because one of them found numpy."""
     import builtins
 
-    targets = [Target(iri=f"c:{index:03d}", label=f"label {index}") for index in range(200)]
+    # Con dos nombres en una de cada tres clases, los dos caminos tienen además que agrupar
+    # igual: uno reduce con numpy y el otro con `max` en el intérprete.
+    targets = [
+        Target(iri=f"c:{index:03d}", label=f"label {index}",
+               alt_labels=[f"alias {index}"] if index % 3 == 0 else [])
+        for index in range(200)
+    ]
     mentions = [mention(f"m{index}", f"text {index}") for index in range(40)]
     matcher = Matcher(RandomEncoder(), auto_merge_threshold=1.1, grey_zone_lower=0.0)
-    target_vectors = matcher.vectors_for([target.text for target in targets])
+    target_vectors = matcher.vectors_for(
+        [text for target in targets for text in target.texts]
+    )
     mention_vectors = matcher.vectors_for([m.text for m in mentions])
 
     with_numpy = matcher._rank(mention_vectors, target_vectors, targets, 5)

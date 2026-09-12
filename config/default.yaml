@@ -139,6 +139,13 @@ matching:
   bi_encoder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
   cross_encoder: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
   match_against: label             # label | gloss | label_and_gloss
+                                   # `label` quiere decir TODOS los nombres de la clase, no el
+                                   # preferido: prefLabel, rdfs:label y skos:altLabel entran
+                                   # por igual y la clase puntúa como su nombre más cercano.
+                                   # Cuál quedó como preferido es un accidente de cómo se
+                                   # escribió la ontología, y el mapeo no puede depender de eso.
+                                   # El máximo y no el promedio: declarar un sinónimo que el
+                                   # corpus no usa no tiene que empeorar el mapeo.
                                    # SETTLED, against the spec (6.2), which matches on the
                                    # gloss. Measured on CRAFT/CL: 8.723 gold mentions against
                                    # 3.418 classes, 96% of them carrying a real definition —

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from rdflib import Graph, URIRef
-from rdflib.namespace import OWL, RDF, SKOS
+from rdflib.namespace import OWL, RDF, RDFS, SKOS
 
 from .matching import AUTO, DISCARDED, GREY, Decision, Mention, Target
 from .store import Store
@@ -85,12 +85,22 @@ def install(conn: Store) -> None:
 
 
 def targets_from(graph: Graph, match_against: str) -> list[Target]:
-    """Every named class with a preferred label becomes a candidate."""
+    """Every named class with at least one name becomes a candidate, and it carries them all.
+
+    `skos:prefLabel` decides which name a tool renders, not which one the matcher compares
+    against: a concept named in two languages, or with a synonym the corpus actually uses, is
+    reachable by any of its names. Reading only the preferred one made the mapping depend on
+    which label the ontology happened to declare first.
+    """
     targets = []
     for subject in graph.subjects(RDF.type, OWL.Class):
         if not isinstance(subject, URIRef):
             continue
-        label = next((str(o) for o in graph.objects(subject, SKOS.prefLabel)), None)
+        names = list(dict.fromkeys(
+            str(name) for predicate in (SKOS.prefLabel, RDFS.label, SKOS.altLabel)
+            for name in graph.objects(subject, predicate)
+        ))
+        label = names[0] if names else None
         if not label:
             continue
         gloss = next(
@@ -103,7 +113,7 @@ def targets_from(graph: Graph, match_against: str) -> list[Target]:
                 iri=str(subject),
                 label=label,
                 gloss=gloss,
-                alt_labels=[str(o) for o in graph.objects(subject, SKOS.altLabel)],
+                alt_labels=names[1:],
                 has_key=[str(o) for o in graph.objects(subject, OWL.hasKey)],
                 match_against=match_against,
             )

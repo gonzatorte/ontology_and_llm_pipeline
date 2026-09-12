@@ -503,6 +503,12 @@ Acuña IRIs opacos (uuid5, reproducible), deriva etiquetas, corre los cuatro det
 erratas, arma los contextos de glosa y —si hay proveedor— genera las glosas. Commitea la
 ontología al DAG de versiones.
 
+**Cada nombre se escribe dos veces: como `rdfs:label` y como `skos:altLabel`, la preferida
+incluida.** `skos:prefLabel` existe para que una herramienta tenga qué mostrar —Protégé
+renderiza esa propiedad— y para nada más; repetirla entre los `altLabel` hace que ese conjunto
+**sea** el de los nombres del concepto, sin un segundo lugar donde mirar. El matcher los compara
+a todos (`ITER-MATCH`).
+
 Salida: `data/ontology/initial_normalized.ttl`. Los hallazgos que necesitan tu decisión
 —divergencias de etiqueta, pares sin verificar entre idiomas, erratas— van a la tabla
 `review_items`:
@@ -1231,6 +1237,14 @@ conversaciones que trabajan sobre este repo.
   `information` 0.998, `support` 0.993, `subject` 0.992 — el nombre de la clase apareciendo como
   palabra corriente, ninguna una instanciación real. Con el corpus y la ontología inicial desalineados ese
   85% no es un veredicto sobre el matcher.
+- **Compara contra TODOS los nombres de la clase**, no contra el preferido. `skos:prefLabel`
+  existe para que una herramienta tenga qué mostrar —Protégé renderiza esa propiedad—; cuál de
+  los nombres quedó ahí es un accidente de cómo se escribió la ontología, y hacer depender el
+  mapeo de ese accidente no tiene justificación. Entran por igual `prefLabel`, `rdfs:label` y
+  `skos:altLabel`, y la clase puntúa como **su nombre más cercano**: el máximo y no el
+  promedio, porque declarar un sinónimo que el corpus no usa no puede empeorar el mapeo, o
+  declararlo saldría caro. Es una decisión de diseño, no una medición: lo medido es lo que
+  sigue, etiqueta contra glosa.
 - **El matcher compara contra etiquetas, no contra glosas, al revés de lo que dice `ITER-MATCH`.**
   Ya no es provisional. Medido sobre CRAFT/CL —8.723 menciones gold contra 3.418 clases, 96% con
   definición escrita por curadores— recall@1: etiqueta 69,8%, etiqueta+glosa 13,3%, glosa 7,9%.

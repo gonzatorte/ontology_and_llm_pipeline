@@ -10,9 +10,10 @@ SESSION = "test-1"
 
 ONTOLOGY = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix : <http://example.org/onto#> .
-:Technique a owl:Class ; skos:prefLabel "Technique"@en ;
+:Technique a owl:Class ; skos:prefLabel "Technique"@en ; rdfs:label "Técnica"@es ;
     skos:definition "A systematic procedure."@en ; skos:altLabel "Method"@en .
 :Subject a owl:Class ; skos:prefLabel "Subject"@en .
 :Unlabelled a owl:Class .
@@ -26,13 +27,21 @@ def graph():
 def test_targets_skip_classes_with_no_label():
     targets = typing_store.targets_from(graph(), "label")
     assert [t.label for t in targets] == ["Subject", "Technique"]
-    assert targets[1].alt_labels == ["Method"]
+
+
+def test_a_class_arrives_with_every_name_it_has():
+    """Cuál nombre quedó como preferido es un accidente de cómo se escribió la ontología —y
+    `skos:prefLabel` existe para que una herramienta tenga qué mostrar—, así que el mapeo no
+    puede depender de eso: la clase se compara por todos sus nombres."""
+    technique = {t.label: t for t in typing_store.targets_from(graph(), "label")}["Technique"]
+
+    assert technique.texts == ["Technique", "Técnica", "Method"]
 
 
 def test_targets_honour_the_configured_comparison_text():
     by_label = {t.label: t for t in typing_store.targets_from(graph(), "gloss")}
-    assert by_label["Technique"].text == "A systematic procedure."
-    assert by_label["Subject"].text == "Subject", "no gloss, so the label is what there is"
+    assert by_label["Technique"].texts == ["A systematic procedure."]
+    assert by_label["Subject"].texts == ["Subject"], "no gloss, so the label is what there is"
 
 
 def test_typings_are_stored_per_version_not_on_the_mention(tmp_path):

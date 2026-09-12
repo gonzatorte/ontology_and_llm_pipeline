@@ -513,7 +513,7 @@ def bridge(
     items = bridging.candidates(
         found, targets,
         matcher.vectors_for(surfaces),
-        matcher.vectors_for([target.text for target in targets]),
+        matcher.vectors_for([text for target in targets for text in target.texts]),
         n_candidates=config.bridging.n_candidates,
         min_score=config.bridging.min_candidate_score,
     )

@@ -177,16 +177,28 @@ def candidates(
     A surface whose best class falls below `min_score` gets no candidates and is dropped: the
     stage is a bridge to something, and asking the model to relate a phrase to five classes
     none of which is remotely close invites the forced connection the prompt warns against.
+
+    `target_vectors` is one vector per **name**, in the order the targets list them, and a class
+    scores as its closest name — the same rule as ITER-MATCH. A bridge that could only be found
+    through the preferred label would miss the orphan that names the class by its synonym, which
+    is exactly the phrase this stage exists to catch.
     """
+    spans, cursor = [], 0
+    for target in targets:
+        spans.append((cursor, len(target.texts)))
+        cursor += len(target.texts)
+
     grouped: dict[str, Candidate] = {}
     for row, vector in zip(rows, vectors, strict=True):
         surface = row["surface_text"]
         candidate = grouped.get(surface)
         if candidate is None:
+            unit = normalize(vector)
             ranked = sorted(
                 (
-                    (dot(normalize(vector), normalize(target_vector)), target)
-                    for target_vector, target in zip(target_vectors, targets, strict=True)
+                    (max((dot(unit, normalize(target_vectors[start + offset]))
+                          for offset in range(count)), default=0.0), target)
+                    for target, (start, count) in zip(targets, spans, strict=True)
                 ),
                 key=lambda pair: (-pair[0], pair[1].iri),
             )[:n_candidates]
