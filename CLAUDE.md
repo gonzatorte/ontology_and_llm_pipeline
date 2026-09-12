@@ -202,6 +202,34 @@ necesita para escribir —`objectstore`, `artifacts`— es del core aunque lo ha
 la misma razón que `store.py` lo es: un servicio no puede importar de una interfaz
 (`SERVICES-NO-INTERFACE`).
 
+### `ARTIFACTS-NOT-FILES`
+
+**Ningún módulo del core abre un archivo para escribir una salida.** Toda salida derivada —el
+Markdown, los recortes, la ontología normalizada, el ABox, los diffs, el export, el informe del
+parser, la herramienta de anotación, el par de brat, el barrido de calibración— se nombra con
+una clave y se escribe por `artifacts`. Dónde caen los bytes lo decide `objectstore` según la
+configuración, y el que escribe no se entera: es el mismo corte que `store.py` hace con el motor
+de base.
+
+**No es lo mismo que `ONE-SUBSTRATE-PER-CONCERN`.** Esa dice que en runtime hay una sola
+implementación; ésta dice que el core no la puede saltear, que es lo que la vuelve cierta. Una
+etapa con un `Path.write_text` adentro no rompe ningún test y anda perfecto en la máquina de
+quien la escribió: falla cuando el contenedor se recicla, o cuando otro proceso va a leer lo que
+no está. Pasó con las cuatro salidas que quedaron afuera del primer barrido —y con ellas se
+fue también el informe del parser, que resolvía los recortes contra el disco y escribía «figure
+crop missing» en vez de fallar.
+
+**Que el archivo sea el entregable no es una excepción, es presentación.** Un informe HTML se
+abre en el navegador y el par de brat se carga en la herramienta: para eso, el **core escribe el
+artefacto** y la **interfaz materializa una copia** donde se la pidan (`--out` en `report`,
+`annotate`, `export-annotations` y `export`). Lo contrario —que el core escriba donde el usuario
+dijo— es lo que había, y es lo que ata una etapa al filesystem de quien la corre.
+
+Lo que sigue siendo un archivo local a propósito: lo que el usuario **trae** —el corpus, la
+ontología inicial, un JSONL para importar— y el marcador `current_session`, que es estado del
+CLI. Entrada y salida no son simétricas: la entrada ya existe en algún lado antes de que el
+pipeline la vea.
+
 ### `ONE-SUBSTRATE-PER-CONCERN`
 
 **Un solo motor de base y un solo almacén de objetos en runtime, también en local**: Postgres y
@@ -371,7 +399,7 @@ src/onto_pipeline/
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
 tests/                un archivo por módulo, más `test_end_to_end.py`; sin red ni Docker
 lib/                  jars del razonador (gitignored, los baja fetch-jars.sh)
-data/                 lo poco que sigue siendo local: el marcador de sesión, informes, brat
+data/                 casi vacío: sólo el marcador de sesión, que es de esta máquina
 docker-compose.yml    Postgres y MinIO para correr local, con el bucket ya creado
 Dockerfile            la imagen: jars en una etapa, glibc en la otra — **nunca Alpine**
 ```

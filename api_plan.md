@@ -4,7 +4,8 @@ Una tercera interfaz sobre la capa de servicios, hermana del CLI y de `wizard`: 
 desplegable en AWS, sin archivos locales durables, con el corpus subido por pre-signed URLs y
 apoyada en la sesión de usuario que ya existe.
 
-**Está construida.** Los ocho hitos de abajo se ejecutaron; lo que la implementación cambió del
+**Está construida.** Los ocho pasos de abajo se ejecutaron —cada uno con su nombre,
+`BUILD-API-*`, porque se citan desde los commits y desde la deuda—; lo que la implementación cambió del
 plan está al final, en [Lo que cambió al construirlo](#lo-que-cambió-al-construirlo). El
 documento queda como el diseño de la interfaz —por qué cada decisión— y no como una lista de
 tareas: cómo se usa está en el [README](README.md), y lo que quedó abierto en las entradas
@@ -111,7 +112,7 @@ Beanstalk queda como alternativa con la misma imagen. La palanca de costo es la 
 
 ---
 
-## Hito 1 — La regla de documentación y los alcances de commit
+## `BUILD-API-DOC-RULE` — La regla de documentación y los alcances de commit
 
 Va primero para no tener que corregir después la documentación que los hitos siguientes escriben.
 
@@ -131,7 +132,7 @@ Va primero para no tener que corregir después la documentación que los hitos s
 
 ---
 
-## Hito 2 — Las interfaces a su propia carpeta
+## `BUILD-API-INTERFACES-FOLDER` — Las interfaces a su propia carpeta
 
 **Objetivo.** `src/onto_pipeline/interfaces/` con las tres interfaces; el core queda en la raíz
 del paquete.
@@ -155,7 +156,7 @@ error**: `uv run onto-pipeline --help` y `uv run onto-pipeline next` tienen que 
 
 ---
 
-## Hito 3 — La capa de artefactos
+## `BUILD-API-ARTIFACTS` — La capa de artefactos
 
 **Objetivo.** Que ninguna etapa escriba a disco durable: todas pasan por una capa que en local es
 el filesystem y en AWS es S3. Es el hito más caro y el que más riesgo tiene, porque lo que quede
@@ -197,7 +198,7 @@ el desalineo: es el canario de este hito.
 
 ---
 
-## Hito 4 — Uploads
+## `BUILD-API-UPLOADS` — Uploads
 
 **Objetivo.** El corpus entra por pre-signed PUT y se comparte entre sesiones.
 
@@ -226,7 +227,7 @@ sesión quede atada a `upload:<id>` y se lea de vuelta.
 
 ---
 
-## Hito 5 — Jobs, workers y paralelismo
+## `BUILD-API-JOBS` — Jobs, workers y paralelismo
 
 **Objetivo.** El mecanismo asíncrono, parallel-safe desde el principio y no como parche posterior.
 
@@ -299,7 +300,7 @@ encodear concurrente da los mismos vectores que en serie).
 
 ---
 
-## Hito 6 — La API
+## `BUILD-API-REST` — La API
 
 **Objetivo.** `src/onto_pipeline/interfaces/api/` traduciendo HTTP a la capa de servicios, y nada
 más: ninguna lógica de dominio vive acá.
@@ -310,7 +311,7 @@ request y response).
 1. `auth.py`: `X-Auth-Key` contra un token estático de entorno. **Sin token configurado la app no
    arranca** — falla cerrado, no abre sin auth (`API-AUTH-KEY`).
 2. `deps.py`: una dependencia que abre el almacén y el objectstore por request y los cierra al
-   terminar, respetando `ONE-CONNECTION-PER-UNIT` del hito 5.
+   terminar, respetando `ONE-CONNECTION-PER-UNIT`, de `BUILD-API-JOBS`.
 3. Los endpoints. La lista de etapas sale de los ids de `orchestration.survey` y de los comandos
    de `interfaces/cli.py`, menos lo que `API-SCOPE-CORE` deja afuera:
    - `GET /healthz`, sin auth.
@@ -341,7 +342,7 @@ un worker de un tiro, la compuerta que rechaza una etapa WAITING diciendo qué f
 
 ---
 
-## Hito 7 — Configuración, imagen y despliegue
+## `BUILD-API-IMAGE` — Configuración, imagen y despliegue
 
 1. `config.py` y `config/default.yaml`: secciones `storage` (backend, bucket, prefijo, región) y
    `api` (host, puerto, `worker_count`, vida de los pre-signed). **Overrides por entorno con
@@ -367,7 +368,7 @@ un worker de un tiro, la compuerta que rechaza una etapa WAITING diciendo qué f
 
 ---
 
-## Hito 8 — Documentación y deuda
+## `BUILD-API-DOCS` — Documentación y deuda
 
 1. Este archivo queda como el diseño de la interfaz; actualizarlo con lo que la implementación
    haya cambiado, porque un plan que miente es peor que no tenerlo.
@@ -377,7 +378,7 @@ un worker de un tiro, la compuerta que rechaza una etapa WAITING diciendo qué f
 3. `CLAUDE.md`: el mapa con `interfaces/`, `SERVICES-NO-INTERFACE`, `SESSION-SCOPED-DATA`, `DECISION-NEVER-CROSSED` al día, `ONE-CONNECTION-PER-UNIT`, y `api` en los comandos si corresponde.
 4. `technical_debt.md`:
    - `DEBT-API-CANCEL`, `DEBT-API-DOCUMENTS-PATH`, `DEBT-API-SSE`, `DEBT-API-USERS`: nuevas.
-   - `DEBT-API-PARALLEL-WORKERS`: **no** es deuda de seguridad —eso queda probado en el hito 5—
+   - `DEBT-API-PARALLEL-WORKERS`: **no** es deuda de seguridad —eso queda probado en `BUILD-API-JOBS`—
      sino de operación: más de una tarea multiplica la memoria de JVM y encoders, y hay que
      dimensionar.
    - `DEBT-API-CONNECTION-POOL`: no es «falta un pool», es «cada unidad de trabajo paga un
@@ -407,7 +408,7 @@ ningún artefacto escrito fuera del objectstore**.
 
 ## Trampas conocidas
 
-- **El hito 3 es el que puede fallar en silencio.** Son once puntos de escritura y cuatro de
+- **`BUILD-API-ARTIFACTS` es el que puede fallar en silencio.** Son once puntos de escritura y cuatro de
   lectura; el que quede sin refactorar no rompe ningún test y aparece recién en AWS. El canario es
   `test_normalize_writes_where_evaluate_reads` más el humo manual sin nada en disco.
 - **Una edición anclada a texto exacto falla abierta** si otra sesión movió el contexto

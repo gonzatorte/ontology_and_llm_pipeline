@@ -85,12 +85,17 @@ capa de servicios. Los nombres se dan de alta acá igual que los del diseño, po
 | `API-ENV-FIRST` | Se configura por variables de entorno; los archivos siguen válidos, pero la imagen no los usa |
 | `ONE-SUBSTRATE-PER-CONCERN` | Un solo motor y un solo almacén en runtime, también en local: Postgres y S3/MinIO |
 | `USAGE-CLI-NOT-ADMIN` | La API tiene su propio comando; `onto-pipeline` es la interfaz de uso |
+| `ARTIFACTS-NOT-FILES` | Ningún módulo del core abre un archivo para escribir; toda salida es una clave |
 | `API-NO-GIT-DOCS` | La documentación no referencia historia de git |
 | `API-PARALLEL-SAFE` | El mecanismo de jobs es parallel-safe por construcción y con pruebas que lo fijan |
 
-Las dos últimas no llevan prefijo `API-` porque no son de la API: son invariantes del proyecto
-—están en [`CLAUDE.md`](CLAUDE.md) con las demás— y se citan desde el código. Aparecen acá porque
-salieron de este trabajo y el índice es uno solo.
+Las tres sin prefijo `API-` no son de la API: son invariantes del proyecto —están en
+[`CLAUDE.md`](CLAUDE.md) con las demás— y se citan desde el código. Aparecen acá porque salieron
+de este trabajo y el índice es uno solo.
+
+Los ocho pasos de la construcción también llevan nombre: `BUILD-API-DOC-RULE`,
+`BUILD-API-INTERFACES-FOLDER`, `BUILD-API-ARTIFACTS`, `BUILD-API-UPLOADS`, `BUILD-API-JOBS`,
+`BUILD-API-REST`, `BUILD-API-IMAGE` y `BUILD-API-DOCS`.
 
 El diseño entero, con su procedencia, está en [`api_plan.md`](api_plan.md).
 
@@ -431,8 +436,8 @@ flowchart LR
   as[/"assets/ (bucket)"/]
   on[/"sessions/&lt;id&gt;/ontology/initial_normalized.ttl"/]
   rv[/"data/review/seed_review.json"/]
-  rp[/"data/reports/ · `DELIVERABLES-PENDING-PARSER-EVAL`"/]
-  an[/"data/annotate/ · data/brat/"/]
+  rp[/"reports/ · `DELIVERABLES-PENDING-PARSER-EVAL`"/]
+  an[/"sessions/&lt;id&gt;/annotate/ · .../brat/"/]
   ex[/"ontología terminada + manifiesto"/]
   di["diagnóstico: perfil · ELK · HermiT · métricas"]
   pr["tasa de aprobación por iteración"]
@@ -1174,8 +1179,9 @@ Markdown que produce `PREP-PARSE`, así que sin parsear no hay a qué anclarlos.
 diferencia; sin esa marca el conjunto se filtra a `ITER-EXTRACT` y la evaluación mediría el pipeline contra
 su propio insumo. La marca sobrevive a una re-ingesta.
 
-**La herramienta de anotación** (`BUILD-STEP-3`) es un HTML autocontenido por documento en
-`data/annotate/`. Se abre en el navegador —el corpus no sale de tu máquina— y tiene tres
+**La herramienta de anotación** (`BUILD-STEP-3`) es un HTML autocontenido por documento;
+`onto-pipeline annotate --out <dir>` lo baja para abrirlo en el navegador —el corpus no sale de
+tu máquina, porque el HTML lleva el texto adentro—. Tiene tres
 acciones: seleccionar texto y elegir una clase de la ontología inicial, escribir una clase que la ontología inicial
 no tiene, o marcar la mención como válida sin clase asignable.
 
@@ -1374,23 +1380,25 @@ que es lo que hace que el contenedor se pueda reciclar sin perder trabajo.
 el bucket               todo lo derivado; las claves son las mismas en MinIO y en S3
   markdown/             un .md por documento; los spans de los bloques indexan esto
   assets/               recortes de figuras
+  reports/              HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
+  calibration/          resultados del barrido, un JSON por caso de uso
   uploads/<id>/         corpus y ontología subidos por la API, con forma de caso de uso
-  sessions/<id>/        lo de cada sesión: la ontología normalizada, el ABox, diffs, export
+  sessions/<id>/        lo de cada sesión: ontología normalizada, ABox, diffs, export,
+                        la herramienta de anotación y el par de brat
   shapes.ttl            las shapes de SHACL, escritas a mano (`ITER-VALIDATE-3-SHACL`)
 
 Postgres                menciones, bloques, work_units, decisiones, versiones, jobs, uploads, CQs
 
-data/                   gitignoreado; lo poco que sigue siendo local
+data/                   gitignoreado, y casi vacío
   current_session       cuál es la actual (`session use`); es de esta máquina y de este CLI
-  reports/              HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
-  brat/                 exportación del conjunto de retención
-  calibration/          resultados del barrido, un JSON por caso de uso
 lib/                    jars del razonador (gitignoreado)
 ```
 
-Los tres últimos de `data/` son salidas del CLI de uso, no de la API, y el archivo **es** el
-entregable: un HTML que se abre en el navegador, un export para anotar en brat. Están fuera de
-`API-SCOPE-CORE` y siguen en disco a propósito; el día que se expongan por HTTP hay que moverlos.
+**Ninguna etapa abre un archivo para escribir** (`ARTIFACTS-NOT-FILES`). Donde el archivo es el
+entregable —el informe del parser, la herramienta de anotación, el par de brat— el core escribe
+el artefacto y es la interfaz la que materializa una copia: `--out` en `report`, `annotate`,
+`export-annotations` y `export`. Lo que sigue siendo local es lo que **trae** el usuario —el
+corpus, la ontología inicial, un JSONL para importar— y el marcador de sesión, que es del CLI.
 
 ```
 use_cases/            los casos de uso. Sólo README.md, use_case.yml y PROCEDENCIA.md se versionan
