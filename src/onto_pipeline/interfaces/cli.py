@@ -268,12 +268,39 @@ def normalize_cmd(config_path: Path = ConfigOption) -> None:
             f"[yellow]glosses skipped[/]: {result.pending_glosses} need generation and {missing}"
         )
         return
+
+    # La verificación va antes de las glosas y antes de la revisión: corrige el idioma de las
+    # etiquetas, que es lo que decide la naturaleza de cada hallazgo. Pedirle al usuario que
+    # decida lo que el modelo podía verificar es cruzar el punto de decisión al revés.
+    with console.status("PREP-NORMALIZE-LABELS-VERIFY") as status:
+        verified = prep.verify_labels(workspace, result, progress=status.update)
+    render.label_verification(console, verified)
+    result = verified.normalization or result
+
+    if not result.pending_glosses:
+        return
     with console.status("glosses") as status:
         bootstrap = prep.generate_glosses(workspace, result, progress=status.update)
     render.glosses(console, bootstrap)
     published = deliver.publish_diff(workspace, bootstrap.committed.id)
     if published is not None:
         render.comparison(console, published)
+
+
+@app.command("verify-labels")
+def verify_labels_cmd(config_path: Path = ConfigOption) -> None:
+    """PREP-NORMALIZE-LABELS-VERIFY: the language of every label, and the pairs the translation
+    confirms.
+
+    The model says the language and the two forms; the code compares them and decides. It
+    re-derives the seed with the corrected languages, so a pair that was filed as a real
+    divergence becomes an unverified translation — or gets closed with its provenance.
+    """
+    workspace = _workspace(config_path)
+    normalization = prep.normalize(workspace)
+    with console.status("PREP-NORMALIZE-LABELS-VERIFY") as status:
+        result = prep.verify_labels(workspace, normalization, progress=status.update)
+    render.label_verification(console, result)
 
 
 @app.command()

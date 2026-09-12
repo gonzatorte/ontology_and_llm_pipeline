@@ -16,6 +16,7 @@ from .. import (
     cq_generation,
     glosses,
     label_overrides,
+    label_verification,
     llm,
     review,
     typing_store,
@@ -33,7 +34,8 @@ from ..initial_ontology import (
     normalize_initial_ontology,
 )
 from ..parse import TEXT_SUFFIXES
-from .workspace import Progress, StageError, Workspace, silent
+from ..telemetry import Ledger, StageAborted
+from .workspace import Progress, ProviderMissing, StageError, Workspace, silent
 
 # ─────────────────────────────  PREP-CLASSIFY + PREP-PARSE  ─────────────────────────────
 
@@ -278,6 +280,194 @@ def generate_glosses(
         failures=result.failures, in_tokens=result.in_tokens, out_tokens=result.out_tokens,
         committed=committed, parent_id=parent.id if parent else None, target=target,
     )
+
+
+# ─────────────────────────────  PREP-NORMALIZE-LABELS-VERIFY  ─────────────────────────────
+
+
+@dataclass
+class LabelVerification:
+    labels: int
+    batches: int
+    executed: int
+    cached: int
+    split_retries: int
+    failures: dict
+    in_tokens: int
+    out_tokens: int
+    retagged: int
+    resolved: list[tuple[str, str]] = field(default_factory=list)
+    annotated: int = 0
+    still_open: int = 0
+    normalization: Normalization | None = None
+
+
+def verify_labels(
+    workspace: Workspace,
+    normalization: Normalization,
+    *,
+    progress: Progress = silent,
+) -> LabelVerification:
+    """`PREP-NORMALIZE-LABELS-VERIFY`: el idioma de cada etiqueta y la comparación por traducción.
+
+    Recibe la `Normalization` y no la calcula, como `generate_glosses`: quien llama corre
+    `normalize` primero, y así el comando suelto, el wizard y la llamada encadenada ven la misma
+    semilla con las mismas decisiones ya aplicadas.
+
+    El veredicto no se le pide al modelo (`VERDICT-IN-CODE`). Él dice idioma y traducciones; el
+    código compara y decide contra los umbrales.
+    """
+    session = workspace.require_session()
+    config, conn = workspace.config, workspace.conn
+    if not workspace.has_provider():
+        raise ProviderMissing(
+            "verify-labels le pregunta el idioma y la traducción al modelo; falta la credencial "
+            "(--env-file)"
+        )
+
+    texts = sorted({label.text for entity in normalization.seed.entities
+                    for label in entity.labels})
+    if not texts:
+        raise StageError("la ontología normalizada no tiene ninguna etiqueta que verificar")
+
+    size = config.initial_ontology.label_batch_size
+    planned = label_verification.batches(texts, size=size)
+    progress(f"labels: {len(texts)} in {len(planned)} batch(es) of ~{size}")
+    readings, run = _read_labels(workspace, planned, progress=progress)
+
+    unread = [text for text in texts if text not in readings]
+    rate = len(unread) / len(texts)
+    if rate > config.execution.stage_failure_rate_abort:
+        raise StageAborted(
+            label_verification.STAGE, total=len(texts),
+            threshold=config.execution.stage_failure_rate_abort, failures=run.failures,
+        )
+
+    retagged = label_overrides.record(
+        conn, label_verification.languages(readings),
+        source=label_overrides.MODEL, session_id=session,
+    )
+
+    # Re-derivar y re-sincronizar es exactamente `normalize` con los overrides ya escritos: los
+    # lee por `LabelDecisions`, acarrea las glosas, commitea si cambió alguna etiqueta y vuelve a
+    # sincronizar los hallazgos —`TYPO` incluido, porque re-taggear cambia los léxicos por idioma
+    # y por lo tanto la salida de `detect_typos`—.
+    progress("re-deriving the seed with the corrected languages")
+    renormalized = normalize(workspace)
+
+    resolved, annotated, still_open = _decide_findings(
+        workspace, readings, threshold=config.initial_ontology.translation_verified_threshold
+    )
+    return LabelVerification(
+        labels=len(texts), batches=len(planned), executed=run.executed, cached=run.cached,
+        split_retries=run.split_retries, failures=run.failures,
+        in_tokens=run.in_tokens, out_tokens=run.out_tokens, retagged=retagged,
+        resolved=resolved, annotated=annotated, still_open=still_open,
+        normalization=renormalized,
+    )
+
+
+@dataclass
+class _Run:
+    executed: int = 0
+    cached: int = 0
+    split_retries: int = 0
+    in_tokens: int = 0
+    out_tokens: int = 0
+    failures: dict = field(default_factory=dict)
+
+
+def _read_labels(
+    workspace: Workspace, planned: list, *, progress: Progress
+) -> tuple[dict, _Run]:
+    """Los lotes, y los que fallaron otra vez partidos al medio (`VERIFY-3-SPLIT`).
+
+    El reintento del ledger repite la **misma** unidad con el mismo payload, así que no sirve
+    para esto: lo que hay que cambiar es qué etiquetas viajan juntas, y una mitad es otra unidad
+    con su propia clave. La cuenta de fallas se hace acá sobre etiquetas y no sobre lotes —y
+    después de partir—, porque un lote que falla es 40 etiquetas y el umbral del ledger daría
+    por sistemática una falla que la partición resuelve.
+    """
+    config = workspace.config
+    tolerant = config.execution.model_copy(update={"stage_failure_rate_abort": 1.0})
+    ledger = Ledger(workspace.conn, tolerant, session_id=workspace.require_session())
+    model = workspace.model()
+    stage = llm.settings(config.llm, label_verification.STAGE)
+
+    readings: dict = {}
+    run = _Run()
+    pending = list(planned)
+    while pending:
+        result = llm.run(
+            ledger, model, label_verification.PROMPT, stage,
+            [(batch.key, label_verification.payload(batch)) for batch in pending],
+            label_verification.parse,
+        )
+        run.executed += result.executed
+        run.cached += result.cached
+        run.in_tokens += result.in_tokens
+        run.out_tokens += result.out_tokens
+        for batch in pending:
+            if batch.key in result.outputs:
+                readings.update(result.outputs[batch.key])
+
+        halves, failed = [], {}
+        for batch in pending:
+            if batch.key not in result.failures:
+                continue
+            pieces = label_verification.split(batch)
+            if pieces:
+                halves.extend(pieces)
+            else:
+                failed[batch.labels[0]] = result.failures[batch.key]
+        run.failures.update(failed)
+        if halves:
+            run.split_retries += 1
+            progress(f"retrying {len(halves)} half-batch(es) the model mangled")
+        pending = halves
+    return readings, run
+
+
+def _decide_findings(
+    workspace: Workspace, readings: dict, *, threshold: float
+) -> tuple[list[tuple[str, str]], int, int]:
+    """`VERIFY-7-VERDICT`: cerrar lo que la traducción confirma, anotar lo que no.
+
+    `rejected` en estos dos kinds se lee como «el hallazgo no se sostiene», y el comentario dice
+    por qué. Lo que queda abierto se queda con las traducciones en el payload, para que quien
+    decida vea contra qué se comparó en vez de volver a preguntarse lo mismo.
+    """
+    session = workspace.require_session()
+    resolved: list[tuple[str, str]] = []
+    annotated = still_open = 0
+    for kind in (review.DIVERGENT_LABEL, review.PENDING_SEMANTIC_CHECK):
+        for item in review.load(workspace.conn, status=review.OPEN, kind=kind,
+                                session_id=session):
+            labels = item["payload"].get("labels", [])
+            derived = next((label["text"] for label in labels if label["source"] == "iri"), None)
+            declared = [label["text"] for label in labels if label["source"] == "declared"]
+            if derived is None or not declared:
+                continue
+            best = label_verification.verdict(
+                derived, declared, readings, threshold=threshold
+            )
+            if best is None:
+                still_open += 1
+                continue
+            review.annotate(
+                workspace.conn, item["id"], {"translation": best.as_evidence()},
+                session_id=session,
+            )
+            annotated += 1
+            if best.verified:
+                review.resolve(
+                    workspace.conn, item["id"], review.REJECTED, best.comment,
+                    session_id=session,
+                )
+                resolved.append((item["id"], item["summary"]))
+            else:
+                still_open += 1
+    return resolved, annotated, still_open
 
 
 # ─────────────────────────────  alineación corpus/ontología inicial  ─────────────────────────────

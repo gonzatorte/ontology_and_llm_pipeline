@@ -86,6 +86,33 @@ def glosses(console: Console, result: prep.GlossBootstrap) -> None:
     )
 
 
+def label_verification(console: Console, result: prep.LabelVerification) -> None:
+    console.print(
+        f"[green]PREP-NORMALIZE-LABELS-VERIFY[/]: {result.labels} labels in "
+        f"{result.batches} batch(es) ({result.executed} asked, {result.cached} cached, "
+        f"{len(result.failures)} unread) · "
+        f"{result.in_tokens} in / {result.out_tokens} out tokens"
+    )
+    if result.split_retries:
+        console.print(
+            f"  [yellow]{result.split_retries}[/] round(s) of split retries: a batch the model "
+            "mangled is re-asked in halves"
+        )
+    for text, error in list(result.failures.items())[:5]:
+        console.print(f"  [red]{text}[/]: {error}")
+
+    summary = Table("what", "count")
+    summary.add_row("labels re-tagged by the model", str(result.retagged))
+    summary.add_row("findings closed by the translation", str(len(result.resolved)))
+    summary.add_row("findings left open, now with evidence", str(result.annotated))
+    summary.add_row("findings still waiting for a decision", str(result.still_open))
+    console.print(summary)
+    for _, summary_line in result.resolved[:10]:
+        console.print(f"  [green]closed[/] {summary_line}")
+    if result.normalization is not None:
+        normalization(console, result.normalization)
+
+
 def alignment(console: Console, result: prep.Alignment, *, limit: int | None = None) -> None:
     report = result.report
     multiword = report.multiword
@@ -847,11 +874,26 @@ def brat_export(console: Console, result: evaluate.BratExport) -> None:
     console.print(f"[dim]{result.prefix}[/]")
 
 
+def translation(evidence: dict) -> str:
+    """La evidencia de `PREP-NORMALIZE-LABELS-VERIFY` en una línea."""
+    derived, declared = evidence["derived"], evidence["declared"]
+    return (
+        f"traducido: «{derived['en']}» / «{declared['en']}» · "
+        f"«{derived['es']}» / «{declared['es']}» · {evidence['similarity']:.2f}"
+    )
+
+
 def review_list(console: Console, items: list[dict], counts: dict) -> None:
     table = Table("id", "kind", "status", "finding")
     for item in items:
         table.add_row(item["id"], item["kind"], item["status"], item["summary"][:60])
     console.print(table)
+    # La evidencia de la verificación por traducción, cuando la hay: sin mostrarla, quien decide
+    # vuelve a preguntarse lo que la etapa ya averiguó.
+    for item in items:
+        evidence = (item.get("payload") or {}).get("translation")
+        if evidence:
+            console.print(f"[dim]{item['id']} · {translation(evidence)}[/]")
     console.print(
         " · ".join(f"{k}/{s}: {n}" for (k, s), n in sorted(counts.items())) or "nothing yet"
     )

@@ -620,6 +620,43 @@ DECISIONS = {
 # ─────────────────────────────  la ontología inicial  ─────────────────────────────
 
 
+def _verify_labels(console: Console, workspace: Workspace, normalization=None):
+    """`PREP-NORMALIZE-LABELS-VERIFY`, ofrecida antes de mandar a nadie a decidir.
+
+    El idioma de una etiqueta decide la naturaleza del hallazgo: `Valor (en) | value (en)` se
+    veía como una divergencia real cuando es una traducción sin verificar. Preguntarle al
+    usuario antes de que el modelo verifique lo verificable es cruzar el punto de decisión al
+    revés.
+    """
+    pending = _pending_language_checks(workspace)
+    if not pending:
+        return None
+    console.print(
+        f"\n[bold]{pending} hallazgos sobre etiquetas sin verificar.[/] El modelo puede decir en "
+        "qué idioma está cada una y traducirla; el veredicto lo saca el código comparando las "
+        "traducciones."
+    )
+    if not _provider(console, workspace):
+        console.print("[yellow]sin proveedor[/]: quedan para decidir a mano.")
+        return None
+    if not _confirm(console, "¿Verifico las etiquetas?"):
+        return None
+    if normalization is None:
+        with console.status("normalizando la ontología inicial"):
+            normalization = prep.normalize(workspace)
+    with console.status("PREP-NORMALIZE-LABELS-VERIFY") as status:
+        result = prep.verify_labels(workspace, normalization, progress=status.update)
+    render.label_verification(console, result)
+    return result.normalization
+
+
+def _pending_language_checks(workspace: Workspace) -> int:
+    return sum(
+        len(evaluate.review_items(workspace, kind=kind))
+        for kind in ("divergent_label", "pending_semantic_check")
+    )
+
+
 def _normalize_initial(console: Console, workspace: Workspace) -> bool:
     """`PREP-NORMALIZE`, que no está en el survey porque pasa una sola vez y antes que todo.
 
@@ -629,6 +666,10 @@ def _normalize_initial(console: Console, workspace: Workspace) -> bool:
     existing = workspace.latest_version()
     if existing is not None:
         console.print(f"[dim]la ontología ya está normalizada · versión {existing}[/]")
+        # La verificación de etiquetas también se ofrece acá: engancharla sólo en el camino de
+        # la normalización fresca deja afuera a toda sesión que ya normalizó, que son las que
+        # tienen los hallazgos abiertos esperando decisión.
+        _verify_labels(console, workspace)
         return True
 
     console.print(Panel.fit(
@@ -647,6 +688,8 @@ def _normalize_initial(console: Console, workspace: Workspace) -> bool:
         published = deliver.publish_diff(workspace, result.committed.id)
         if published is not None:
             render.comparison(console, published)
+
+    result = _verify_labels(console, workspace, result) or result
 
     if not result.pending_glosses:
         return True

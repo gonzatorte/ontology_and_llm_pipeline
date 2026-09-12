@@ -162,3 +162,29 @@ def test_one_session_does_not_retire_what_another_left_open(conn):
 
     assert report.superseded == 0
     assert len(load(conn, status=review.OPEN)) == 1
+
+
+def test_evidence_can_be_added_without_touching_the_decision(conn):
+    """`sync` sólo inserta lo que todavía no está, así que un hallazgo abierto no tiene por dónde
+    recibir lo que se averiguó después. La evidencia va al payload de la **fila**, nunca al que
+    arma `findings_from_initial`: el id deriva de ése, y tocarlo dejaría huérfana cada decisión
+    ya tomada."""
+    sync(conn, [finding()])
+    item_id = finding().id
+
+    assert review.annotate(conn, item_id, {"translation": {"similarity": 0.83}},
+                           session_id=SESSION)
+
+    stored = load(conn, status=review.OPEN)[0]
+    assert stored["payload"]["translation"] == {"similarity": 0.83}
+    assert stored["payload"]["token"] == "subre", "y lo que ya estaba sigue ahí"
+    assert stored["status"] == review.OPEN, "anotar no decide nada"
+    assert load(conn, status=review.OPEN)[0]["id"] == item_id, "ni le cambia el id"
+
+
+def test_annotating_a_finding_of_another_session_does_nothing(conn):
+    """SESSION-SCOPED-DATA: el id de un hallazgo deriva del contenido, así que dos sesiones sobre
+    el mismo caso de uso tienen el mismo. Sin el filtro, una le escribiría evidencia a la otra."""
+    sync(conn, [finding()])
+
+    assert not review.annotate(conn, finding().id, {"translation": {}}, session_id=OTHER)

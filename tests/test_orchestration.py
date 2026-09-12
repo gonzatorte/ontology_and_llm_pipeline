@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from onto_pipeline import orchestration
+from onto_pipeline import orchestration, review
 from onto_pipeline.db import connect
 from onto_pipeline.orchestration import BLOCKED, DONE, READY, WAITING
 
@@ -139,6 +139,30 @@ def test_induction_is_blocked_until_bridging_ran(tmp_path):
 
     step = named(survey(conn), "induce")
     assert step.state == BLOCKED and "run bridge first" in step.detail
+
+
+def test_the_label_check_is_done_when_the_ledger_says_so(tmp_path):
+    """El estado sale de las unidades de la etapa, no de una columna que alguien tenga que
+    acordarse de escribir (`PHASE-DERIVED`). Y la fila va antes de `review`: pedirle al usuario
+    que decida lo que el modelo podía verificar es cruzar el punto de decisión al revés."""
+    conn = store(tmp_path)
+    review.sync(
+        conn, [review.Finding(review.DIVERGENT_LABEL, "c:1", "Valor (en) | value (en)", {})],
+        version_id="v1", kinds=[review.DIVERGENT_LABEL], session_id=SESSION,
+    )
+
+    plan = survey(conn)
+    step = named(plan, "label check")
+    assert step.state == READY and "nobody has verified" in step.detail
+    assert plan.steps.index(step) < plan.steps.index(named(plan, "review"))
+
+    conn.execute(
+        "INSERT INTO work_units (key, session_id, stage, status) VALUES (?, ?, ?, 'done')",
+        ("k1", SESSION, "prep_normalize_labels"),
+    )
+    conn.commit()
+
+    assert named(survey(conn), "label check").state == DONE
 
 
 def test_a_store_missing_a_stages_table_reads_as_never_run(tmp_path):

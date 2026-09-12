@@ -112,6 +112,17 @@ initial_ontology:
   base_iri: https://ontology.local/id/   # opaque IRIs; the original is kept as provenance
   label_divergence_threshold: 0.8        # below it, a label pair is flagged, not assumed
                                          # to be a translation
+  # PREP-NORMALIZE-LABELS-VERIFY. Por encima de esto, dos etiquetas que traducidas se parecen
+  # tanto se dan por el mismo término y el hallazgo se cierra con su procedencia.
+  # **No medido**: es el valor con el que se escribió la etapa. Lo que hay para contrastarlo son
+  # las decisiones que el usuario ya tomó sobre `divergent_label`; hasta que eso se corra, el
+  # número es una apuesta conservadora —cierra sólo lo que casi coincide— y no una medición.
+  translation_verified_threshold: 0.95
+  # Cuántas etiquetas viajan por llamada. El ledger corre las unidades de a una, así que una
+  # llamada por etiqueta convierte el pase en un trabajo de horas sobre una ontología grande.
+  # Es el tamaño **medio**: el corte lo decide el contenido (BATCH-CUT), para que agregar una
+  # etiqueta invalide un lote y no todos los que siguen.
+  label_batch_size: 40
 
 # ─── Matching and entity resolution ──────────────────────
 matching:

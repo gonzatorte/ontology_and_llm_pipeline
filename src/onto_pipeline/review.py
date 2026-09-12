@@ -195,6 +195,31 @@ def resolve(
     return cursor.rowcount == 1
 
 
+def annotate(conn: Store, item_id: str, patch: dict[str, Any], *, session_id: str) -> bool:
+    """Sumarle evidencia a un hallazgo sin tocar la decisión.
+
+    `sync` sólo inserta lo que todavía no está, así que no hay por dónde agregarle a un hallazgo
+    abierto lo que se averiguó después — las traducciones que dejan ver por qué el par sigue
+    marcado, por ejemplo. Se escribe en el payload de la **fila** y nunca en el que arma
+    `findings_from_initial`: el id deriva de ese último, y tocarlo cambiaría todos los ids y
+    dejaría huérfana cada decisión ya tomada.
+    """
+    install(conn)
+    row = conn.execute(
+        "SELECT payload FROM review_items WHERE session_id = ? AND id = ?",
+        (session_id, item_id),
+    ).fetchone()
+    if row is None:
+        return False
+    payload = json.loads(row["payload"]) | patch
+    conn.execute(
+        "UPDATE review_items SET payload = ? WHERE session_id = ? AND id = ?",
+        (json.dumps(payload, ensure_ascii=False), session_id, item_id),
+    )
+    conn.commit()
+    return True
+
+
 def load(
     conn: Store, *, status: str | None = OPEN, kind: str | None = None, session_id: str
 ) -> list[dict]:

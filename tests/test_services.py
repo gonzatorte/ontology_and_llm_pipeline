@@ -210,6 +210,141 @@ def test_re_normalizing_keeps_the_glosses_the_session_already_has(tmp_path):
     assert set(graph.objects(None, SKOS_NS.definition)), "la versión más nueva las conserva"
 
 
+_VERIFY_RDF = """<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+  <owl:Class rdf:about="http://example.org/onto#Valor">
+    <rdfs:label>value</rdfs:label></owl:Class>
+  <owl:ObjectProperty rdf:about="http://example.org/onto#Aplica_una_o_varias">
+    <rdfs:label>appliesTechnique</rdfs:label></owl:ObjectProperty>
+</rdf:RDF>
+"""
+
+_TRANSLATIONS = {
+    "Valor": ("es", "value", "valor"),
+    "value": ("en", "value", "valor"),
+    "Aplica una o varias": ("es", "applies one or several", "aplica una o varias"),
+    "appliesTechnique": ("en", "applies technique", "aplica tecnica"),
+}
+
+
+class _Translator:
+    """Contesta lo que el prompt pregunta, lote por lote.
+
+    No es `ScriptedModel` porque el lote lo arma `BATCH-CUT` a partir del contenido: una lista
+    de respuestas fijas ataría el test a cómo quedaron cortados los lotes."""
+
+    def __init__(self, table: dict) -> None:
+        self.table = table
+        self.calls = 0
+
+    def complete(self, prompt: str, **_) -> object:
+        import json as _json
+        import re as _re
+
+        from onto_pipeline.llm import Completion
+
+        self.calls += 1
+        answer = {}
+        for line in prompt.splitlines():
+            match = _re.match(r"^(\d+)\. (.+)$", line)
+            if not match:
+                continue
+            language, english, spanish = self.table[match.group(2)]
+            answer[match.group(1)] = {"language": language, "en": english, "es": spanish}
+        return Completion(text=_json.dumps(answer), in_tokens=10, out_tokens=10)
+
+
+def _verifiable(tmp_path, monkeypatch) -> Workspace:
+    from onto_pipeline import llm
+
+    workspace = _workspace(tmp_path)
+    workspace.config.paths.initial_ontology.write_text(_VERIFY_RDF, encoding="utf-8")
+    workspace.config.llm.provider = "openai_compatible"
+    workspace.config.llm.api_key_env = "TEST_LLM_KEY"
+    monkeypatch.setenv("TEST_LLM_KEY", "irrelevante")
+    monkeypatch.setattr(llm, "build", lambda *_a, **_k: _Translator(_TRANSLATIONS))
+    return workspace
+
+
+def test_a_pair_that_matches_once_translated_resolves_the_finding(tmp_path, monkeypatch):
+    """`Valor (en) | value (en)`: las dos etiquetas mal taggeadas hacían de una traducción una
+    divergencia en el mismo idioma. Con el idioma corregido y las traducciones comparadas, el
+    hallazgo no se sostiene y se cierra con su procedencia.
+
+    `Aplica_una_o_varias` contra `appliesTechnique` es la salvedad del spec y sobrevive: la
+    etiqueta pierde la cuantificación que el identificador carga, y traducida sigue sin
+    coincidir."""
+    from onto_pipeline import review
+    from onto_pipeline.services import prep
+
+    workspace = _verifiable(tmp_path, monkeypatch)
+    normalized = prep.normalize(workspace)
+    kinds = {
+        item["summary"]: item["kind"]
+        for item in review.load(workspace.conn, status=review.OPEN, session_id=SESSION)
+    }
+    assert kinds["Valor (en) | value (en)"] == review.DIVERGENT_LABEL
+
+    result = prep.verify_labels(workspace, normalized)
+
+    assert result.labels == 4, "las cuatro etiquetas, deduplicadas"
+    assert len(result.resolved) == 1
+    open_now = review.load(workspace.conn, status=review.OPEN, session_id=SESSION)
+    assert [item["kind"] for item in open_now] == [review.PENDING_SEMANTIC_CHECK]
+    assert "traducido coinciden" in review.load(
+        workspace.conn, status=review.REJECTED, session_id=SESSION
+    )[0]["comment"]
+    assert open_now[0]["payload"]["translation"]["verified"] is False, \
+        "y el que sigue abierto se queda con la evidencia"
+
+
+def test_verifying_labels_retags_them_for_the_next_normalization(tmp_path, monkeypatch):
+    """El override es lo que hace durar la corrección: sin él, la corrida siguiente vuelve a
+    adivinar y levanta otro hallazgo idéntico al que se acaba de cerrar."""
+    from onto_pipeline import label_overrides
+    from onto_pipeline.services import prep
+
+    workspace = _verifiable(tmp_path, monkeypatch)
+    prep.verify_labels(workspace, prep.normalize(workspace))
+
+    stored = label_overrides.load(workspace.conn, session_id=SESSION)
+
+    assert stored["Valor"].language == "es"
+    assert stored["Valor"].source == label_overrides.MODEL
+    again = prep.normalize(workspace)
+    entity = next(e for e in again.seed.entities if e.original_iri.endswith("Valor"))
+    assert entity.divergence_reason == "cross_language_unverified"
+
+
+def test_verifying_labels_twice_changes_nothing_the_second_time(tmp_path, monkeypatch):
+    """Re-correrla tiene que ser barata y no apilar versiones: las unidades son aciertos de
+    caché y el re-derivado produce el mismo grafo."""
+    from onto_pipeline.services import prep
+
+    workspace = _verifiable(tmp_path, monkeypatch)
+    first = prep.verify_labels(workspace, prep.normalize(workspace))
+    second = prep.verify_labels(workspace, prep.normalize(workspace))
+
+    assert first.executed and not second.executed, "la segunda sale del ledger"
+    assert second.normalization.committed is None, "y no commitea otra versión"
+
+
+def test_verifying_labels_without_a_provider_says_so_before_doing_anything(tmp_path):
+    """`ProviderMissing` y no un error a mitad de camino: cada interfaz la trata distinto, y la
+    API la contesta antes de encolar nada."""
+    from onto_pipeline.services import prep
+    from onto_pipeline.services.workspace import ProviderMissing
+
+    workspace = _workspace(tmp_path)
+    workspace.config.paths.initial_ontology.write_text(_VERIFY_RDF, encoding="utf-8")
+    normalized = prep.normalize(workspace)
+
+    with pytest.raises(ProviderMissing):
+        prep.verify_labels(workspace, normalized)
+
+
 # ─────────────────────────  resolución de versión  ─────────────────────────
 
 

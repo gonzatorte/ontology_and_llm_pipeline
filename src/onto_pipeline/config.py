@@ -194,6 +194,8 @@ class InitialOntology(BaseModel):
 
     base_iri: str = "https://ontology.local/id/"
     label_divergence_threshold: float = 0.8
+    translation_verified_threshold: float = 0.95
+    label_batch_size: int = 40
 
 
 # What candidate generation implements. Both are real; `embedding` is ITER-MATCH's.

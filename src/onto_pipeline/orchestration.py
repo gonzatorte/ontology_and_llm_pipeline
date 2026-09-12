@@ -134,6 +134,21 @@ def survey(
         "SELECT COUNT(*) AS n FROM review_items WHERE session_id = ? AND status = 'open'",
         (session_id,),
     )
+    unverified_labels = _count(
+        conn,
+        "SELECT COUNT(*) AS n FROM review_items WHERE session_id = ? AND status = 'open' "
+        "AND kind IN ('divergent_label', 'pending_semantic_check')",
+        (session_id,),
+    )
+    # El estado de la etapa se deriva de los datos, como todo lo demás (`PHASE-DERIVED`): sus
+    # unidades en el ledger dicen si corrió, sin una columna que alguien tenga que acordarse de
+    # escribir.
+    verified = _count(
+        conn,
+        "SELECT COUNT(*) AS n FROM work_units WHERE session_id = ? AND stage = ? "
+        "AND status = 'done'",
+        (session_id, "prep_normalize_labels"),
+    )
     questions = _count(
         conn,
         "SELECT COUNT(*) AS n FROM competency_questions WHERE session_id = ? AND status='accepted'",
@@ -178,6 +193,13 @@ def survey(
               f"{open_branches} branch(es) proposed and undecided" if open_branches
               else "no decision axis found yet",
               "no axioms: run axiomatize", decision=bool(open_branches)),
+        # Antes de `review`, y no después: las divergencias que el modelo puede verificar son
+        # parte de lo que `review` va a preguntar, y preguntarlas antes de verificarlas es
+        # cruzar el punto de decisión al revés.
+        stage("label check", f"onto-pipeline verify-labels{llm_note}", bool(verified),
+              True,
+              f"{unverified_labels} label pair(s) nobody has verified"
+              if unverified_labels else "no label pair is waiting for a check"),
         stage("review", "onto-pipeline review", not open_reviews, True,
               f"{open_reviews} open item(s): conflicts, functional properties, seed typos",
               decision=bool(open_reviews)),
