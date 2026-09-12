@@ -15,7 +15,6 @@ import pytest
 
 from onto_pipeline.artifacts import Artifacts
 from onto_pipeline.db import connect
-from onto_pipeline.objectstore import LocalObjectStore
 from onto_pipeline.services import StageError, Workspace, prep
 
 SESSION = "test-1"
@@ -30,8 +29,8 @@ _SEED_RDF = """<?xml version="1.0"?>
 """
 
 
-def _artifacts(tmp_path: Path, session: str = SESSION) -> Artifacts:
-    return Artifacts(LocalObjectStore(tmp_path), session)
+def _artifacts(store, session: str = SESSION) -> Artifacts:
+    return Artifacts(store, session)
 
 
 def _workspace(tmp_path: Path) -> Workspace:
@@ -50,36 +49,36 @@ def _workspace(tmp_path: Path) -> Workspace:
     return Workspace.of(config, conn, session_id=created.id)
 
 
-def test_two_sessions_do_not_share_an_abox(tmp_path):
+def test_two_sessions_do_not_share_an_abox(object_store):
     """`SESSION-SCOPED-DATA` sobre los artefactos: el ABox es dato derivado, y el id de versión
     ya lleva la sesión adentro, pero la clave lo dice igual para que se vea sin decodificar nada."""
-    one = _artifacts(tmp_path, "s1").abox("s1:v1")
-    other = _artifacts(tmp_path, "s2").abox("s2:v1")
+    one = _artifacts(object_store, "s1").abox("s1:v1")
+    other = _artifacts(object_store, "s2").abox("s2:v1")
 
     assert one.key != other.key
     assert one.key.startswith("sessions/s1/")
     assert other.key.startswith("sessions/s2/")
 
 
-def test_a_version_id_does_not_reach_the_key_with_its_colon(tmp_path):
+def test_a_version_id_does_not_reach_the_key_with_its_colon(object_store):
     """`sesión:v3` es el id, y los dos puntos son otra cosa en una URL y no son un carácter de
     nombre en Windows. El artefacto se descarga por URL, así que esto no es cosmético."""
-    assert ":" not in _artifacts(tmp_path).abox("test-1:v3").key
+    assert ":" not in _artifacts(object_store).abox("test-1:v3").key
 
 
-def test_the_markdown_of_a_document_does_not_depend_on_the_session(tmp_path):
+def test_the_markdown_of_a_document_does_not_depend_on_the_session(object_store):
     """A propósito, y es la excepción: el id de documento sale del corpus, así que dos sesiones
     sobre el mismo corpus producen el mismo Markdown. Dos corpus distintos con ids que coinciden
     sí se pisarían — está anotado como `DEBT-API-DOCUMENTS-PATH` y no arreglado acá, porque mover
     la clave obliga a re-ingestar todo lo que ya está parseado."""
-    assert _artifacts(tmp_path, "s1").markdown("doc").key == \
-        _artifacts(tmp_path, "s2").markdown("doc").key
+    assert _artifacts(object_store, "s1").markdown("doc").key == \
+        _artifacts(object_store, "s2").markdown("doc").key
 
 
-def test_writing_and_reading_an_artifact_needs_no_directory(tmp_path):
+def test_writing_and_reading_an_artifact_needs_no_directory(object_store):
     """Nadie hace `mkdir` antes de escribir: en un almacén de objetos no hay directorios, y el
     `mkdir` esparcido era parte de lo que ataba las etapas al filesystem."""
-    artifact = _artifacts(tmp_path).abox("test-1:v1")
+    artifact = _artifacts(object_store).abox("test-1:v1")
 
     assert not artifact.exists()
     artifact.write_text("@prefix : <http://x/> .")
@@ -88,10 +87,10 @@ def test_writing_and_reading_an_artifact_needs_no_directory(tmp_path):
     assert artifact.read_text().startswith("@prefix")
 
 
-def test_an_artifact_can_be_brought_down_to_a_file_for_what_needs_a_path(tmp_path):
+def test_an_artifact_can_be_brought_down_to_a_file_for_what_needs_a_path(object_store, tmp_path):
     """La JVM del razonador abre archivos, no claves. La copia vive lo que viva el directorio que
     le den, que es del que llama: acá es lo que hace que el contenedor no acumule nada."""
-    artifact = _artifacts(tmp_path).normalized_ontology().write_text("x")
+    artifact = _artifacts(object_store).normalized_ontology().write_text("x")
 
     local = artifact.materialize(tmp_path / "efimero")
 
@@ -99,12 +98,12 @@ def test_an_artifact_can_be_brought_down_to_a_file_for_what_needs_a_path(tmp_pat
     assert local.name == "initial_normalized.ttl"
 
 
-def test_the_listing_of_a_session_shows_only_its_own(tmp_path):
+def test_the_listing_of_a_session_shows_only_its_own(object_store):
     """Es lo que la API contesta cuando preguntan qué hay para descargar."""
-    mine = _artifacts(tmp_path, "s1")
+    mine = _artifacts(object_store, "s1")
     mine.abox("s1:v1").write_text("a")
     mine.normalized_ontology().write_text("b")
-    _artifacts(tmp_path, "s2").abox("s2:v1").write_text("c")
+    _artifacts(object_store, "s2").abox("s2:v1").write_text("c")
 
     assert sorted(item.key for item in mine.listing()) == [
         "sessions/s1/ontology/initial_normalized.ttl",

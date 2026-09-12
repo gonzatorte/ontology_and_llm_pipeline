@@ -1,24 +1,22 @@
 """Dónde viven los bytes, sin que nadie sepa dónde.
 
-El mismo papel que `store.py` hace con el motor de base: lo que difiere entre el filesystem y S3
-vive acá y en ningún otro módulo. Un artefacto se nombra con una **clave** —segmentos separados
-por `/`, sin barra inicial— y esa clave es la misma en los dos backends, así que una corrida
-local y una en la nube escriben lo mismo con otro sustrato debajo.
+El mismo papel que `store.py` hace con el motor de base. Un artefacto se nombra con una **clave**
+—segmentos separados por `/`, sin barra inicial— y el que la resuelve es este módulo.
 
-El backend local enraiza las claves en `paths.work_dir`, que es donde ya vivían los artefactos:
-`sessions/s1/ontology/x.ttl` es `data/sessions/s1/ontology/x.ttl`. No es una comodidad de
-migración sino la propiedad que hace verificable el corte — si algo quedó escribiendo derecho al
-disco, el árbol local sigue igual y no se nota; lo que lo delata es correr con el backend de
-objetos y ver qué falta.
+**Hay un solo sustrato: S3.** No porque haga falta la nube para trabajar, sino porque dos
+implementaciones son dos comportamientos, y el que se prueba termina no siendo el que se
+despliega: las URL firmadas, el paginado del listado y los errores no se parecen entre un
+filesystem y un bucket. En local eso es MinIO, que habla la misma API —`storage.endpoint_url` lo
+apunta—; en los tests es un cliente falso en memoria, sin red, que entra por el mismo
+`S3ObjectStore`. Escribir en disco directo no es una opción soportada en ningún lado.
 """
 
 from __future__ import annotations
 
-import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-BACKENDS = ("local", "s3")
+BACKENDS = ("s3",)
 
 
 class MissingObject(KeyError):
@@ -66,65 +64,9 @@ class ObjectStore(ABC):
     def presigned_put(self, key: str, *, expires_s: int) -> str: ...
 
     def copy_in(self, key: str, source: Path) -> None:
-        """Subir un archivo que ya está en disco. Los backends lo sobreescriben con lo suyo, que
-        no lee el archivo entero a memoria: un corpus en PDF pesa."""
+        """Subir un archivo que ya está en disco. S3 lo sobreescribe con `upload_file`, que no
+        lo lee entero a memoria: un corpus en PDF pesa."""
         self.put(key, Path(source).read_bytes())
-
-
-class LocalObjectStore(ObjectStore):
-    """El filesystem. Para correr sin nube, y para los tests."""
-
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root)
-
-    def path(self, key: str) -> Path:
-        return self.root / check_key(key)
-
-    def put(self, key: str, data: bytes) -> None:
-        target = self.path(key)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-
-    def get(self, key: str) -> bytes:
-        try:
-            return self.path(key).read_bytes()
-        except FileNotFoundError as exc:
-            raise MissingObject(key) from exc
-
-    def exists(self, key: str) -> bool:
-        return self.path(key).is_file()
-
-    def list(self, prefix: str = "") -> list[str]:
-        base = self.root / prefix if prefix else self.root
-        if not base.exists():
-            return []
-        if base.is_file():
-            return [prefix]
-        return sorted(
-            str(item.relative_to(self.root)).replace("\\", "/")
-            for item in base.rglob("*")
-            if item.is_file()
-        )
-
-    def delete(self, key: str) -> None:
-        self.path(key).unlink(missing_ok=True)
-
-    def presigned_get(self, key: str, *, expires_s: int) -> str:
-        """Un `file://` absoluto. No está firmado ni vence: en local el que puede leer el
-        artefacto es el que puede leer el disco, y fingir una firma sería mentir sobre qué
-        protege. Sirve para desarrollo; el que viaja a un cliente remoto es el de S3."""
-        return self.path(key).resolve().as_uri()
-
-    def presigned_put(self, key: str, *, expires_s: int) -> str:
-        check_key(key)
-        return (self.root / key).resolve().as_uri()
-
-    def copy_in(self, key: str, source: Path) -> None:
-        """Subir un archivo que ya está en disco sin leerlo entero a memoria. Es lo que usa la
-        siembra de uploads, donde los PDF son grandes y el destino es local."""
-        target = self.path(key)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
 
 
 class S3ObjectStore(ObjectStore):
@@ -133,7 +75,13 @@ class S3ObjectStore(ObjectStore):
     `store.open_postgres`."""
 
     def __init__(
-        self, bucket: str, *, prefix: str = "", region: str = "", client=None
+        self,
+        bucket: str,
+        *,
+        prefix: str = "",
+        region: str = "",
+        endpoint_url: str = "",
+        client=None,
     ) -> None:
         if not bucket:
             raise ValueError("storage.bucket es obligatorio con storage.backend: s3")
@@ -150,7 +98,12 @@ class S3ObjectStore(ObjectStore):
             raise RuntimeError(
                 "storage.backend: s3 necesita boto3. `uv sync --extra api` lo instala."
             ) from exc
-        self.client = boto3.client("s3", region_name=region or None)
+        # `endpoint_url` vacío es AWS; con valor es cualquier cosa que hable S3 —MinIO en
+        # local—. Es un parámetro y no un backend nuevo a propósito: el código que corre contra
+        # MinIO tiene que ser el mismo que corre contra AWS, o probar uno no dice nada del otro.
+        self.client = boto3.client(
+            "s3", region_name=region or None, endpoint_url=endpoint_url or None
+        )
 
     def _key(self, key: str) -> str:
         return f"{self.prefix}/{check_key(key)}" if self.prefix else check_key(key)
@@ -205,8 +158,12 @@ class S3ObjectStore(ObjectStore):
         self.client.upload_file(str(source), self.bucket, self._key(key))
 
 
-def open_configured(storage, work_dir: Path) -> ObjectStore:
-    """El backend que diga la configuración. `work_dir` es la raíz del local y se ignora en s3."""
-    if storage.backend == "local":
-        return LocalObjectStore(Path(storage.root) if storage.root else Path(work_dir))
-    return S3ObjectStore(storage.bucket, prefix=storage.prefix, region=storage.region)
+def open_configured(storage) -> ObjectStore:
+    """El almacén que diga la configuración. Es el **único** lugar donde se construye uno, y por
+    eso es el único que los tests reemplazan por el doble en memoria."""
+    return S3ObjectStore(
+        storage.bucket,
+        prefix=storage.prefix,
+        region=storage.region,
+        endpoint_url=storage.endpoint_url,
+    )

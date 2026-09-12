@@ -1,92 +1,23 @@
-"""El almacén de objetos: un contrato, dos sustratos.
+"""El almacén de objetos: lo que este módulo le pone encima a S3.
 
-El molde es `tests/test_store.py`, que corre el mismo contrato contra SQLite y contra Postgres.
-La razón es la misma: lo que se prueba con uno tiene que valer con el otro, porque el código que
-los usa no sabe cuál está debajo — y si se entera, el corte se rompió.
-
-El doble de S3 vive acá y es deliberadamente tonto: no prueba a S3, prueba lo que este módulo le
-pone encima —el prefijado de claves, el paginado del listado, qué pasa cuando una clave no está—,
-que es lo único que podemos romper nosotros.
+No prueba a S3 —eso no es nuestro— sino lo único que podemos romper nosotros: el prefijado de
+claves, el paginado del listado, qué pasa cuando una clave no está, y que una clave que podría
+salirse del prefijo se rechace. El cliente es el doble en memoria de `conftest.py`, que entra por
+el mismo `S3ObjectStore` que corre en producción: no hay una implementación de tests y otra de
+despliegue, porque entonces la probada no sería la desplegada.
 """
 
 from __future__ import annotations
 
 import pytest
+from conftest import FakeS3Client
 
-from onto_pipeline.objectstore import (
-    LocalObjectStore,
-    MissingObject,
-    S3ObjectStore,
-    check_key,
-)
+from onto_pipeline.objectstore import MissingObject, S3ObjectStore, check_key
 
 
-class _NoSuchKey(Exception):
-    pass
-
-
-class _ClientError(Exception):
-    pass
-
-
-class FakeS3Client:
-    """Lo mínimo de la API de S3 que usa `S3ObjectStore`, en un diccionario."""
-
-    class exceptions:  # noqa: N801 - el nombre lo fija boto3
-        NoSuchKey = _NoSuchKey
-        ClientError = _ClientError
-
-    def __init__(self) -> None:
-        self.objects: dict[str, bytes] = {}
-
-    def put_object(self, *, Bucket, Key, Body):  # noqa: N803 - la firma la fija boto3
-        self.objects[Key] = Body
-
-    def get_object(self, *, Bucket, Key):  # noqa: N803
-        if Key not in self.objects:
-            raise _NoSuchKey(Key)
-        return {"Body": _Body(self.objects[Key])}
-
-    def head_object(self, *, Bucket, Key):  # noqa: N803
-        if Key not in self.objects:
-            raise _ClientError(Key)
-        return {"ContentLength": len(self.objects[Key])}
-
-    def delete_object(self, *, Bucket, Key):  # noqa: N803
-        self.objects.pop(Key, None)
-
-    def get_paginator(self, _operation):
-        return _Paginator(self)
-
-    def generate_presigned_url(self, operation, *, Params, ExpiresIn):  # noqa: N803
-        return f"https://fake.s3/{operation}/{Params['Key']}?expires={ExpiresIn}"
-
-
-class _Body:
-    def __init__(self, data: bytes) -> None:
-        self.data = data
-
-    def read(self) -> bytes:
-        return self.data
-
-
-class _Paginator:
-    def __init__(self, client: FakeS3Client) -> None:
-        self.client = client
-
-    def paginate(self, *, Bucket, Prefix):  # noqa: N803
-        # De a una clave por página a propósito: un listado que sólo anduviera con una página
-        # pasaría igual, y el corpus de un upload no entra en una.
-        for key in sorted(self.client.objects):
-            if key.startswith(Prefix):
-                yield {"Contents": [{"Key": key}]}
-
-
-@pytest.fixture(params=["local", "s3"])
-def store(request, tmp_path):
-    if request.param == "local":
-        return LocalObjectStore(tmp_path)
-    return S3ObjectStore("bucket", prefix="deploy", client=FakeS3Client())
+@pytest.fixture
+def store(object_store):
+    return object_store
 
 
 def test_what_was_written_comes_back_the_same(store):

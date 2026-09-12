@@ -11,6 +11,12 @@ dependencies = [
     "rich>=13.7.1",
     "typer>=0.12.3",
     "httpx>=0.28.1",
+    # boto3 tampoco es opcional: S3 es el único sustrato de artefactos, y toda etapa escribe
+    # alguno. En local eso es MinIO, que habla la misma API.
+    "boto3>=1.35",
+    # No es opcional: `postgres` es el único motor soportado en runtime. SQLite quedó para los
+    # tests, y ése viene con Python.
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -30,12 +36,6 @@ matching = [
     # LoRA, para ajustar un re-ranker que no entra entero en memoria.
     "peft>=0.13",
 ]
-# Dos sesiones de usuario escribiendo a la vez. SQLite da un escritor y muchos lectores, que
-# alcanza para una sesión por vez; para dos hace falta esto. Opcional porque la suite entera
-# corre contra SQLite y no necesita servidor.
-postgres = [
-    "psycopg[binary]>=3.2",
-]
 # B5 filter 3. Optional because the filter reports SKIPPED without shapes anyway, and shapes
 # are written by hand: OWL says what must be true, SHACL what must be stated, and under the
 # open-world assumption generating one from the other turns every silence into a violation.
@@ -48,11 +48,13 @@ validation = [
 api = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
-    "boto3>=1.35",
 ]
 
 [project.scripts]
 onto-pipeline = "onto_pipeline.interfaces.cli:entrypoint"
+# La API es su propio comando: el de arriba es para enriquecer una ontología, éste para
+# levantar y administrar un despliegue. Necesita el extra `api`.
+onto-pipeline-api = "onto_pipeline.interfaces.api.admin:entrypoint"
 
 [build-system]
 requires = ["hatchling"]

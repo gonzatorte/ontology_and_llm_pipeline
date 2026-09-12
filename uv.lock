@@ -1714,7 +1714,9 @@ name = "onto-pipeline"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "boto3" },
     { name = "httpx" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pymupdf" },
     { name = "pyyaml" },
@@ -1725,7 +1727,6 @@ dependencies = [
 
 [package.optional-dependencies]
 api = [
-    { name = "boto3" },
     { name = "fastapi" },
     { name = "uvicorn" },
 ]
@@ -1739,9 +1740,6 @@ matching = [
     { name = "peft" },
     { name = "sentence-transformers" },
 ]
-postgres = [
-    { name = "psycopg", extra = ["binary"] },
-]
 reasoning = [
     { name = "jpype1" },
 ]
@@ -1752,13 +1750,13 @@ validation = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'matching'", specifier = ">=1.1.0" },
-    { name = "boto3", marker = "extra == 'api'", specifier = ">=1.35" },
+    { name = "boto3", specifier = ">=1.35" },
     { name = "datasets", marker = "extra == 'matching'", specifier = ">=3.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jpype1", marker = "extra == 'reasoning'", specifier = ">=1.7.1" },
     { name = "peft", marker = "extra == 'matching'", specifier = ">=0.13" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "pymupdf", specifier = ">=1.24.0" },
     { name = "pyshacl", marker = "extra == 'validation'", specifier = ">=0.26.0" },
@@ -1771,7 +1769,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12.3" },
     { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30" },
 ]
-provides-extras = ["dev", "reasoning", "matching", "postgres", "validation", "api"]
+provides-extras = ["dev", "reasoning", "matching", "validation", "api"]
 
 [[package]]
 name = "owlrl"

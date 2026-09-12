@@ -15,10 +15,9 @@ import random
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import parse
+from . import objectstore, parse
 from .artifacts import Artifact, Artifacts
 from .config import Config
-from .objectstore import open_configured as open_objectstore
 from .parse import (
     CAPTION,
     TABLE,
@@ -136,7 +135,7 @@ def artifacts_of(config: Config) -> Artifacts:
 
     Salen del id de documento, que sale del corpus, así que dos sesiones sobre el mismo corpus
     escriben lo mismo. Quien tiene un `Workspace` a mano usa el suyo, que sabe la sesión."""
-    return Artifacts(open_objectstore(config.storage, config.paths.work_dir), "")
+    return Artifacts(objectstore.open_configured(config.storage), "")
 
 
 def markdown_artifact(config: Config, doc_id: str) -> Artifact:

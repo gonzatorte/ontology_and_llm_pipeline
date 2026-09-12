@@ -15,13 +15,12 @@ from onto_pipeline import sessions
 from onto_pipeline.db import connect
 from onto_pipeline.interfaces.api import uploads
 from onto_pipeline.interfaces.api.deps import workspace as api_workspace
-from onto_pipeline.objectstore import LocalObjectStore
 from onto_pipeline.services import StageError
 
 
 @pytest.fixture
-def store(tmp_path):
-    return LocalObjectStore(tmp_path / "objects")
+def store(object_store):
+    return object_store
 
 
 @pytest.fixture
@@ -131,8 +130,7 @@ def _config_file(tmp_path) -> Path:
         f"  corpus_root: {tmp_path / 'no-existe'}\n"
         f"  initial_ontology: {tmp_path / 'tampoco.rdf'}\n"
         f"  work_dir: {tmp_path / 'work'}\n"
-        "storage:\n"
-        f"  backend: local\n  root: {tmp_path / 'objects'}\n",
+        "storage:\n  bucket: test-bucket\n",
         encoding="utf-8",
     )
     return path

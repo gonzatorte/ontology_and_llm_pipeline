@@ -15,24 +15,28 @@ paths:
   use_cases_root: ../use_cases
 
 # ─── Almacén ─────────────────────────────────────────────
-# `sqlite` alcanza para una sesión de usuario por vez. Para correr dos en paralelo hace falta
-# `postgres`: SQLite da un escritor y muchos lectores, y dos sesiones escribiendo es justo lo que
-# no admite. Los módulos no saben cuál está activo (ver `store.py`).
+# SQLite da un escritor y muchos lectores, que no alcanza para dos sesiones escribiendo a la vez
+# ni para más de un worker de la API. Los módulos no saben cuál está activo (ver `store.py`).
 database:
-  backend: sqlite          # sqlite | postgres
-  dsn: ""                  # postgresql://usuario@host/base — sólo para postgres
+  # `postgres` siempre, también en local: SQLite quedó para los tests, que corren sin servidor.
+  # Tener dos motores vivos en runtime significa que el que se prueba no es el que se despliega.
+  # `docker compose up` levanta el de local con este DSN.
+  backend: postgres
+  dsn: postgresql://onto:onto@localhost:5432/onto
 
 # ─── Artefactos ──────────────────────────────────────────
 # Dónde van las salidas derivadas: el Markdown, los recortes, la ontología normalizada, el ABox,
-# los diffs y el export. `local` las deja donde siempre estuvieron, enraizadas en `work_dir`;
-# `s3` es lo que hace que sobrevivan a que el contenedor se recicle, que en la nube pasa sin
-# aviso. Los módulos no saben cuál está activo (ver `objectstore.py`).
+# los diffs y el export. **Un solo sustrato, S3**, también en local: escribir a disco directo no
+# sobrevive a que el contenedor se recicle, y tener dos implementaciones significa que la que se
+# prueba no es la que se despliega. En local eso es MinIO, que habla la misma API
+# (`docker compose up` lo levanta). Las credenciales salen del entorno, como siempre:
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
 storage:
-  backend: local           # local | s3
-  root: ""                 # sólo local; vacío es `paths.work_dir`
-  bucket: ""               # sólo s3
-  prefix: ""               # sólo s3; permite compartir un bucket entre despliegues
-  region: ""               # sólo s3; vacío deja que boto3 la resuelva del entorno
+  backend: s3
+  bucket: onto-pipeline
+  prefix: ""               # permite compartir un bucket entre despliegues
+  region: ""               # vacío deja que boto3 la resuelva del entorno
+  endpoint_url: http://localhost:9000   # MinIO; vacío es AWS
 
 # ─── La interfaz REST ────────────────────────────────────────
 # Todo esto se sobreescribe por entorno con el prefijo `ONTO_PIPELINE_` (`ONTO_PIPELINE_API_PORT`,

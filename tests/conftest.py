@@ -1,3 +1,12 @@
+"""Lo que comparten los tests, y el sustrato sobre el que corren.
+
+**El almacén de objetos es un doble en memoria, y entra por el mismo `S3ObjectStore` que corre
+en producción.** No hay un backend de archivos: tenerlo significaría que lo que se prueba no es
+lo que se despliega —las URL firmadas, el paginado del listado y los errores no se parecen entre
+un filesystem y un bucket—. El doble reemplaza al cliente de boto3 y nada más, así que el
+prefijado de claves, el paginado y el manejo de «no está» son los de verdad.
+"""
+
 from __future__ import annotations
 
 import textwrap
@@ -6,7 +15,91 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from onto_pipeline import ingest, objectstore
 from onto_pipeline.config import Config
+from onto_pipeline.objectstore import S3ObjectStore
+
+
+class _NoSuchKey(Exception):
+    pass
+
+
+class _ClientError(Exception):
+    pass
+
+
+class FakeS3Client:
+    """Lo mínimo de la API de S3 que usa `S3ObjectStore`, en un diccionario."""
+
+    class exceptions:  # noqa: N801 - el nombre lo fija boto3
+        NoSuchKey = _NoSuchKey
+        ClientError = _ClientError
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    def put_object(self, *, Bucket, Key, Body):  # noqa: N803 - la firma la fija boto3
+        self.objects[Key] = Body
+
+    def get_object(self, *, Bucket, Key):  # noqa: N803
+        if Key not in self.objects:
+            raise _NoSuchKey(Key)
+        return {"Body": _Body(self.objects[Key])}
+
+    def head_object(self, *, Bucket, Key):  # noqa: N803
+        if Key not in self.objects:
+            raise _ClientError(Key)
+        return {"ContentLength": len(self.objects[Key])}
+
+    def delete_object(self, *, Bucket, Key):  # noqa: N803
+        self.objects.pop(Key, None)
+
+    def upload_file(self, source, Bucket, Key):  # noqa: N803
+        self.objects[Key] = Path(source).read_bytes()
+
+    def get_paginator(self, _operation):
+        return _Paginator(self)
+
+    def generate_presigned_url(self, operation, *, Params, ExpiresIn):  # noqa: N803
+        return f"https://fake.s3/{operation}/{Params['Key']}?expires={ExpiresIn}"
+
+
+class _Body:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def read(self) -> bytes:
+        return self.data
+
+
+class _Paginator:
+    def __init__(self, client: FakeS3Client) -> None:
+        self.client = client
+
+    def paginate(self, *, Bucket, Prefix):  # noqa: N803
+        # De a una clave por página a propósito: un listado que sólo anduviera con una página
+        # pasaría igual, y el corpus de un upload no entra en una.
+        for key in sorted(self.client.objects):
+            if key.startswith(Prefix):
+                yield {"Contents": [{"Key": key}]}
+
+
+@pytest.fixture
+def object_store(request) -> S3ObjectStore:
+    """El almacén de este test. Uno solo por test: dos workspaces del mismo test tienen que ver
+    los mismos artefactos, que es lo que pasa en un despliegue con un bucket."""
+    return S3ObjectStore("test-bucket", client=FakeS3Client())
+
+
+@pytest.fixture(autouse=True)
+def _object_store_everywhere(monkeypatch, object_store):
+    """Todo el que abra un almacén en este test recibe el mismo doble.
+
+    Se parchea el único lugar donde se construye uno. Los módulos lo llaman por el módulo
+    —`objectstore.open_configured(...)`— justamente para que haya un solo punto que reemplazar.
+    """
+    monkeypatch.setattr(objectstore, "open_configured", lambda storage: object_store)
+    monkeypatch.setattr(ingest, "objectstore", objectstore)
 
 _BODY = (
     "The commercialization of academic research has generated mixed results and the "

@@ -20,10 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from onto_pipeline import objectstore  # noqa: E402
 from onto_pipeline.config import Config  # noqa: E402
 from onto_pipeline.db import open_configured  # noqa: E402
 from onto_pipeline.interfaces.api import uploads  # noqa: E402 — después de armar el path
-from onto_pipeline.objectstore import open_configured as open_objectstore  # noqa: E402
 
 
 def files_of(directory: Path) -> dict[str, Path]:
@@ -63,7 +63,7 @@ def main() -> int:
         return 1
 
     conn = open_configured(config.database, config.paths.work_dir)
-    store = open_objectstore(config.storage, config.paths.work_dir)
+    store = objectstore.open_configured(config.storage)
     for name in names:
         directory = root / name
         found = files_of(directory)

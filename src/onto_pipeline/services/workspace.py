@@ -20,11 +20,10 @@ from pathlib import Path
 
 from rdflib import Graph
 
-from .. import versioning
+from .. import objectstore, versioning
 from ..artifacts import Artifact, Artifacts
 from ..config import Config
 from ..db import open_configured
-from ..objectstore import open_configured as open_objectstore
 from ..store import Store
 from ..telemetry import Ledger
 
@@ -232,8 +231,7 @@ class Workspace:
         # cambió: un artefacto de la sesión equivocada es exactamente el bug que esto arregla.
         if self._artifacts is None or self._artifacts.session_id != (self.session_id or "default"):
             self._artifacts = Artifacts(
-                open_objectstore(self.config.storage, self.config.paths.work_dir),
-                self.session_id,
+                objectstore.open_configured(self.config.storage), self.session_id
             )
         return self._artifacts
 

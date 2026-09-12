@@ -1,0 +1,63 @@
+# Lo que hace falta al lado del proceso para correr local: Postgres y MinIO.
+#
+# No es «el entorno de desarrollo»: es **el mismo par de piezas que en el despliegue**, en chico.
+# Correr local contra SQLite y disco significaba probar un código y desplegar otro —el SQL, las
+# URL firmadas y el paginado del listado no se parecen entre un motor y el otro—, y eso es lo que
+# esto viene a cerrar. La suite sigue sin necesitar nada de acá: corre contra SQLite en memoria y
+# un doble de S3.
+#
+#   docker compose up -d          # levanta las dos y crea el bucket
+#   docker compose down -v        # las baja y borra los datos
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: onto
+      POSTGRES_PASSWORD: onto
+      POSTGRES_DB: onto
+    ports: ["5432:5432"]
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onto"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # Desde quay.io y no desde Docker Hub: ahí `minio/minio` pide login y el `up` falla
+    # con un «pull access denied» que no dice qué hacer.
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      # Las mismas que boto3 lee del entorno. En local son de juguete y están acá a propósito:
+      # un secreto de verdad no va en un archivo versionado.
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # la API de S3, que es lo que apunta `storage.endpoint_url`
+      - "9001:9001"   # la consola web, para mirar qué quedó escrito
+    volumes: ["minio:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Crea el bucket y se va. MinIO no lo crea solo, y la primera corrida fallaría con un
+  # `NoSuchBucket` que no dice qué hacer.
+  createbucket:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/onto-pipeline &&
+      echo 'bucket onto-pipeline listo'
+      "
+
+volumes:
+  postgres:
+  minio:

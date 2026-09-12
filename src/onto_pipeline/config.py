@@ -29,9 +29,11 @@ class Paths(BaseModel):
 class Database(BaseModel):
     """Contra qué motor corre el almacén.
 
-    `sqlite` es el default y alcanza para una sesión de usuario por vez: da un escritor y muchos
-    lectores. `postgres` es lo que admite **dos sesiones escribiendo a la vez**, que es para lo
-    que existe la opción. Los módulos no saben cuál está activo — eso vive en `store.py`.
+    **En runtime es siempre `postgres`**, también en local: SQLite da un escritor y muchos
+    lectores, que no alcanza para dos sesiones escribiendo a la vez ni para más de un worker de
+    la API. `sqlite` sigue existiendo para los tests, que corren sin servidor, y por eso el
+    default del modelo lo sigue siendo; lo que manda en una corrida es `config/default.yaml`, y
+    ahí dice `postgres`. Los módulos no saben cuál está activo — eso vive en `store.py`.
     """
 
     backend: str = "sqlite"
@@ -52,22 +54,21 @@ class Database(BaseModel):
 
 
 class Storage(BaseModel):
-    """Dónde se guardan los artefactos derivados.
+    """Dónde se guardan los artefactos derivados. Un solo sustrato: S3.
 
-    `local` enraiza las claves en `paths.work_dir`, que es donde ya vivían, así que una corrida
-    local escribe el mismo árbol de siempre. `s3` es lo que permite que el contenedor se recicle
-    sin perder nada: en la nube el disco del proceso es efímero y todo lo que se escriba derecho
-    ahí desaparece sin avisar. Los módulos no saben cuál está activo — eso vive en
-    `objectstore.py`.
+    En la nube el disco del proceso es efímero y todo lo que se escriba derecho ahí desaparece
+    cuando el contenedor se recicla, sin avisar. En local es MinIO, que habla la misma API y se
+    apunta con `endpoint_url`: correr local contra otra implementación sería probar un código y
+    desplegar otro. Los módulos no saben nada de esto — vive en `objectstore.py`.
     """
 
-    backend: str = "local"
-    # Sólo para local, y sólo para sacar los artefactos de `work_dir`. Vacío significa `work_dir`.
-    root: str = ""
-    # Sólo para s3. El prefijo permite compartir un bucket entre despliegues.
+    backend: str = "s3"
     bucket: str = ""
+    # El prefijo permite compartir un bucket entre despliegues.
     prefix: str = ""
     region: str = ""
+    # Vacío es AWS. Con valor, cualquier cosa que hable S3: MinIO en local.
+    endpoint_url: str = ""
 
     @field_validator("backend")
     @classmethod

@@ -29,10 +29,8 @@ database:
 ```
 
 ```bash
-uv sync --extra postgres
-docker run -d --rm --name onto-pg -e POSTGRES_PASSWORD=onto -e POSTGRES_USER=onto \
-    -e POSTGRES_DB=onto -p 55432:5432 postgres:16-alpine
-ONTO_PIPELINE_TEST_DSN=postgresql://onto:onto@127.0.0.1:55432/onto uv run pytest -q
+docker compose up -d          # el mismo Postgres que usa una corrida local
+ONTO_PIPELINE_TEST_DSN=postgresql://onto:onto@127.0.0.1:5432/onto uv run pytest -q
 ```
 
 `tests/test_store.py` corre **el mismo contrato contra los dos** motores, parametrizado: sin

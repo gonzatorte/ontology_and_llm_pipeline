@@ -47,6 +47,7 @@ def config_path(tmp_path, monkeypatch):
         f"  initial_ontology: {tmp_path / 'use_cases' / 'humo' / 'ontology.rdf'}\n"
         f"  work_dir: {tmp_path / 'data'}\n"
         f"  use_cases_root: {tmp_path / 'use_cases'}\n"
+        "storage:\n  bucket: test-bucket\n"
         "llm:\n  provider: none\n",
         encoding="utf-8",
     )
@@ -304,7 +305,8 @@ def test_an_artifact_is_downloaded_by_a_signed_url_and_not_through_the_api(
     url = client.get(
         f"/sessions/{session_id}/artifacts/{listed[0]['key']}", headers=AUTH
     ).json()
-    assert url["url"].startswith("file://")
+    assert url["url"].startswith("https://")
+    assert url["expires_s"] > 0
 
 
 def test_one_session_cannot_ask_for_the_artifact_of_another(client, config_path):
