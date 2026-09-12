@@ -14,9 +14,10 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from onto_pipeline import orchestration, wizard
+from onto_pipeline import orchestration
 from onto_pipeline.config import Config
 from onto_pipeline.db import connect
+from onto_pipeline.interfaces import wizard
 from onto_pipeline.services import StageError, Workspace
 
 SESSION = "test-1"

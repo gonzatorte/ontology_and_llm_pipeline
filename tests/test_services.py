@@ -28,14 +28,25 @@ SERVICES = Path(__file__).resolve().parents[1] / "src" / "onto_pipeline" / "serv
 # ─────────────────────────  el invariante de la capa  ─────────────────────────
 
 
+# Lo de la terminal y lo de HTTP: una etapa que importa cualquiera de estos eligió por quién la
+# corren. `interfaces` está en la lista porque el corte es por capa y no por biblioteca — importar
+# `render` es lo mismo que importar `rich`, con un rodeo.
+INTERFACE_IMPORTS = {"typer", "rich", "click", "fastapi", "uvicorn", "interfaces"}
+
+
 def _imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names |= {alias.name.split(".")[0] for alias in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            names.add(node.module.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            # Las relativas también: `from ..interfaces import render` no tiene `node.module`
+            # cuando es `from ..interfaces import …`, así que se miran los dos lados.
+            if node.module:
+                names.add(node.module.split(".")[0])
+            if node.level:
+                names |= {alias.name.split(".")[0] for alias in node.names}
     return names
 
 
@@ -43,13 +54,14 @@ def test_no_service_imports_a_user_interface():
     """El corte entero depende de esto.
 
     Una etapa que importa `typer` ya eligió quién la corre, y `rich` en el medio del cuerpo es
-    lo que hacía imposible correrla desde el wizard sin copiarla. Si esto se rompe, la capa
-    dejó de ser una capa.
+    lo que hacía imposible correrla desde el wizard sin copiarla. Con tres interfaces —el CLI de
+    banderas, el wizard y la API— la regla es la misma y la lista es más larga. Si esto se
+    rompe, la capa dejó de ser una capa.
     """
     offenders = {
-        path.name: sorted(_imported_modules(path) & {"typer", "rich", "click"})
+        path.name: sorted(_imported_modules(path) & INTERFACE_IMPORTS)
         for path in SERVICES.glob("*.py")
-        if _imported_modules(path) & {"typer", "rich", "click"}
+        if _imported_modules(path) & INTERFACE_IMPORTS
     }
     assert not offenders, offenders
 

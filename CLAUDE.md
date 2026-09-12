@@ -98,10 +98,14 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
    (`LAYERS-ONTOLOGY-NOT-GRAPH`). Clustering sobre el grafo de menciones huérfanas sí está permitido.
 8. **Mundo abierto.** No asertar X y asertar ¬X son cosas distintas. Ausencia de contraejemplo no
    es prueba; sólo el contraejemplo es conocimiento.
-9. **Ningún servicio importa `typer` ni `rich`.** Hay dos interfaces sobre el mismo pipeline —el
-   CLI de banderas y `wizard`— y el cuerpo de una etapa no puede pertenecer a ninguna de las
-   dos. El contrato está en `services/__init__.py`; un test lo fija leyendo los imports. Etapa
-   nueva: va en `services/`, se muestra en `render.py`, y las dos interfaces la llaman.
+9. **Ningún servicio importa `typer`, `rich`, `fastapi` ni `uvicorn` — ni nada de `interfaces/`.**
+   Hay más de una interfaz sobre el mismo pipeline y el cuerpo de una etapa no puede pertenecer
+   a ninguna: las de terminal son el CLI de banderas y `wizard`, y la de HTTP es la API REST.
+   Todas viven en `interfaces/`, que es la carpeta que traduce un protocolo a la capa de
+   servicios y no tiene lógica de dominio. El contrato está en `services/__init__.py`;
+   `tests/test_services.py` lo fija leyendo los imports, y prohíbe `interfaces` además de las
+   bibliotecas, porque importar `render` es importar `rich` con un rodeo. Etapa nueva: va en
+   `services/`, se muestra en `interfaces/render.py`, y la llaman todas las interfaces.
 10. **Ningún módulo sabe contra qué motor corre el almacén.** El SQL se escribe con `?` y las
     filas se leen por nombre; lo que difiere entre SQLite y Postgres vive en `store.py` y en
     ningún otro lado. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
@@ -232,9 +236,10 @@ src/onto_pipeline/
     iterate.py      ITER: menciones, tipado, puentes, clases, axiomas, ramas, validación
     evaluate.py     EVAL: parada, CQ, retención, calibración, ajuste
     deliver.py      DELIVERABLES: diff, DAG, telemetría y `export`
-  render.py         cómo se ve cada resultado. Compartido por las dos interfaces
-  cli.py            la interfaz de banderas: leer, llamar a un servicio, renderizar
-  wizard.py         la interfaz guiada: el mismo plan, preguntando en vez de frenar
+  interfaces/       **traducen un protocolo a la capa de servicios.** Sin lógica de dominio
+    render.py       cómo se ve cada resultado. Compartido por las interfaces de terminal
+    cli.py          la interfaz de banderas: leer, llamar a un servicio, renderizar
+    wizard.py       la interfaz guiada: el mismo plan, preguntando en vez de frenar
   config.py         la superficie de configuración; rechaza valores no implementados
   initial_ontology.py  `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
   parse.py ingest.py classify.py boilerplate.py chunking.py     corpus -> bloques -> chunks

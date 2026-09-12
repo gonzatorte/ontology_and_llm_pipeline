@@ -17,9 +17,9 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-from . import calibration, versioning
-from .services import deliver, evaluate, iterate, prep
-from .services.deliver import readable
+from .. import calibration, versioning
+from ..services import deliver, evaluate, iterate, prep
+from ..services.deliver import readable
 
 # ─────────────────────────────  PREP  ─────────────────────────────
 
@@ -323,7 +323,7 @@ def induction(console: Console, result: iterate.Induction) -> None:
 
 def chain(console: Console, result: iterate.Chain) -> None:
     """La tabla de veredictos. **ELK nunca dice `OK`**, y la tabla no lo inventa."""
-    from .reasoning import REJECTED
+    from ..reasoning import REJECTED
 
     if result.missing_imports:
         console.print(
@@ -691,7 +691,7 @@ def validation(console: Console, result: iterate.Validation) -> None:
     Que HermiT diga «not run» y no «consistent» es la misma asimetría que la de ELK: no
     haberle preguntado no es una aprobación.
     """
-    from .reasoning import REJECTED
+    from ..reasoning import REJECTED
 
     chain_result = result.chain
     if chain_result.missing_imports:
@@ -753,7 +753,7 @@ def validation(console: Console, result: iterate.Validation) -> None:
 
 
 def stopping(console: Console, result: evaluate.Stopping, *, curve: bool = False) -> None:
-    from .stopping import MET, NOT_MET
+    from ..stopping import MET, NOT_MET
 
     assessment = result.assessment
     table = Table("criterion", "role", "state", "value", "note")
@@ -1125,7 +1125,7 @@ def stage_aborted(console: Console, aborted) -> None:
 
 def plan(console: Console, survey, version_id: str) -> None:
     """Qué corresponde correr, y qué está esperando a una persona (`orchestration`)."""
-    from . import orchestration
+    from .. import orchestration
 
     colours = {
         orchestration.DONE: "green", orchestration.READY: "bold",

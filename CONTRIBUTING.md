@@ -116,10 +116,11 @@ Tres lecturas, en este orden:
    registradas.
 
 Y los **invariantes que no se negocian** están en [`CLAUDE.md`](CLAUDE.md). Cada uno costó un bug
-o está en el diseño como decisión; los diez se leen en dos minutos.
+o está en el diseño como decisión; se leen en dos minutos.
 
 ## Agregar una etapa
 
 Va en `services/` —una función que recibe un `Workspace` y devuelve un resultado tipado, sin
-importar `typer` ni `rich`—, se muestra en `render.py`, y la llaman las dos interfaces: `cli.py`
-y `wizard.py`. Hay un test que verifica que ningún servicio importe una interfaz.
+importar `typer`, `rich`, `fastapi` ni `uvicorn`—, se muestra en `interfaces/render.py`, y la
+llaman las interfaces, que viven todas en `interfaces/`: `cli.py`, `wizard.py` y la API REST. Hay
+un test que verifica que ningún servicio importe una interfaz.

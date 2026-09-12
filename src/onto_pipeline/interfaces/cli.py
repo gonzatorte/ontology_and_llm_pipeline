@@ -19,10 +19,11 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from . import orchestration, render, sessions, versioning
-from .providers import load_env_file
-from .services import StageError, Workspace, deliver, evaluate, iterate, prep
-from .telemetry import StageAborted
+from .. import orchestration, sessions, versioning
+from ..providers import load_env_file
+from ..services import StageError, Workspace, deliver, evaluate, iterate, prep
+from ..telemetry import StageAborted
+from . import render
 
 app = typer.Typer(add_completion=False, help="LLM-assisted ontology enrichment pipeline.")
 console = Console()
