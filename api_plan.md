@@ -467,6 +467,12 @@ la que se probó. El valor pasa por la validación del campo, así que no es una
   que `curl -sSL` guardaba como si fuera el tarball, y lo que fallaba después era `tar`. Ahora cae
   al archivo de Apache, que siempre tiene la versión fijada.
 
+**Queda una escritura local que no es un artefacto**: crear una sesión deja el marcador
+`current_session`, que es estado del CLI —cuál es la sesión actual cuando no se pasa `--session`—.
+La API no lo lee nunca, porque siempre direcciona la sesión por id; en un contenedor se pierde con
+el reciclado y no se extraña. Se deja escrito acá para que el humo manual no lo cuente como un
+artefacto suelto.
+
 **La imagen instala torch de CPU explícitamente.** El default de PyPI arrastra las ruedas de CUDA
 —varios gigas— y una tarea de ECS no tiene GPU.
 
