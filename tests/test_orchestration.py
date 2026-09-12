@@ -165,6 +165,22 @@ def test_the_label_check_is_done_when_the_ledger_says_so(tmp_path):
     assert named(survey(conn), "label check").state == DONE
 
 
+def test_review_says_when_what_it_asks_has_not_been_verified_yet(tmp_path):
+    """Una decisión le gana a cualquier etapa corrible, así que `review` es la fila que `next`
+    elige. Si no dijera que parte de lo que va a preguntar todavía no lo verificó nadie, mandaría
+    a decidir a mano justo lo que el modelo podía cerrar solo."""
+    conn = store(tmp_path)
+    review.sync(
+        conn, [review.Finding(review.DIVERGENT_LABEL, "c:1", "Valor (en) | value (en)", {})],
+        version_id="v1", kinds=[review.DIVERGENT_LABEL], session_id=SESSION,
+    )
+
+    step = named(survey(conn), "review")
+
+    assert step.state == WAITING
+    assert "run verify-labels first" in step.detail
+
+
 def test_a_store_missing_a_stages_table_reads_as_never_run(tmp_path):
     """The table belongs to the stage; its absence is the stage not having run, not an error."""
     conn = connect(tmp_path)

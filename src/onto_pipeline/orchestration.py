@@ -200,8 +200,13 @@ def survey(
               True,
               f"{unverified_labels} label pair(s) nobody has verified"
               if unverified_labels else "no label pair is waiting for a check"),
+        # Una decisión le gana a cualquier etapa corrible, así que esta fila es la que `next`
+        # elige y es donde tiene que decir que parte de lo que va a preguntar todavía no lo
+        # verificó nadie: mandarlo a decidir eso primero es cruzar el punto de decisión al revés.
         stage("review", "onto-pipeline review", not open_reviews, True,
-              f"{open_reviews} open item(s): conflicts, functional properties, seed typos",
+              f"{open_reviews} open item(s): conflicts, functional properties, seed typos"
+              + (f" · {unverified_labels} of them are label pairs nobody has verified: "
+                 "run verify-labels first" if unverified_labels and not verified else ""),
               decision=bool(open_reviews)),
         stage("regenerate", "onto-pipeline regenerate", False, bool(typed),
               "the ABox is a function of the mentions and this version; rerun it after any "
