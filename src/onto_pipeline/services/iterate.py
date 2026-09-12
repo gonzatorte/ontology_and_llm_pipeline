@@ -2,8 +2,8 @@
 
 Una etapa, una función; ninguna imprime. Los cinco puntos donde decide el usuario —zona gris,
 rama, propiedad funcional, CQ, errata— están partidos en dos funciones cada uno, una que
-*plantea* y otra que *registra*, porque las dos interfaces cruzan ese corte distinto: el CLI
-entre dos comandos, el wizard entre una pregunta y su respuesta.
+*plantea* y otra que *registra*, porque cada interfaz cruza ese corte distinto: el CLI entre dos
+comandos, el wizard entre una pregunta y su respuesta, y la API entre dos requests.
 """
 
 from __future__ import annotations

@@ -1,14 +1,15 @@
 """Lo que toda etapa necesita antes de empezar: config, almacén, versión, modelo.
 
-Esta capa existe porque hay **dos** interfaces sobre el mismo pipeline —el CLI de banderas y
-el `wizard` línea por línea— y una etapa no puede pertenecer a ninguna de las dos. Una función
+Esta capa existe porque hay **tres** interfaces sobre el mismo pipeline —el CLI de banderas, el
+`wizard` línea por línea y la API REST— y una etapa no puede pertenecer a ninguna. Una función
 de servicio recibe un `Workspace`, devuelve un resultado tipado, y no imprime: quien la llamó
-decide cómo mostrarlo. La regla que lo mantiene honesto es que **nada acá importa `typer` ni
-`rich`**; hay un test que lo fija.
+decide cómo mostrarlo. La regla que lo mantiene honesto es que **nada acá importa `typer`,
+`rich`, `fastapi` ni `uvicorn`**; hay un test que lo fija.
 
 Los errores que el usuario tiene que arreglar viajan como `StageError`, no como
 `typer.BadParameter`: el wizard los muestra y sigue preguntando, el CLI los convierte en un
-código de salida. Que la etapa no sepa cuál de las dos cosas va a pasar es justamente el punto.
+código de salida, la API en un 400 con el mensaje en el cuerpo. Que la etapa no sepa cuál de las
+tres cosas va a pasar es justamente el punto.
 """
 
 from __future__ import annotations
@@ -50,8 +51,9 @@ class StageError(Exception):
 class ProviderMissing(StageError):
     """La etapa llama al modelo y no hay credencial cargada.
 
-    Subclase y no un mensaje más porque las dos interfaces la tratan distinto: el CLI dice
-    `--env-file`, el wizard puede pedir el archivo y seguir.
+    Subclase y no un mensaje más porque cada interfaz la trata distinto: el CLI dice
+    `--env-file`, el wizard puede pedir el archivo y seguir, y la API la contesta antes de
+    encolar nada, para que nadie espere dos minutos a que un job falle por una credencial.
     """
 
 

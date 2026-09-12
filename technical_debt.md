@@ -980,3 +980,74 @@ Dónde va escrito: el config es el lugar natural para los que ya viven ahí —u
 valor, como los que ya tienen los umbrales del matcher—, y los que están en una firma se mueven
 al config o se documentan donde están. Lo medido se cita desde `findings.md` en vez de copiarse,
 para que no haya dos números que se desincronizan.
+
+---
+
+## La interfaz REST
+
+Lo que quedó abierto al poner el pipeline detrás de HTTP. Nada de acá está roto: son límites que
+la v1 acepta a sabiendas, y cada entrada dice qué los levantaría.
+
+### DEBT-API-USERS — Un token para todo el despliegue
+
+`API-AUTH-KEY` es un token estático en `X-Auth-Key`, así que **quien lo tiene ve y toca todas las
+sesiones**: no hay usuarios, no hay dueño de una sesión, y el costo de modelo de cualquiera cae en
+la misma credencial de proveedor. Alcanza para un despliegue de una persona o de un equipo que ya
+comparte todo, que es el caso de hoy.
+
+Lo que lo levantaría no es «agregar login»: es decidir qué es un dueño. Las sesiones y los
+uploads ya tienen id propio, así que la columna es barata; lo caro es lo que se sigue — quién
+puede borrar un upload que otro usa (`API-SHARED-UPLOADS` hoy dice que cualquiera), y si el costo
+de modelo se contabiliza por usuario, que obliga a más de una credencial.
+
+### DEBT-API-CANCEL — Un job no se puede cancelar
+
+Se encola, corre y termina. Si alguien lanzó `extract` sobre el corpus equivocado, la única
+salida es esperar —y pagarlo, si llama al modelo—. La sesión queda además bloqueada mientras
+tanto, porque el índice parcial no deja encolar otro.
+
+Cancelar de verdad no es marcar la fila: la etapa tendría que mirar una bandera entre unidades de
+trabajo y salir limpia, que es justo donde el ledger ya hace checkpoint. El lugar natural es el
+mismo `progress` que ya se llama entre unidades, devolviendo «seguí» o «cortá» en vez de nada.
+
+### DEBT-API-SSE — El progreso se poletea
+
+`GET /jobs/{id}` devuelve la última línea de progreso y el cliente pregunta de nuevo. Es simple y
+no necesita nada del servidor; la contra es que entre dos preguntas no hay noticias, y una etapa
+de cuarenta minutos con una línea cada cinco es indistinguible de una colgada durante cuatro.
+
+Server-sent events sobre la misma columna alcanzaría. No se hizo porque un stream abierto contra
+una tarea fija de ECS es una conexión que hay que mantener viva, y el poleo no tiene ese problema.
+
+### DEBT-API-DOCUMENTS-PATH — El Markdown de un documento no cuelga de la sesión
+
+La clave de un Markdown es `markdown/<doc_id>.md`, sin la sesión adentro, y lo mismo los recortes.
+Es correcto mientras el id de documento salga del corpus —dos sesiones sobre el mismo corpus
+escriben lo mismo—, y es la excepción escrita a la invariante 11. Donde se rompe es con dos
+corpus distintos cuyos ids coinciden: el segundo pisa al primero, y el síntoma es texto de otro
+documento, no un error.
+
+Moverlo bajo la sesión es una línea en `artifacts.py`. Lo que cuesta es que obliga a re-ingestar
+todo lo que ya está parseado, y hoy eso no se paga por un caso que nadie tuvo.
+
+### DEBT-API-PARALLEL-WORKERS — Más de un worker es una decisión de dimensionamiento
+
+**No es deuda de seguridad**: el mecanismo es parallel-safe y está probado —reclamo atómico,
+índice parcial, conexión por unidad de trabajo, y la JVM con candado—. Lo que falta es saber
+cuánto cuesta: cada job en vuelo tiene su instancia de razonador y comparte los encoders, así que
+la restricción que manda es la memoria, y nadie la midió con dos jobs pesados a la vez.
+
+Por eso el default es 1 y subirlo es configuración. Y por eso una tarea con N workers es el
+primer paso y N tareas el segundo: la JVM y los encoders se comparten dentro del proceso y se
+duplican entre tareas.
+
+### DEBT-API-CONNECTION-POOL — Cada unidad de trabajo paga un connect
+
+No es «falta un pool». Es que la invariante de conexión —una por request o por job, abierta y
+cerrada en el hilo que la usa— se paga con un connect por unidad, y contra Postgres administrado
+eso no es gratis. Mientras el tráfico sea de una persona poleando un job no se nota.
+
+Cuando moleste, el pool tiene que **respetar la invariante**, no reemplazarla: una conexión
+prestada y devuelta por unidad de trabajo, nunca una compartida entre dos. Compartirla en
+Postgres es compartir transacción, y eso no explota — se commitean trabajo a medio hacer entre
+ellas, que es peor.

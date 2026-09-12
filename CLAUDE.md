@@ -12,10 +12,10 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología inicial, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, con una suite que corre sin red ni Docker e incluye un test de punta a punta. **Dos
-interfaces sobre el mismo pipeline**: el CLI de banderas (`onto-pipeline --help` las lista) y
-`wizard`, que recorre el mismo plan preguntando en cada punto de decisión. Las dos llaman a
-`services/`.
+con `uv`, con una suite que corre sin red ni Docker e incluye un test de punta a punta. **Tres
+interfaces sobre el mismo pipeline**: el CLI de banderas (`onto-pipeline --help` las lista),
+`wizard`, que recorre el mismo plan preguntando en cada punto de decisión, y la API REST, que
+hace lo mismo por HTTP y encola lo que tarda. Las tres llaman a `services/`.
 
 El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentación y los
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
@@ -40,6 +40,7 @@ El caso de uso de metodología cualitativa fue el andamio inicial y **está reti
 | [`NOTICE.md`](NOTICE.md) | Qué licencia tiene esto y qué **no** cubre: los corpus y ontologías de los casos de uso son de terceros | Antes de redistribuir cualquier cosa que salga de acá |
 | [`mapping_rules_plan.md`](mapping_rules_plan.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
 | [`use_case_selection.md`](use_case_selection.md) | Por qué **estos** casos de uso y no otros: los criterios, lo que se midió de cada candidato y por qué se descartó cada descarte | Antes de agregar uno, y antes de proponer uno que ya se descartó |
+| [`api_plan.md`](api_plan.md) | El diseño de la interfaz REST: sus decisiones (`API-*`), qué se dejó afuera y qué falta para desplegarla | Al tocar `interfaces/api/`, `jobs.py`, `uploads.py` o la capa de artefactos |
 
 Los dos últimos son enmiendas o complementos del spec, no lo reemplazan.
 
@@ -70,6 +71,7 @@ uv run onto-pipeline session list      # las sesiones de usuario que hay
 uv run onto-pipeline next              # qué corresponde correr, y qué espera al usuario
 uv run onto-pipeline wizard            # lo mismo, pero preguntando en vez de frenar
 uv run onto-pipeline export            # la ontología terminada: TBox + ABox + manifiesto
+uv run onto-pipeline serve             # la API REST; necesita --extra api y el token en el entorno
 ```
 
 Las etapas que llaman al modelo necesitan `--env-file opencode.env` **antes** del subcomando:
@@ -114,16 +116,27 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 11. **Todo dato derivado pertenece a una sesión de usuario, y toda consulta lo filtra.** Los ids
     de documento y de mención derivan del corpus, así que dos sesiones sobre el mismo generan
     los mismos: sin el filtro, la segunda le **borra** las menciones a la primera. Las
-    excepciones son dos y están escritas: lo que cuelga de `version_id` —que es
-    `<sesión>:v<N>`, único globalmente— y el **resultado** de `work_units`, que es
-    content-addressed y se comparte para no pagar dos veces. `tests/test_session_scope.py` lee
-    el código y falla si alguna consulta se olvida.
+    excepciones son tres y están escritas: lo que cuelga de `version_id` —que es
+    `<sesión>:v<N>`, único globalmente—, el **resultado** de `work_units`, que es
+    content-addressed y se comparte para no pagar dos veces, y los **uploads**, que son material
+    de entrada y se comparten como cualquier caso de uso publicado (`API-SHARED-UPLOADS`).
+    `tests/test_session_scope.py` lee el código y falla si alguna consulta se olvida; la cola de
+    `jobs` es lo único que se mira entre sesiones, porque un worker reclama el más viejo de
+    cualquiera.
 12. **La fase de una sesión se deriva de los datos.** Hay una columna `phase`, pero es una
     afirmación: `sessions.observed_phase` cuenta filas y `sync_phase` la corrige antes de que
     alguien la lea. Volver a `PREP` desde `ITER` **no borra**: dice qué queda atrás y ramifica.
-13. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno y `wizard` lo
-    pregunta; las dos cosas son la misma regla. Correr lo que viene después de una decisión que
-    nadie tomó es tomarla por default, que es lo que `BRANCH-ONLY-REVIEW` nombra.
+13. **Ninguna interfaz cruza un punto de decisión.** `next` frena ante uno, `wizard` lo
+    pregunta y la API no encola lo que el plan da como bloqueado: las tres cosas son la misma
+    regla. Correr lo que viene después de una decisión que nadie tomó es tomarla por default,
+    que es lo que `BRANCH-ONLY-REVIEW` nombra. Por lo mismo, una decisión no se registra
+    mientras la sesión tiene un job en vuelo: se estaría decidiendo sobre un estado que cambia
+    debajo.
+14. **Una conexión por unidad de trabajo** —un request, un job—, abierta y cerrada en el hilo
+    que la usa. Nunca una conexión global en el ciclo de vida de un proceso. En SQLite eso
+    explota por afinidad de hilo; en Postgres es peor, porque **no** explota: compartir conexión
+    es compartir transacción, y dos unidades terminan commiteándose mutuamente trabajo a medio
+    hacer. Lo mismo vale para lo efímero: lo que un job baja a disco lo borra al terminar.
 
 ## Convenciones de trabajo
 
@@ -236,10 +249,12 @@ src/onto_pipeline/
     iterate.py      ITER: menciones, tipado, puentes, clases, axiomas, ramas, validación
     evaluate.py     EVAL: parada, CQ, retención, calibración, ajuste
     deliver.py      DELIVERABLES: diff, DAG, telemetría y `export`
+    catalog.py      qué etapas hay, sus parámetros, cuáles se encolan y la compuerta del plan
   interfaces/       **traducen un protocolo a la capa de servicios.** Sin lógica de dominio
     render.py       cómo se ve cada resultado. Compartido por las interfaces de terminal
     cli.py          la interfaz de banderas: leer, llamar a un servicio, renderizar
     wizard.py       la interfaz guiada: el mismo plan, preguntando en vez de frenar
+    api/            la interfaz HTTP: app y rutas, auth, dependencias y modelos
   config.py         la superficie de configuración; rechaza valores no implementados
   initial_ontology.py  `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
   parse.py ingest.py classify.py boilerplate.py chunking.py     corpus -> bloques -> chunks
@@ -261,11 +276,15 @@ src/onto_pipeline/
   llm.py providers.py telemetry.py                               proveedor, caché y costos
   sessions.py                                                    la sesión de usuario: fase, historial
   store.py                                                       el almacén sin dialecto: sqlite | postgres
+  objectstore.py artifacts.py                                    los bytes sin sustrato, y qué artefacto es cuál
+  uploads.py                                                     corpus y ontología subidos, con forma de caso de uso
+  jobs.py                                                        la cola: reclamo atómico, workers, barrido
   db.py language.py terms.py report.py                           esquema y utilidades
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
 tests/                un archivo por módulo, más `test_end_to_end.py`; sin red ni Docker
 lib/                  jars del razonador (gitignored, los baja fetch-jars.sh)
-data/                 almacén SQLite, artefactos derivados (gitignored)
+data/                 almacén SQLite, artefactos derivados y uploads (gitignored)
+Dockerfile            la imagen: jars en una etapa, glibc en la otra — **nunca Alpine**
 ```
 
 **El ledger de unidades de trabajo (`telemetry.py`) es una sola cosa haciendo tres**: caché,

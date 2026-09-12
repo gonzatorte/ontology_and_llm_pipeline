@@ -1,16 +1,18 @@
-# Plan: la interfaz REST
+# La interfaz REST
 
-Agrega una tercera interfaz sobre la capa de servicios, hermana del CLI y de `wizard`: una API
-REST desplegable en AWS, sin archivos locales durables, con el corpus subido por pre-signed URLs
-y apoyada en la sesión de usuario que ya existe.
+Una tercera interfaz sobre la capa de servicios, hermana del CLI y de `wizard`: una API REST
+desplegable en AWS, sin archivos locales durables, con el corpus subido por pre-signed URLs y
+apoyada en la sesión de usuario que ya existe.
 
-Escrito para que lo ejecute otra sesión. **Leer antes:** `CLAUDE.md` (invariantes y convenciones),
-`CONTRIBUTING.md` (el almacén, los worktrees, las sesiones de usuario) y `main_plan.md` en
-`LAYERS` y `BUILD-OUT-OF-SCOPE`. Trabajar en su propio worktree:
+**Está construida.** Los ocho hitos de abajo se ejecutaron; lo que la implementación cambió del
+plan está al final, en [Lo que cambió al construirlo](#lo-que-cambió-al-construirlo). El
+documento queda como el diseño de la interfaz —por qué cada decisión— y no como una lista de
+tareas: cómo se usa está en el [README](README.md), y lo que quedó abierto en las entradas
+`DEBT-API-*` de [`technical_debt.md`](technical_debt.md).
 
-```bash
-git worktree add ../pipeline-api -b api
-```
+Lo que falta y no es código: **nadie la desplegó todavía**. El circuito entero se corrió contra
+uvicorn con SQLite y almacén local; contra ECS, Postgres y S3 no se corrió, y el número de
+workers por tarea no está medido.
 
 ## Procedencia
 
@@ -25,6 +27,17 @@ la tabla de abajo. Además, cuatro correcciones sobre el borrador del plan: las 
 su propia carpeta y el core queda en la raíz del paquete; la regla de no citar historia de git se
 escribe en un solo archivo y primero; la configuración de la API es por variables de entorno; y
 los casos de uso publicados no tienen trato especial en la API.
+
+**Avalado por el usuario, preguntado al ejecutar** — tres cosas que el plan no definía y que
+bloqueaban hitos enteros:
+
+- **La ontología inicial de una sesión sobre un upload viaja en el mismo upload.** El plan definía
+  el upload como «un conjunto de documentos» y nunca decía de dónde salía la ontología, que es la
+  otra mitad de un caso de uso.
+- **Un job que quedó en `running` porque murió el proceso se cierra al arrancar.** Sin eso, el
+  índice parcial —lo que hace correcta la exclusión— deja esa sesión trabada para siempre.
+- **Es job lo que tarda: modelo, razonador, encoders o PDFs.** Lo demás contesta en el request.
+  El plan decía «un POST por etapa» y no clasificaba ninguna.
 
 **Generado por el modelo, sin aval explícito** — se puede discutir sin romper nada de lo
 anterior: el reclamo de jobs por compare-and-set y el índice parcial único; la invariante de
@@ -406,3 +419,57 @@ ningún artefacto escrito fuera del objectstore**.
   las mediciones, que van a `findings.md` con su n y su fecha.
 - **El tamaño de la imagen** con los jars y los encoders. Si el build se vuelve inmanejable, la
   salida es cachear los jars en su propia capa, no bajar a Alpine: sin glibc no hay JVM.
+
+---
+
+## Lo que cambió al construirlo
+
+Un plan que miente es peor que no tenerlo. Lo de arriba es el diseño tal como se decidió; esto es
+en qué difiere lo que quedó, y por qué.
+
+**La forma de un upload es un contrato, y se valida.** El plan decía «un conjunto de documentos
+bajo un prefijo». Quedó con la forma exacta de un caso de uso publicado —el corpus bajo `corpus/`,
+la ontología como `ontology.*`— y `uploads.create` rechaza lo que no la tenga. Con dos
+convenciones, el workspace tendría que saber de dónde vino el material, que es lo que
+`API-UPLOADED-AND-PUBLISHED` viene a evitar.
+
+**El catálogo de etapas no estaba en el plan.** `services/catalog.py`: qué etapas hay, qué
+parámetros acepta cada una, cuál se encola y cuál contesta en el acto, y la compuerta contra
+`orchestration.survey`. La alternativa era que la API tuviera su propia lista, y entonces habría
+dos —la suya y la del CLI— que se desincronizan. Como está en `services/`, la compuerta del plan
+vale para cualquier interfaz que venga.
+
+**Las claves locales son las rutas de antes.** El backend local del almacén de objetos enraiza en
+`work_dir`, así que una corrida local escribe exactamente el mismo árbol que escribía. No es
+comodidad de migración: es lo que hace verificable el corte — si algo quedó escribiendo derecho
+al disco, el árbol local no lo delata, y correr contra el otro backend sí.
+
+**El Markdown y los recortes no cuelgan de la sesión.** El id de documento sale del corpus, así
+que dos sesiones sobre el mismo escriben lo mismo; dos corpus con ids que coinciden se pisarían.
+Está anotado como `DEBT-API-DOCUMENTS-PATH` en vez de arreglado, porque mover la clave obliga a
+re-ingestar todo lo que ya está parseado.
+
+**`export --out` pasó a ser una copia.** El artefacto es el original; `--out` escribe además una
+copia local para el que corre en su máquina. Si la copia fuera lo único, exportar desde la nube no
+dejaría nada que descargar.
+
+**Los overrides por entorno valen para cualquier corrida**, no sólo para la imagen. Tener dos
+mecanismos según quién arranca es cómo el despliegue termina corriendo con otra configuración que
+la que se probó. El valor pasa por la validación del campo, así que no es una puerta de atrás.
+
+**Tres cosas rotas que aparecieron al construir, y se arreglaron en vez de anotarse:**
+
+- `normalize` escribía la ontología normalizada bajo la sesión y dos lectores la buscaban bajo
+  `work_dir`. No fallaba: uno pedía correr `normalize` después de haberlo corrido.
+- El arranque de la JVM tenía una carrera que hasta ahora no podía dispararse porque no había dos
+  hilos. Con dos workers validando a la vez, los dos veían `isJVMStarted()` en falso.
+- `scripts/fetch-jars.sh` bajaba Maven de un mirror que rota las versiones viejas: devolvía un 404
+  que `curl -sSL` guardaba como si fuera el tarball, y lo que fallaba después era `tar`. Ahora cae
+  al archivo de Apache, que siempre tiene la versión fijada.
+
+**La imagen instala torch de CPU explícitamente.** El default de PyPI arrastra las ruedas de CUDA
+—varios gigas— y una tarea de ECS no tiene GPU.
+
+**Lo que no se hizo**, además de desplegar: `report`, `annotate`, el export a brat y la
+calibración siguen escribiendo al filesystem. Están fuera de la v1 por `API-SCOPE-CORE` y por eso
+quedaron sin pasar por la capa de artefactos; el día que se expongan, hay que moverlas.

@@ -65,6 +65,29 @@ Sin sección propia en el spec, pero son comandos: `chunk` (agrupa bloques sin p
 en vez de frenar), `export` (la ontología terminada, con toda la historia aplicada), `alignment`
 (¿el corpus habla de lo que la ontología nombra?).
 
+### La interfaz REST — `API`
+
+No sale del spec: `BUILD-OUT-OF-SCOPE` lo deja afuera, y esto es una interfaz más sobre la misma
+capa de servicios. Los nombres se dan de alta acá igual que los del diseño, porque se citan igual.
+
+| Id | Qué decide |
+|---|---|
+| `API-FASTAPI` | FastAPI y uvicorn |
+| `API-JOBS` | Las etapas largas son jobs asíncronos con poleo; nada de un request de cuarenta minutos |
+| `API-S3-ARTIFACTS` | Los artefactos van a un almacén de objetos, no a disco |
+| `API-AUTH-KEY` | Header `X-Auth-Key` contra un token de entorno, y falla cerrado |
+| `API-SCOPE-CORE` | La v1 no expone `calibrate`, `tune`, `report`, `annotate` ni brat |
+| `API-NEUTRAL-CONTAINER` | La imagen no depende de ningún proveedor |
+| `API-ECS-ONE-TASK` | ECS con una tarea fija: mínimo 1, máximo 1, autoscaling apagado |
+| `API-UPLOADED-AND-PUBLISHED` | El corpus subido y los casos publicados conviven sin distinción |
+| `API-SHARED-UPLOADS` | Los uploads se comparten entre sesiones, y borrarlos es global |
+| `API-PRESIGNED-GET` | Los artefactos se descargan con un pre-signed de lectura |
+| `API-ENV-FIRST` | Se configura por variables de entorno; los archivos siguen válidos, pero la imagen no los usa |
+| `API-NO-GIT-DOCS` | La documentación no referencia historia de git |
+| `API-PARALLEL-SAFE` | El mecanismo de jobs es parallel-safe por construcción y con pruebas que lo fijan |
+
+El diseño entero, con su procedencia, está en [`api_plan.md`](api_plan.md).
+
 ### El resto del diseño
 
 | Id | Qué es |
@@ -126,7 +149,8 @@ existe para que no se pierdan entre las entradas.
 | 7 | **Correr dos sesiones con etapas de modelo a la vez** | Lo probado en paralelo es la ingesta, que es CPU. Las llamadas al modelo son secuenciales dentro de una sesión, así que el riesgo está en el ledger —que sí tiene test— pero nadie lo corrió con dos sesiones pagando a la vez | [`DEBT-POSTGRES-UNTESTED`](technical_debt.md) |
 | 8 | **Dónde parte `auto` de zona gris** | El barrido mide **un** corte y el pipeline usa **dos**: lo calibrado es el corte de huérfano. Dónde empieza la zona gris es cuánta revisión humana se acepta, y eso no lo contesta ningún corpus — es una decisión, no una medición | [`FINDINGS-MEASURED-MATCHER-CRAFT`](findings.md), [`DEBT-THRESHOLDS`](technical_debt.md) |
 | 9 | **Contexto al decidir un hallazgo de revisión** | Hoy se decide sobre una línea —tipo y resumen—, y una divergencia de etiqueta no se juzga sin ver el IRI original, de dónde sale cada etiqueta y dónde se usa la entidad | [`DEBT-REVIEW-CONTEXT`](technical_debt.md) |
-| 10 | **Decir cómo se fijó cada parámetro**: umbrales, top-k, tamaños de lote, qué tier de modelo usa cada etapa | De afuera todos parecen igual de arbitrarios, y no lo son: algunos se midieron, otros vienen del spec de antes de tener datos, otros son criterio y algunos no los examinó nadie. Esa diferencia decide si mover uno es ajustar o romper | [`DEBT-TUNED-PARAMETERS`](technical_debt.md) |
+| 10 | **Dimensionar la API**: cuánta memoria por worker y cuántos entran en una tarea | El mecanismo de jobs está probado y el default es 1 por costo, no por miedo. Falta el número, y sale de medir dos jobs pesados a la vez: cada uno tiene su razonador y comparten los encoders | [`DEBT-API-PARALLEL-WORKERS`](technical_debt.md) |
+| 11 | **Decir cómo se fijó cada parámetro**: umbrales, top-k, tamaños de lote, qué tier de modelo usa cada etapa | De afuera todos parecen igual de arbitrarios, y no lo son: algunos se midieron, otros vienen del spec de antes de tener datos, otros son criterio y algunos no los examinó nadie. Esa diferencia decide si mover uno es ajustar o romper | [`DEBT-TUNED-PARAMETERS`](technical_debt.md) |
 
 <details>
 <summary>Lo que estaba en cola y se cerró</summary>
@@ -246,12 +270,13 @@ implementado, que hoy son el ajuste del matcher y la mitad que falta del registr
 —extraído, correferido, tipado, puenteado, inducido, axiomatizado, validado por siete filtros y
 ramificado— y la ontología inicial hasta una TBox normalizada, glosada y enriquecida desde el corpus.
 
-**Hay dos interfaces sobre el mismo pipeline.** El CLI de banderas —un comando por etapa, que
-es lo que documenta la sección Uso— y `wizard`, que recorre el plan preguntando en cada punto de
-decisión en vez de frenar ante él. Las dos llaman a las mismas funciones: los cuerpos de las
-etapas viven en `services/`, no en ninguna de las dos interfaces, y hay un test que fija que
-ningún servicio importe `typer` ni `rich`. Qué cubre el wizard y qué le falta está en
-[`DEBT-WIZARD-COVERAGE`](technical_debt.md).
+**Hay tres interfaces sobre el mismo pipeline.** El CLI de banderas —un comando por etapa, que
+es lo que documenta la sección Uso—, `wizard`, que recorre el plan preguntando en cada punto de
+decisión en vez de frenar ante él, y la API REST, que hace lo mismo por HTTP. Las tres llaman a
+las mismas funciones: los cuerpos de las etapas viven en `services/`, no en ninguna interfaz, y
+hay un test que fija que ningún servicio importe `typer`, `rich`, `fastapi` ni `uvicorn`. Qué
+cubre el wizard y qué le falta está en [`DEBT-WIZARD-COVERAGE`](technical_debt.md); la API, en
+[La interfaz REST](#la-interfaz-rest).
 
 ## Instalación
 
@@ -259,6 +284,7 @@ ningún servicio importe `typer` ni `rich`. Qué cubre el wizard y qué le falta
 uv sync --extra dev                      # base + pytest/ruff
 uv sync --extra dev --extra reasoning    # + JPype (ELK, HermiT)
 uv sync --extra dev --extra matching     # + sentence-transformers (`ITER-MATCH`)
+uv sync --extra api                      # + fastapi, uvicorn y boto3 (la interfaz REST)
 ```
 
 El razonador necesita jars que no se versionan:
@@ -290,9 +316,26 @@ paths:
   use_cases_root: ../use_cases        # los casos de uso; ver Calibración, en Uso
 ```
 
-Ningún módulo sabe contra qué motor corre el almacén: el SQL se escribe con `?` y las filas se
-leen por nombre, y lo que difiere entre los dos vive en `store.py`. Los tests corren siempre
-sobre SQLite, sin servidor.
+```yaml
+storage:                   # dónde van los artefactos derivados
+  backend: local           # local | s3 — `local` los enraiza en work_dir
+  bucket: ""               # sólo s3
+api:
+  worker_count: 1          # más de uno exige database.backend: postgres
+  auth_key_env: ONTO_PIPELINE_API_KEY   # de dónde sale el token; nunca va en este archivo
+```
+
+Ningún módulo sabe contra qué motor corre el almacén ni dónde viven los bytes de un artefacto: el
+SQL se escribe con `?` y las filas se leen por nombre, y un artefacto se nombra con una clave. Lo
+que difiere entre motores vive en `store.py` y lo que difiere entre sustratos en `objectstore.py`.
+Los tests corren siempre sobre SQLite y el almacén local, sin red ni servidor.
+
+**Cualquier valor se puede pisar por entorno**, con el prefijo `ONTO_PIPELINE_` más la sección y el
+campo: `ONTO_PIPELINE_API_PORT`, `ONTO_PIPELINE_STORAGE_BUCKET`, `ONTO_PIPELINE_DATABASE_DSN`. El
+valor pasa por la misma validación que si estuviera en el archivo, así que un `storage.backend`
+inventado se rechaza igual. Existe porque la imagen no lleva archivo propio (`API-ENV-FIRST`), y
+vale para cualquier corrida: dos mecanismos según quién arranca es cómo el despliegue termina
+corriendo con otra configuración que la que se probó.
 
 **Credenciales.** Nunca en el config, que se versiona. Van en un archivo de entorno explícito
 —nunca autodescubierto— que se pasa con `--env-file`:
@@ -1192,20 +1235,115 @@ Lo que reporta, además del barrido de umbrales:
 Los resultados están en [`findings.md`](findings.md), y por qué se eligieron estos casos de uso y no
 otros, en [`use_case_selection.md`](use_case_selection.md).
 
+## La interfaz REST
+
+La tercera interfaz sobre la misma capa de servicios, hermana del CLI de banderas y del wizard.
+No es un pipeline paralelo: traduce HTTP a las mismas funciones de `services/`, y lo que decide
+qué puede correr y qué puede correr a la vez vive del lado del dominio, no acá.
+
+```bash
+uv sync --extra api                          # fastapi, uvicorn y boto3
+export ONTO_PIPELINE_API_KEY=...             # sin token, la API no arranca
+uv run onto-pipeline serve                   # o --host/--port
+```
+
+**Autenticación** (`API-AUTH-KEY`): un token estático en el header `X-Auth-Key`, comparado sin
+filtrar por tiempo. Falla cerrado — sin token configurado la app no levanta, porque arrancar
+abierta no daría ningún error y nadie se enteraría. `GET /healthz` es lo único sin auth: es lo que
+mira el balanceador, que no tiene token. Hoy el token es del despliegue entero, así que quien lo
+tiene ve todas las sesiones: `DEBT-API-USERS`.
+
+**Qué se encola y qué contesta en el acto.** Es job lo que llama al modelo, al razonador o a los
+encoders, y lo que parsea PDFs (`API-JOBS`): un request de cuarenta minutos no lo aguanta ningún
+proxy. Es síncrono lo que consulta el almacén y lo que registra una decisión. La lista vive en
+`services/catalog.py` —ninguna interfaz puede ser su dueña— y `GET /stages` la devuelve.
+
+**La compuerta del plan.** Una etapa que `orchestration.survey` da como bloqueada o esperando una
+decisión **no se encola**, y la respuesta dice qué falta. Es la invariante 13 sobre HTTP: `next`
+frena ante un punto de decisión y `wizard` lo pregunta; encolar lo que viene después de una
+decisión que nadie tomó sería tomarla por default (`BRANCH-ONLY-REVIEW`). Por la misma razón, una
+decisión síncrona se rechaza con 409 mientras la sesión tiene un job en vuelo: se estaría
+decidiendo sobre un estado que cambia debajo. Los `GET` no se frenan nunca.
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /healthz` | Sin auth. Lo que mira el balanceador |
+| `GET /stages` | Qué etapas hay, con sus parámetros y si se encolan |
+| `POST /uploads` | Reserva un upload y devuelve un pre-signed PUT por archivo |
+| `GET /uploads` · `GET /uploads/{id}` · `DELETE /uploads/{id}` | Listar, mirar, borrar. Borrar es global |
+| `POST /sessions` | Sobre un caso publicado (`use_case`) o sobre un upload (`upload_id`) |
+| `GET /sessions` · `GET /sessions/{id}` | Las sesiones que hay |
+| `GET /sessions/{id}/plan` | Lo mismo que `next`: qué corresponde y qué te espera |
+| `POST /sessions/{id}/stages/{stage}` | 202 con un job, o 200 con el resultado si es síncrona |
+| `GET /jobs/{id}` · `GET /sessions/{id}/jobs` | El poleo y el historial |
+| `GET /sessions/{id}/grey` · `POST …/grey/{mention}` | La zona gris (`ITER-MATCH`) |
+| `GET /sessions/{id}/branches` · `POST …/branches/{id}` | Las ramas (`ITER-BRANCH`) |
+| `GET /sessions/{id}/review` · `POST …/review/{item}` | La cola de revisión |
+| `GET /sessions/{id}/artifacts` · `GET …/artifacts/{clave}` | Qué hay para descargar, y el link firmado |
+
+El corpus **no pasa por la API**: `POST /uploads` devuelve una URL firmada por archivo y el
+cliente sube contra el almacén; los artefactos se bajan igual, con un pre-signed de lectura
+(`API-PRESIGNED-GET`). Un archivo de cien megas no tiene por qué atravesar el proceso que atiende
+HTTP. Un upload tiene la forma de un caso de uso publicado —el corpus bajo `corpus/`, la ontología
+inicial como `ontology.*`— y se usa en el mismo lugar (`API-UPLOADED-AND-PUBLISHED`); se comparte
+entre sesiones y borrarlo es para todas (`API-SHARED-UPLOADS`).
+
+### Qué hace falta para desplegarla
+
+La imagen no tiene nada de ningún proveedor adentro (`API-NEUTRAL-CONTAINER`): se configura por
+variables de entorno con prefijo `ONTO_PIPELINE_` (`API-ENV-FIRST`), que es lo que la vuelve
+desplegable en cualquier lado.
+
+```bash
+docker build -t onto-pipeline .
+```
+
+Es una imagen grande: lleva los jars del razonador y los encoders. **Nunca Alpine** — `jpype`
+arranca una JVM y eso pide glibc; sin ella no hay razonador, y la cadena de validación no falla,
+reporta SKIPPED.
+
+El destino es **ECS** con una tarea fija: mínimo 1, máximo 1, autoscaling apagado
+(`API-ECS-ONE-TASK`). Elastic Beanstalk sirve con la misma imagen. **App Runner no**, por dos
+razones independientes: está cerrado a clientes nuevos, y su almacenamiento efímero son 3 GB
+*incluyendo la imagen*, donde ésta no entra. Anotado para que nadie lo reintente.
+
+Lo que hay que tener al lado:
+
+- **Postgres administrado.** No es opcional: el disco del contenedor es efímero, así que un
+  SQLite ahí se pierde cuando la tarea se recicla. Y es lo que exige `api.worker_count > 1`.
+- **Un bucket** para los artefactos y los uploads (`storage.backend: s3`).
+- **Dos secretos**: el token de la API y la credencial del proveedor de modelo.
+
+La palanca de costo es la pausa programada: `desired 0` en el servicio y la base detenida. Lo que
+sobrevive a la pausa es lo que está en la base y en el bucket, que es todo lo que importa.
+
+**Dimensionamiento.** La restricción que manda es la memoria: cada job en vuelo tiene su instancia
+de razonador, y los encoders se comparten dentro del proceso. Por eso **una tarea con N workers
+cuesta menos que N tareas** —la JVM y los encoders se duplicarían—, y por eso el paralelismo
+dentro del proceso es el primer paso y escalar tareas el segundo. No hay número recomendado
+todavía: falta medirlo con dos jobs pesados a la vez, y cuando se mida va a `findings.md` con su
+fecha y contra qué se midió (`DEBT-API-PARALLEL-WORKERS`).
+
 ## Dónde queda todo
+
+**Los artefactos derivados no se escriben a disco, se escriben a una clave.** `artifacts.py` dice
+qué artefacto es cuál y `objectstore.py` dónde viven los bytes: `local` los enraiza en `work_dir`,
+que es exactamente el árbol de abajo, y `s3` los pone en un bucket con las mismas claves. Es lo que
+hace que el contenedor se pueda reciclar sin perder nada, y que una corrida local siga viéndose
+igual.
 
 ```
 data/                 gitignoreado; todo es derivado y regenerable
-  pipeline.sqlite3    menciones, bloques, work_units, decisiones, versiones, CQs
+  pipeline.sqlite3    menciones, bloques, work_units, decisiones, versiones, jobs, CQs
   markdown/           un .md por documento; los spans de los bloques indexan esto
   assets/             recortes de figuras
+  uploads/<id>/       corpus y ontología subidos por la API, con forma de caso de uso
   reports/            HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
-  ontology/           la ontología inicial normalizada, el diff y el ABox de cada versión
   review/             lo que espera tu revisión
   brat/               exportación del conjunto de retención
   calibration/        resultados del barrido, un JSON por caso de uso
-  sessions/<id>/      lo derivado de cada sesión: markdown, ontology, annotate, reports
-  current_session     cuál es la actual (`session use`); es estado de esta máquina
+  sessions/<id>/      lo derivado de cada sesión: la ontología normalizada, el ABox, diffs, export
+  current_session     cuál es la actual (`session use`); es estado de esta máquina y del CLI
 lib/                  jars del razonador (gitignoreado)
 
 use_cases/            los casos de uso. Sólo README.md, use_case.yml y PROCEDENCIA.md se versionan
