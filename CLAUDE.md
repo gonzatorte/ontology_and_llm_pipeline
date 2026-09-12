@@ -40,6 +40,7 @@ El caso de uso de metodología cualitativa fue el andamio inicial y **está reti
 | [`NOTICE.md`](NOTICE.md) | Qué licencia tiene esto y qué **no** cubre: los corpus y ontologías de los casos de uso son de terceros | Antes de redistribuir cualquier cosa que salga de acá |
 | [`mapping_rules_plan.md`](mapping_rules_plan.md) | El contrato de las reglas de mapeo: cómo la capa de menciones se vuelve ABox | Al tocar `mapping.py` o la regeneración |
 | [`use_case_selection.md`](use_case_selection.md) | Por qué **estos** casos de uso y no otros: los criterios, lo que se midió de cada candidato y por qué se descartó cada descarte | Antes de agregar uno, y antes de proponer uno que ya se descartó |
+| [`label_verification_plan.md`](label_verification_plan.md) | La verificación de etiquetas y su idioma: por qué el guess no alcanza, qué decide el código y qué el modelo | Al tocar `label_verification.py`, `label_overrides.py` o la precedencia de idiomas |
 | [`api_plan.md`](api_plan.md) | El diseño de la interfaz REST: sus decisiones (`API-*`), qué se dejó afuera y qué falta para desplegarla | Al tocar `interfaces/api/`, `jobs.py`, `uploads.py` o la capa de artefactos |
 
 Los dos últimos son enmiendas o complementos del spec, no lo reemplazan.

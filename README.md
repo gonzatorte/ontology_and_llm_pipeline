@@ -35,6 +35,7 @@ Este índice existe para encontrar las cosas, no para traducirlas: **no hay cód
 | `PREP-NORMALIZE-PROFILE` | Detecta el perfil OWL de la ontología inicial (EL/QL/RL/DL) | `profile` |
 | `PREP-NORMALIZE-IRIS` | Acuña IRIs opacos y guarda el original como procedencia | `normalize` |
 | `PREP-NORMALIZE-LABELS` | Deriva etiquetas es/en y marca las divergentes | `normalize` |
+| `PREP-NORMALIZE-LABELS-VERIFY` | Le pregunta al modelo el idioma y la traducción de cada etiqueta, y cierra los pares que la traducción confirma | `verify-labels` |
 | `PREP-NORMALIZE-TYPOS` | Cuatro detectores de erratas, sin modelo | `normalize` |
 | `PREP-NORMALIZE-GLOSSES` | Escribe una definición para cada clase | `gloss` |
 | `PREP-CQ-GENERATED` | Genera competency questions desde el corpus | `cq propose` |
@@ -613,7 +614,29 @@ de la etapa —se lee de `review_items` y se re-aplica sola— y por eso corregi
 contestar el hallazgo y volver a correr `normalize`. El wizard lo ofrece apenas decidís; el
 identificador no se toca nunca, porque después de `PREP-NORMALIZE-IRIS` no significa nada.
 
-Sin proveedor configurado saltea `PREP-NORMALIZE-GLOSSES` y te dice cuántas glosas quedaron pendientes.
+**Las etiquetas se verifican antes de que decidas** (`PREP-NORMALIZE-LABELS-VERIFY`). La
+similitud de cadenas no distingue una divergencia real de una traducción, así que `Valor (en) |
+value (en)` llegaba a la revisión como divergencia cuando el problema era que `valor` estaba mal
+taggeado: `terms.guess_language` decide por ortografía española o por palabras función, y un
+sustantivo común cae al default `en`.
+
+```bash
+uv run onto-pipeline --env-file opencode.env verify-labels
+uv run onto-pipeline review correct-language <id> "Valor" es   # si el modelo se equivoca
+```
+
+El modelo dice el idioma de cada etiqueta y sus formas es/en; **el veredicto lo saca el código**
+comparando traducción contra traducción. Por encima de `translation_verified_threshold` el
+hallazgo se cierra con su procedencia en el comentario; debajo queda abierto con las traducciones
+como evidencia. Un nombre propio o una palabra que se escribe igual en los dos idiomas se
+contesta `und` y se escribe con el idioma mayoritario de la ontología, pero el par no se afirma
+como divergencia: nadie determinó el idioma.
+
+La precedencia es `user > declarado > model > guess` — el `xml:lang` que trae el literal es dato
+de la fuente, no conjetura. Lo que se corrige queda en el almacén y vuelve a aplicarse solo en
+cada `normalize`, igual que las demás decisiones sobre etiquetas.
+
+Sin proveedor configurado saltea `PREP-NORMALIZE-LABELS-VERIFY` y `PREP-NORMALIZE-GLOSSES`, y te dice cuántas glosas quedaron pendientes.
 
 ### 3. ¿Y ahora qué? (`next`)
 
