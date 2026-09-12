@@ -944,3 +944,39 @@ Tres lugares donde el pipeline sabe que algo quedó viejo y no hace nada:
 Los tres son la misma forma —comparar un hash contra el que quedó registrado— y `next` es el
 lugar natural: ya reporta estado por etapa, y le faltan estas tres comparaciones para dejar de
 sugerir `regenerate` siempre y empezar a sugerirlo cuando corresponde.
+
+### DEBT-TUNED-PARAMETERS — Los parámetros no dicen cómo se fijaron
+
+Pedido por el usuario el 2026-09-12. El sistema está lleno de números —umbrales, top-k, tamaños
+de lote, qué tier de modelo usa cada etapa— y de afuera **todos parecen igual de arbitrarios**.
+No lo son: algunos se midieron con un barrido, otros vienen del spec de antes de tener datos,
+otros son criterio, y algunos no los examinó nadie. Esa diferencia es la que hay que poder leer,
+porque decide si mover uno es ajustar o romper.
+
+El invariante 5 cubre la mitad: ningún umbral se escribe fuera de `config/default.yaml`. Falta
+la otra mitad, y son dos cosas:
+
+1. **Por cada parámetro, cómo se fijó**: medido (con su n, su fecha y contra qué caso de uso),
+   heredado del spec, criterio de diseño, o nunca examinado — y esto último se escribe, no se
+   omite. `DEBT-THRESHOLDS` ya lo hace para los dos umbrales del matcher; es el modelo a seguir.
+2. **Los que no están en el config tampoco están escritos.** Viven como default en una firma,
+   donde nadie los busca.
+
+Lo que hay que cubrir, de lo relevado el 2026-09-12:
+
+| Parámetro | Dónde | Estado |
+|---|---|---|
+| `top_k` de recuperación (5) | default en `matching.type_mentions` y en `calibration.rank`; configurable sólo en el banco de `tune` | sin justificar: 5 candidatos por mención es una elección, y las mediciones de recuperación de `findings.md` están hechas a 50 |
+| `auto_merge_threshold`, `grey_zone_lower` | `config/default.yaml` | **medidos** — y los defaults de `Matcher.__init__` siguen siendo los históricos del spec (0,92 y 0,70), que ya no son los vigentes (0,95 y 0,80) |
+| Tier de modelo por etapa | `llm.*` en el config | el porqué está a medias: hay costo medido y una nota sobre `reasoning_effort`, pero por qué `iter_bridge` es `large` y `iter_match` es `small` no está escrito |
+| `n_candidates` (5), `min_candidate_score` (0,45) de `ITER-BRIDGE` | config | sin medir, sin decir que no se midió |
+| `max_retries` (3), `backoff_base_s` (2), `stage_failure_rate_abort` (0,10) | `execution` | criterio, sin escribir |
+| Clasificación y parseo: `min_visible_chars` (100), `garbled_ratio_threshold` (0,35), `image_coverage_scan_threshold` (0,65), `page_frequency_threshold` (0,8), `bbox_tolerance_px` (12), `max_block_chars` (200) | config | heredados del spec o de la primera corrida |
+| `max_mention_words` (8), `similarity_threshold` (0,75), `redundant_threshold` (0,90), `max_phrases_in_prompt` (30) | config | idem |
+| `elk_coverage_threshold` (0,7), `hermit_timeout_s` (120) | config | idem |
+| `_CHUNK` (512) | `matching.py` | es memoria, no calidad — y decirlo es justamente lo que evita que alguien lo toque buscando precisión |
+
+Dónde va escrito: el config es el lugar natural para los que ya viven ahí —un comentario por
+valor, como los que ya tienen los umbrales del matcher—, y los que están en una firma se mueven
+al config o se documentan donde están. Lo medido se cita desde `findings.md` en vez de copiarse,
+para que no haya dos números que se desincronizan.
