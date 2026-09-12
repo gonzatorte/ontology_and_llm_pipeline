@@ -227,10 +227,19 @@ def normalize_cmd(config_path: Path = ConfigOption) -> None:
         if published is not None:
             render.comparison(console, published)
 
-    if workspace.config.llm.provider == "none":
-        console.print(
-            f"[yellow]glosses skipped[/]: {result.pending_glosses} need generation and "
+    # Normalizar no llama al modelo y las glosas sí, así que la falta de credencial no puede
+    # tirar abajo el comando entero: la ontología ya quedó normalizada y commiteada, y decirlo
+    # con un error borraría ese hecho. Se pregunta por la credencial y no sólo por `provider`,
+    # porque un proveedor configurado sin la variable en el entorno reventaba acá adentro.
+    if not workspace.has_provider():
+        missing = (
             "llm.provider is 'none'. Set a provider in the config to run it."
+            if workspace.config.llm.provider == "none"
+            else f"{workspace.config.llm.api_key_env} is not in the environment. Pass "
+                 "--env-file before the subcommand to run it."
+        )
+        console.print(
+            f"[yellow]glosses skipped[/]: {result.pending_glosses} need generation and {missing}"
         )
         return
     with console.status("glosses") as status:
