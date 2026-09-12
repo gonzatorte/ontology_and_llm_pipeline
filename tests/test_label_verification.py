@@ -169,3 +169,13 @@ def test_a_single_label_that_keeps_failing_is_the_floor_of_the_split():
     """Partir termina en una etiqueta sola: ahí ya no hay a quién culpar, y esa unidad queda
     fallada y se cuenta como tal."""
     assert lv.split(lv.Batch(["a"])) == []
+
+
+def test_a_batch_the_provider_never_answered_is_not_split():
+    """Medido, y caro: con el proveedor devolviendo 429 por límite de uso, partir cada lote
+    fallado convirtió 4 unidades en 87 —cada mitad vuelve a fallar y vuelve a partirse— contra
+    un servicio que ya estaba rechazando. Partir es la respuesta a una respuesta mala, no a que
+    no haya respuesta."""
+    assert lv.is_mangled("MangledBatch: the answer skips label 2 ('Valor')")
+    assert not lv.is_mangled("RuntimeError: https://opencode.ai/zen/go/v1 returned 429")
+    assert not lv.is_mangled("TimeoutError: timed out")

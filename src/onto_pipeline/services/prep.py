@@ -413,13 +413,21 @@ def _read_labels(
 
         halves, failed = [], {}
         for batch in pending:
-            if batch.key not in result.failures:
+            error = result.failures.get(batch.key)
+            if error is None:
                 continue
-            pieces = label_verification.split(batch)
+            # Partir es la respuesta a una respuesta mala, nunca a que no haya respuesta: con el
+            # proveedor devolviendo 429, partir cada lote fallado multiplica las llamadas contra
+            # algo que ya está rechazando. Medido en una corrida: 4 unidades se volvieron 87.
+            pieces = (
+                label_verification.split(batch)
+                if label_verification.is_mangled(error) else []
+            )
             if pieces:
                 halves.extend(pieces)
             else:
-                failed[batch.labels[0]] = result.failures[batch.key]
+                for text in batch.labels:
+                    failed[text] = error
         run.failures.update(failed)
         if halves:
             run.split_retries += 1

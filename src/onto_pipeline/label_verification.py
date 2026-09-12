@@ -57,6 +57,17 @@ Answer with JSON only, keyed by number:
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
+class MangledBatch(ValueError):
+    """El modelo contestó, y la respuesta no sirve para este lote.
+
+    Tipo propio porque es la **única** falla que se reintenta partiendo el lote: si el problema
+    fue del proveedor —un 429, un timeout— partir multiplica las llamadas contra algo que ya
+    está rechazando, que es exactamente lo contrario de lo que hay que hacer. El ledger registra
+    la falla como `<tipo>: <mensaje>`, así que el nombre de esta clase es lo que distingue un
+    caso del otro.
+    """
+
+
 @dataclass(frozen=True)
 class Reading:
     """What the model says about one label.
@@ -104,20 +115,20 @@ def parse(text: str, payload: dict[str, str]) -> dict[str, dict]:
     expected = [line.split(". ", 1)[1] for line in payload["labels"].split("\n")]
     match = _JSON_RE.search(text)
     if not match:
-        raise ValueError(f"no JSON object in the model's answer: {text[:120]!r}")
+        raise MangledBatch(f"no JSON object in the model's answer: {text[:120]!r}")
     data = json.loads(match.group())
 
     readings: dict[str, dict] = {}
     for index, label in enumerate(expected, start=1):
         entry = data.get(str(index))
         if entry is None:
-            raise ValueError(f"the answer skips label {index} ({label!r})")
+            raise MangledBatch(f"the answer skips label {index} ({label!r})")
         missing = {"language", "en", "es"} - set(entry)
         if missing:
-            raise ValueError(f"label {index} is missing {sorted(missing)}")
+            raise MangledBatch(f"label {index} is missing {sorted(missing)}")
         language = str(entry["language"]).strip().lower()
         if language not in LANGUAGES:
-            raise ValueError(
+            raise MangledBatch(
                 f"label {index}: {language!r} is not one of {', '.join(LANGUAGES)}"
             )
         readings[label] = {
@@ -163,8 +174,19 @@ def _is_boundary(text: str, size: int) -> bool:
     return int.from_bytes(digest[:4], "big") % size == 0
 
 
+def is_mangled(error: str) -> bool:
+    """Si la falla fue del modelo contestando mal, y no del proveedor.
+
+    Medido, y caro: con el proveedor devolviendo 429 por límite de uso, partir cada lote fallado
+    convirtió 4 unidades en 87 —cada mitad vuelve a fallar y vuelve a partirse— contra un
+    servicio que ya estaba rechazando. Partir es la respuesta a una respuesta mala, nunca a que
+    no haya respuesta.
+    """
+    return error.startswith(MangledBatch.__name__)
+
+
 def split(batch: Batch) -> list[Batch]:
-    """Un lote que falló, en dos mitades (VERIFY-3-SPLIT).
+    """Un lote que el modelo contestó mal, en dos mitades (VERIFY-3-SPLIT).
 
     No puede hacerlo el reintento del ledger: ése repite la **misma** unidad con el mismo
     payload, y lo que hay que cambiar es qué etiquetas van juntas. Una sola mal contestada no
@@ -240,6 +262,6 @@ def languages(readings: dict[str, dict]) -> dict[str, str]:
 
 
 __all__ = [
-    "Batch", "PROMPT", "Reading", "STAGE", "Verdict",
-    "batches", "languages", "parse", "payload", "split", "verdict",
+    "Batch", "MangledBatch", "PROMPT", "Reading", "STAGE", "Verdict",
+    "batches", "is_mangled", "languages", "parse", "payload", "split", "verdict",
 ]
