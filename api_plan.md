@@ -10,9 +10,10 @@ documento queda como el diseño de la interfaz —por qué cada decisión— y n
 tareas: cómo se usa está en el [README](README.md), y lo que quedó abierto en las entradas
 `DEBT-API-*` de [`technical_debt.md`](technical_debt.md).
 
-Lo que falta y no es código: **nadie la desplegó todavía**. El circuito entero se corrió contra
-uvicorn con SQLite y almacén local; contra ECS, Postgres y S3 no se corrió, y el número de
-workers por tarea no está medido.
+Lo que falta y no es código: **nadie la desplegó todavía**. El circuito entero se corrió local
+contra Postgres y MinIO —que es lo que ahora se usa también para desarrollar—, así que lo no
+probado es ECS y el S3 de verdad, no el código que habla con ellos. El número de workers por
+tarea tampoco está medido.
 
 ## Procedencia
 
@@ -477,3 +478,34 @@ artefacto suelto.
 **Lo que no se hizo**, además de desplegar: `report`, `annotate`, el export a brat y la
 calibración siguen escribiendo al filesystem. Están fuera de la v1 por `API-SCOPE-CORE` y por eso
 quedaron sin pasar por la capa de artefactos; el día que se expongan, hay que moverlas.
+
+---
+
+## Lo que cambió después, al usarlo
+
+El plan lo escribió una sesión y lo ejecutó otra; esto es lo que se corrigió cuando el usuario
+miró el resultado. Son cuatro cambios y ninguno es de detalle: los cuatro mueven un límite.
+
+**El CLI de `onto-pipeline` es la interfaz de uso, no la de gestión** (`USAGE-CLI-NOT-ADMIN`).
+El plan le agregaba `serve` y `session new --upload`, y eso estaba mal: quien enriquece una
+ontología no levanta servidores ni crea uploads. La API tiene su propio comando,
+`onto-pipeline-api`, con `serve` y lo que hace falta para administrar un despliegue.
+
+**`jobs` y `uploads` son de la API y viven en `interfaces/api/`.** No aportan ninguna capacidad
+sobre la ontología: existen para que se la pueda usar por HTTP. Con eso el core deja de saber
+qué es un upload, y quien lo baja a disco es la dependencia de la API, apuntando `paths` como
+hace `--corpus-root` en el CLI.
+
+**`objectstore` y `artifacts` se quedan en el core**, y la pregunta era legítima: tampoco
+aportan una capacidad sobre la ontología. Pero toda etapa escribe artefactos, así que si
+vivieran bajo `interfaces/`, `prep.normalize` importaría de una interfaz — que es lo que
+`SERVICES-NO-INTERFACE` prohíbe. Son la misma clase de cosa que `store.py`: dónde van los bytes,
+como `store.py` es dónde van las filas.
+
+**Un solo sustrato y un solo motor, también en local** (`ONE-SUBSTRATE-PER-CONCERN`). El plan
+dejaba un backend local de artefactos y SQLite para desarrollar. Dos implementaciones vivas son
+dos comportamientos y la que se prueba termina no siendo la que se despliega; además el backend
+local **no podía probar el camino principal**, porque un `file://` no acepta un PUT y la subida
+por URL firmada quedaba sin ejercitar. Ahora es MinIO y Postgres, los levanta
+`docker compose up`, y la suite corre sin ellos contra un doble en memoria que entra por el
+mismo `S3ObjectStore` que producción.

@@ -1019,6 +1019,19 @@ de cuarenta minutos con una línea cada cinco es indistinguible de una colgada d
 Server-sent events sobre la misma columna alcanzaría. No se hizo porque un stream abierto contra
 una tarea fija de ECS es una conexión que hay que mantener viva, y el poleo no tiene ese problema.
 
+### DEBT-API-LOCAL-ARTEFACTS — Cuatro salidas del CLI de uso siguen en disco
+
+`report` (el HTML del parser), `annotate`, el export a brat y `calibrate` escriben archivos
+locales en vez de pasar por la capa de artefactos. No es un olvido: están fuera de
+`API-SCOPE-CORE`, son salidas del CLI de uso, y ahí el archivo **es** el entregable — un HTML que
+se abre en el navegador, un directorio para anotar en brat.
+
+Lo que lo vuelve deuda y no una decisión cerrada es que rompe la uniformidad que
+`ONE-SUBSTRATE-PER-CONCERN` acaba de establecer: hay dos formas de escribir una salida según qué
+comando la produce. Moverlas al bucket cuesta poco; lo que falta decidir antes es si un `report`
+al que hay que pedirle una URL firmada sigue siendo cómodo de usar desde la terminal. El día que
+alguna se exponga por HTTP, la decisión se toma sola.
+
 ### DEBT-API-DOCUMENTS-PATH — El Markdown de un documento no cuelga de la sesión
 
 La clave de un Markdown es `markdown/<doc_id>.md`, sin la sesión adentro, y lo mismo los recortes.

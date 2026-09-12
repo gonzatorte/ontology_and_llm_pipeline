@@ -71,7 +71,19 @@ uv run onto-pipeline session list      # las sesiones de usuario que hay
 uv run onto-pipeline next              # qué corresponde correr, y qué espera al usuario
 uv run onto-pipeline wizard            # lo mismo, pero preguntando en vez de frenar
 uv run onto-pipeline export            # la ontología terminada: TBox + ABox + manifiesto
-uv run onto-pipeline serve             # la API REST; necesita --extra api y el token en el entorno
+```
+
+**Hacen falta Postgres y un bucket, también en local**: `docker compose up -d` los levanta —MinIO
+para lo segundo— y crea el bucket. No hay modo «sin servicios»: dos implementaciones significan
+que la que se prueba no es la que se despliega. La suite sí corre sin nada.
+
+La API es **otro comando**, porque `onto-pipeline` es la interfaz de uso y no la de gestión:
+
+```bash
+uv sync --extra api
+uv run onto-pipeline-api serve         # levantar la API; sin token en el entorno no arranca
+uv run onto-pipeline-api jobs list     # la cola; `jobs sweep` destraba lo que quedó colgado
+uv run onto-pipeline-api uploads list  # los corpus subidos; `uploads delete <id>` los borra
 ```
 
 Las etapas que llaman al modelo necesitan `--env-file opencode.env` **antes** del subcomando:
@@ -140,8 +152,10 @@ bibliotecas, porque importar `render` es importar `rich` con un rodeo. Etapa nue
 ### `STORE-NO-DIALECT`
 
 **Ningún módulo sabe contra qué motor corre el almacén.** El SQL se escribe con `?` y las
-filas se leen por nombre; lo que difiere entre SQLite y Postgres vive en `store.py` y en
-ningún otro lado. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
+filas se leen por nombre; lo que difiere entre motores vive en `store.py` y en ningún otro lado.
+En runtime el motor es uno —Postgres, ver `ONE-SUBSTRATE-PER-CONCERN`—, y el corte sigue
+existiendo porque los tests corren sobre SQLite: si se rompe, la suite deja de decir algo sobre
+lo que se despliega. Lo demás se escribe portable: `COALESCE` y no `IFNULL`, `CASE WHEN` y no
 `SUM(booleano)`, el JSON se lee en Python y no con `json_extract`. `tests/test_store.py`
 corre el mismo contrato contra los dos.
 
@@ -152,11 +166,11 @@ de documento y de mención derivan del corpus, así que dos sesiones sobre el mi
 los mismos: sin el filtro, la segunda le **borra** las menciones a la primera. Las
 excepciones son tres y están escritas: lo que cuelga de `version_id` —que es
 `<sesión>:v<N>`, único globalmente—, el **resultado** de `work_units`, que es
-content-addressed y se comparte para no pagar dos veces, y los **uploads**, que son material
-de entrada y se comparten como cualquier caso de uso publicado (`API-SHARED-UPLOADS`).
-`tests/test_session_scope.py` lee el código y falla si alguna consulta se olvida; la cola de
-`jobs` es lo único que se mira entre sesiones, porque un worker reclama el más viejo de
-cualquiera.
+content-addressed y se comparte para no pagar dos veces, y lo que la API guarda como material
+de entrada —los **uploads**, que se comparten como cualquier caso de uso publicado
+(`API-SHARED-UPLOADS`)—. `tests/test_session_scope.py` lee el código y falla si alguna consulta
+se olvida; las excepciones están ahí escritas, y la cola de `jobs` es una: un worker reclama el
+más viejo de cualquier sesión, y la vista de administración las mira todas.
 
 ### `PHASE-DERIVED`
 
@@ -172,6 +186,35 @@ regla. Correr lo que viene después de una decisión que nadie tomó es tomarla 
 que es lo que `BRANCH-ONLY-REVIEW` nombra. Por lo mismo, una decisión no se registra
 mientras la sesión tiene un job en vuelo: se estaría decidiendo sobre un estado que cambia
 debajo.
+
+### `USAGE-CLI-NOT-ADMIN`
+
+**El CLI de `onto-pipeline` es la interfaz de uso, no la de gestión.** Sirve para enriquecer una
+ontología: quien la enriquece no crea uploads, no mira la cola de jobs ni destraba una sesión.
+Administrar un despliegue es `onto-pipeline-api`, que es otro comando y otro entry point. El
+corte no es estético — con los dos mezclados, la mitad de los verbos del comando que documenta
+el pipeline hablarían de otra cosa, y lo que es un detalle de cómo se lo expone parecería parte
+de lo que hace.
+
+De ahí se sigue dónde vive cada módulo: lo que existe **sólo** para que se pueda usar por HTTP
+—`jobs`, `uploads`— vive en `interfaces/api/` y el core no lo importa. Lo que toda etapa
+necesita para escribir —`objectstore`, `artifacts`— es del core aunque lo haya traído la API, por
+la misma razón que `store.py` lo es: un servicio no puede importar de una interfaz
+(`SERVICES-NO-INTERFACE`).
+
+### `ONE-SUBSTRATE-PER-CONCERN`
+
+**Un solo motor de base y un solo almacén de objetos en runtime, también en local**: Postgres y
+S3 —MinIO cuando es local—. Dos implementaciones vivas son dos comportamientos, y la que se
+prueba termina no siendo la que se despliega: entre un filesystem y un bucket no se parecen las
+URL firmadas, el paginado del listado ni los errores; entre SQLite y Postgres, ni el SQL ni
+cuántos pueden escribir. `docker compose up` levanta las dos piezas.
+
+La excepción son **los tests**, y es lo que hace que la regla se pueda sostener: corren sobre
+SQLite y sobre un doble de S3 en memoria que entra por el mismo `S3ObjectStore` que corre en
+producción. Reemplaza al cliente de boto3 y nada más, así que lo que se ejercita es el código de
+verdad. Por eso `objectstore.open_configured` es el **único** lugar donde se construye un
+almacén: es el único que hay que reemplazar.
 
 ### `ONE-CONNECTION-PER-UNIT`
 
@@ -294,9 +337,14 @@ src/onto_pipeline/
     catalog.py      qué etapas hay, sus parámetros, cuáles se encolan y la compuerta del plan
   interfaces/       **traducen un protocolo a la capa de servicios.** Sin lógica de dominio
     render.py       cómo se ve cada resultado. Compartido por las interfaces de terminal
-    cli.py          la interfaz de banderas: leer, llamar a un servicio, renderizar
+    cli.py          **la interfaz de uso**: un comando por etapa, para enriquecer una ontología
     wizard.py       la interfaz guiada: el mismo plan, preguntando en vez de frenar
-    api/            la interfaz HTTP: app y rutas, auth, dependencias y modelos
+    api/            la interfaz HTTP, y lo que existe sólo para ella
+      app.py        rutas: leer el request, llamar a un servicio, responder
+      admin.py      `onto-pipeline-api`: levantar la API y administrarla
+      deps.py       el workspace de cada unidad de trabajo; acá se baja el upload
+      jobs.py       la cola: reclamo atómico, workers, barrido
+      uploads.py    corpus y ontología subidos, con forma de caso de uso
   config.py         la superficie de configuración; rechaza valores no implementados
   initial_ontology.py  `PREP-NORMALIZE`: IRIs opacos, etiquetas, erratas, DECLARED_ANNOTATIONS
   parse.py ingest.py classify.py boilerplate.py chunking.py     corpus -> bloques -> chunks
@@ -317,15 +365,14 @@ src/onto_pipeline/
   calibration.py                                                 el banco: barrer umbrales sobre uno
   llm.py providers.py telemetry.py                               proveedor, caché y costos
   sessions.py                                                    la sesión de usuario: fase, historial
-  store.py                                                       el almacén sin dialecto: sqlite | postgres
-  objectstore.py artifacts.py                                    los bytes sin sustrato, y qué artefacto es cuál
-  uploads.py                                                     corpus y ontología subidos, con forma de caso de uso
-  jobs.py                                                        la cola: reclamo atómico, workers, barrido
+  store.py                                                       el almacén sin dialecto: postgres (sqlite en tests)
+  objectstore.py artifacts.py                                    los bytes en S3, y qué artefacto es cuál
   db.py language.py terms.py report.py                           esquema y utilidades
 config/default.yaml   TODA la configuración, con el porqué de cada valor en comentarios
 tests/                un archivo por módulo, más `test_end_to_end.py`; sin red ni Docker
 lib/                  jars del razonador (gitignored, los baja fetch-jars.sh)
-data/                 almacén SQLite, artefactos derivados y uploads (gitignored)
+data/                 lo poco que sigue siendo local: el marcador de sesión, informes, brat
+docker-compose.yml    Postgres y MinIO para correr local, con el bucket ya creado
 Dockerfile            la imagen: jars en una etapa, glibc en la otra — **nunca Alpine**
 ```
 

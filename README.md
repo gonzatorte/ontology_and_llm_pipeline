@@ -83,8 +83,14 @@ capa de servicios. Los nombres se dan de alta acá igual que los del diseño, po
 | `API-SHARED-UPLOADS` | Los uploads se comparten entre sesiones, y borrarlos es global |
 | `API-PRESIGNED-GET` | Los artefactos se descargan con un pre-signed de lectura |
 | `API-ENV-FIRST` | Se configura por variables de entorno; los archivos siguen válidos, pero la imagen no los usa |
+| `ONE-SUBSTRATE-PER-CONCERN` | Un solo motor y un solo almacén en runtime, también en local: Postgres y S3/MinIO |
+| `USAGE-CLI-NOT-ADMIN` | La API tiene su propio comando; `onto-pipeline` es la interfaz de uso |
 | `API-NO-GIT-DOCS` | La documentación no referencia historia de git |
 | `API-PARALLEL-SAFE` | El mecanismo de jobs es parallel-safe por construcción y con pruebas que lo fijan |
+
+Las dos últimas no llevan prefijo `API-` porque no son de la API: son invariantes del proyecto
+—están en [`CLAUDE.md`](CLAUDE.md) con las demás— y se citan desde el código. Aparecen acá porque
+salieron de este trabajo y el índice es uno solo.
 
 El diseño entero, con su procedencia, está en [`api_plan.md`](api_plan.md).
 
@@ -284,7 +290,7 @@ cubre el wizard y qué le falta está en [`DEBT-WIZARD-COVERAGE`](technical_debt
 uv sync --extra dev                      # base + pytest/ruff
 uv sync --extra dev --extra reasoning    # + JPype (ELK, HermiT)
 uv sync --extra dev --extra matching     # + sentence-transformers (`ITER-MATCH`)
-uv sync --extra api                      # + fastapi, uvicorn y boto3 (la interfaz REST)
+uv sync --extra api                      # + fastapi y uvicorn (la interfaz REST)
 ```
 
 El razonador necesita jars que no se versionan:
@@ -295,6 +301,18 @@ El razonador necesita jars que no se versionan:
 
 Baja Maven a `.tools/` si no lo tenés instalado. Requiere Java 11+.
 
+**Y hacen falta dos servicios**, también para correr local: Postgres para el almacén y un bucket
+para los artefactos. El compose los levanta y crea el bucket:
+
+```bash
+docker compose up -d           # Postgres en 5432, MinIO en 9000 (consola en 9001)
+export AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
+```
+
+Con eso, `config/default.yaml` ya apunta a los dos y cualquier comando anda. El porqué de no
+tener un modo «sin servicios» está abajo, en Configuración. La suite **no** los necesita:
+`uv run pytest -q` sigue corriendo sin red ni Docker.
+
 ## Configuración
 
 Un solo archivo central, `config/default.yaml` (`CONFIG` del spec). Todo umbral vive ahí; nada está
@@ -303,8 +321,8 @@ comandos funcionan desde cualquier directorio.
 
 ```yaml
 database:
-  backend: sqlite          # sqlite | postgres — postgres admite dos sesiones escribiendo a la vez
-  dsn: ""                  # postgresql://usuario@host/base
+  backend: postgres        # lo único soportado en runtime; SQLite quedó para los tests
+  dsn: postgresql://onto:onto@localhost:5432/onto
 
 paths:
   # Respaldo: sobre qué corre el pipeline lo dice el caso de uso de la sesión, y estas dos sólo
@@ -317,18 +335,25 @@ paths:
 ```
 
 ```yaml
-storage:                   # dónde van los artefactos derivados
-  backend: local           # local | s3 — `local` los enraiza en work_dir
-  bucket: ""               # sólo s3
+storage:                   # dónde van los artefactos derivados; siempre S3
+  bucket: onto-pipeline
+  endpoint_url: http://localhost:9000   # MinIO en local; vacío es AWS
 api:
-  worker_count: 1          # más de uno exige database.backend: postgres
+  worker_count: 1          # más de uno exige más de un escritor: ver Dimensionamiento
   auth_key_env: ONTO_PIPELINE_API_KEY   # de dónde sale el token; nunca va en este archivo
 ```
 
-Ningún módulo sabe contra qué motor corre el almacén ni dónde viven los bytes de un artefacto: el
-SQL se escribe con `?` y las filas se leen por nombre, y un artefacto se nombra con una clave. Lo
-que difiere entre motores vive en `store.py` y lo que difiere entre sustratos en `objectstore.py`.
-Los tests corren siempre sobre SQLite y el almacén local, sin red ni servidor.
+**Un motor y un sustrato, también en local.** Postgres y S3 —que en local es MinIO, y lo levanta
+`docker compose up`—. No es que haga falta la nube para trabajar: es que dos implementaciones son
+dos comportamientos, y el que se prueba termina no siendo el que se despliega. Entre un
+filesystem y un bucket no se parecen las URL firmadas, el paginado del listado ni los errores; y
+entre SQLite y Postgres, ni el SQL ni cuántos pueden escribir.
+
+Ningún módulo sabe nada de eso: el SQL se escribe con `?` y las filas se leen por nombre, y un
+artefacto se nombra con una clave. Lo que difiere entre motores vive en `store.py` y lo que
+difiere entre sustratos en `objectstore.py`. **Los tests sí corren sin nada**: SQLite y un doble
+de S3 en memoria que entra por el mismo `S3ObjectStore` que corre en producción, así que lo que
+se ejercita es el código de verdad.
 
 **Cualquier valor se puede pisar por entorno**, con el prefijo `ONTO_PIPELINE_` más la sección y el
 campo: `ONTO_PIPELINE_API_PORT`, `ONTO_PIPELINE_STORAGE_BUCKET`, `ONTO_PIPELINE_DATABASE_DSN`. El
@@ -1242,9 +1267,23 @@ No es un pipeline paralelo: traduce HTTP a las mismas funciones de `services/`, 
 qué puede correr y qué puede correr a la vez vive del lado del dominio, no acá.
 
 ```bash
-uv sync --extra api                          # fastapi, uvicorn y boto3
+uv sync --extra api                          # fastapi y uvicorn
+docker compose up -d                         # Postgres y MinIO, si no estaban
+export AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
 export ONTO_PIPELINE_API_KEY=...             # sin token, la API no arranca
-uv run onto-pipeline serve                   # o --host/--port
+uv run onto-pipeline-api serve               # o --host/--port
+```
+
+**Es su propio comando, y no `onto-pipeline`.** Ése es la interfaz de uso —enriquecer una
+ontología— y nadie que la enriquezca necesita levantar un servidor ni mirar la cola.
+`onto-pipeline-api` es la de gestión, y además de `serve` tiene lo que hace falta para
+administrar un despliegue:
+
+```bash
+uv run onto-pipeline-api jobs list           # qué hay en la cola; --session acota
+uv run onto-pipeline-api jobs sweep          # destrabar una sesión con un job de un proceso muerto
+uv run onto-pipeline-api uploads list        # qué corpus subidos hay, y cuáles están incompletos
+uv run onto-pipeline-api uploads delete <id>
 ```
 
 **Autenticación** (`API-AUTH-KEY`): un token estático en el header `X-Auth-Key`, comparado sin
@@ -1307,11 +1346,12 @@ El destino es **ECS** con una tarea fija: mínimo 1, máximo 1, autoscaling apag
 razones independientes: está cerrado a clientes nuevos, y su almacenamiento efímero son 3 GB
 *incluyendo la imagen*, donde ésta no entra. Anotado para que nadie lo reintente.
 
-Lo que hay que tener al lado:
+Lo que hay que tener al lado es lo mismo que en local, con otra implementación debajo — que es
+exactamente el punto de que en local sea Postgres y MinIO y no SQLite y disco:
 
-- **Postgres administrado.** No es opcional: el disco del contenedor es efímero, así que un
-  SQLite ahí se pierde cuando la tarea se recicla. Y es lo que exige `api.worker_count > 1`.
-- **Un bucket** para los artefactos y los uploads (`storage.backend: s3`).
+- **Postgres administrado**, apuntado por `ONTO_PIPELINE_DATABASE_DSN`.
+- **Un bucket**, en `ONTO_PIPELINE_STORAGE_BUCKET`, con `ONTO_PIPELINE_STORAGE_ENDPOINT_URL`
+  vacío para que sea el S3 de verdad. Las credenciales salen del rol de la tarea.
 - **Dos secretos**: el token de la API y la credencial del proveedor de modelo.
 
 La palanca de costo es la pausa programada: `desired 0` en el servicio y la base detenida. Lo que
@@ -1327,25 +1367,32 @@ fecha y contra qué se midió (`DEBT-API-PARALLEL-WORKERS`).
 ## Dónde queda todo
 
 **Los artefactos derivados no se escriben a disco, se escriben a una clave.** `artifacts.py` dice
-qué artefacto es cuál y `objectstore.py` dónde viven los bytes: `local` los enraiza en `work_dir`,
-que es exactamente el árbol de abajo, y `s3` los pone en un bucket con las mismas claves. Es lo que
-hace que el contenedor se pueda reciclar sin perder nada, y que una corrida local siga viéndose
-igual.
+qué artefacto es cuál y `objectstore.py` los pone en el bucket. En disco no queda nada derivado,
+que es lo que hace que el contenedor se pueda reciclar sin perder trabajo.
 
 ```
-data/                 gitignoreado; todo es derivado y regenerable
-  pipeline.sqlite3    menciones, bloques, work_units, decisiones, versiones, jobs, CQs
-  markdown/           un .md por documento; los spans de los bloques indexan esto
-  assets/             recortes de figuras
-  uploads/<id>/       corpus y ontología subidos por la API, con forma de caso de uso
-  reports/            HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
-  review/             lo que espera tu revisión
-  brat/               exportación del conjunto de retención
-  calibration/        resultados del barrido, un JSON por caso de uso
-  sessions/<id>/      lo derivado de cada sesión: la ontología normalizada, el ABox, diffs, export
-  current_session     cuál es la actual (`session use`); es estado de esta máquina y del CLI
-lib/                  jars del razonador (gitignoreado)
+el bucket               todo lo derivado; las claves son las mismas en MinIO y en S3
+  markdown/             un .md por documento; los spans de los bloques indexan esto
+  assets/               recortes de figuras
+  uploads/<id>/         corpus y ontología subidos por la API, con forma de caso de uso
+  sessions/<id>/        lo de cada sesión: la ontología normalizada, el ABox, diffs, export
+  shapes.ttl            las shapes de SHACL, escritas a mano (`ITER-VALIDATE-3-SHACL`)
 
+Postgres                menciones, bloques, work_units, decisiones, versiones, jobs, uploads, CQs
+
+data/                   gitignoreado; lo poco que sigue siendo local
+  current_session       cuál es la actual (`session use`); es de esta máquina y de este CLI
+  reports/              HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`)
+  brat/                 exportación del conjunto de retención
+  calibration/          resultados del barrido, un JSON por caso de uso
+lib/                    jars del razonador (gitignoreado)
+```
+
+Los tres últimos de `data/` son salidas del CLI de uso, no de la API, y el archivo **es** el
+entregable: un HTML que se abre en el navegador, un export para anotar en brat. Están fuera de
+`API-SCOPE-CORE` y siguen en disco a propósito; el día que se expongan por HTTP hay que moverlos.
+
+```
 use_cases/            los casos de uso. Sólo README.md, use_case.yml y PROCEDENCIA.md se versionan
   README.md           índice de casos de uso
   craft-cl/           use_case.yml y PROCEDENCIA.md versionados; ontology/ no
