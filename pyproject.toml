@@ -42,6 +42,14 @@ postgres = [
 validation = [
     "pyshacl>=0.26.0",
 ]
+# La interfaz REST y lo que necesita para desplegarse. Opcional porque el CLI y el wizard no la
+# usan, y la imagen no tiene por qué cargarla para correr una etapa suelta. boto3 va acá porque
+# el backend S3 de `objectstore.py` es lo que hace que los artefactos sobrevivan al contenedor.
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "boto3>=1.35",
+]
 
 [project.scripts]
 onto-pipeline = "onto_pipeline.interfaces.cli:entrypoint"

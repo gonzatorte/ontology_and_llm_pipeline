@@ -34,6 +34,18 @@ storage:
   prefix: ""               # sólo s3; permite compartir un bucket entre despliegues
   region: ""               # sólo s3; vacío deja que boto3 la resuelva del entorno
 
+# ─── La interfaz REST ────────────────────────────────────────
+# Todo esto se sobreescribe por entorno con el prefijo `ONTO_PIPELINE_` (`ONTO_PIPELINE_API_PORT`,
+# `ONTO_PIPELINE_STORAGE_BUCKET`), que es lo que usa la imagen: un contenedor no lleva archivo de
+# configuración propio.
+api:
+  host: "0.0.0.0"
+  port: 8000
+  worker_count: 1          # más de uno exige database.backend: postgres, y falla al arrancar si no
+  presigned_expiry_s: 3600 # una hora: alcanza para subir un corpus, y un link filtrado no es eterno
+  auth_key_env: ONTO_PIPELINE_API_KEY   # de dónde sale el token; nunca va en este archivo
+  poll_s: 0.5              # cada cuánto mira la cola un worker ocioso
+
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:
   detected: auto          # computed in PREP-NORMALIZE-PROFILE

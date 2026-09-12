@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import collections.abc
+import os
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
+
+# Con qué se nombra una variable de entorno que pisa la configuración: sección y campo.
+ENV_PREFIX = "ONTO_PIPELINE_"
 
 
 class Paths(BaseModel):
@@ -72,6 +77,29 @@ class Storage(BaseModel):
         if value not in BACKENDS:
             raise ValueError(f"storage.backend es {' | '.join(sorted(BACKENDS))}, no {value!r}")
         return value
+
+
+class Api(BaseModel):
+    """La interfaz REST: cómo escucha y cuántos jobs corre a la vez.
+
+    Todo esto se sobreescribe por entorno (`API-ENV-FIRST`), que es lo que usa la imagen: un
+    contenedor no lleva archivo de configuración propio y ECS pasa variables.
+    """
+
+    host: str = "0.0.0.0"  # noqa: S104 - en un contenedor, escuchar sólo en loopback es no escuchar
+    port: int = 8000
+    # Cuántos jobs corren a la vez en el proceso. Más de uno exige `database.backend: postgres`
+    # y falla al arrancar si no: SQLite da un escritor y N workers ahí son una cola de esperas.
+    # El default es 1 por costo, no por miedo — el mecanismo de `jobs.py` es el mismo para N.
+    worker_count: int = 1
+    # Cuánto vive una URL firmada. Una hora alcanza para subir un corpus o bajar un export, y no
+    # tanto como para que el link sirva de credencial permanente si se filtra.
+    presigned_expiry_s: int = 3600
+    # De qué variable de entorno sale el token de `X-Auth-Key`. El token nunca está en el
+    # archivo de configuración: los secretos se leen del entorno, como la credencial del modelo.
+    auth_key_env: str = "ONTO_PIPELINE_API_KEY"
+    # Cada cuánto mira la cola un worker que no tiene nada que hacer.
+    poll_s: float = 0.5
 
 
 class OwlProfile(BaseModel):
@@ -343,6 +371,7 @@ class Config(BaseModel):
     paths: Paths
     database: Database = Database()
     storage: Storage = Storage()
+    api: Api = Api()
     owl_profile: OwlProfile = OwlProfile()
     reasoner: Reasoner = Reasoner()
     upper_ontology: str = "none"
@@ -377,4 +406,38 @@ class Config(BaseModel):
         config.paths.work_dir = (base / config.paths.work_dir).resolve()
         config.paths.reasoner_lib = (base / config.paths.reasoner_lib).resolve()
         config.paths.use_cases_root = (base / config.paths.use_cases_root).resolve()
+        config.apply_environment()
         return config
+
+    def apply_environment(
+        self, environ: collections.abc.Mapping[str, str] | None = None
+    ) -> list[str]:
+        """Sobreescribir con lo que diga el entorno, y decir qué cambió.
+
+        `ONTO_PIPELINE_API_PORT`, `ONTO_PIPELINE_STORAGE_BUCKET`: sección y campo, en mayúsculas.
+        Existe por `API-ENV-FIRST` — la imagen no lleva archivo de configuración propio y lo que
+        ECS pasa son variables—, pero vale para cualquier corrida, porque tener dos mecanismos
+        según quién arranca es cómo el despliegue termina corriendo con otra configuración que la
+        que se probó.
+
+        El valor pasa por la validación del campo, así que un `storage.backend` inventado se
+        rechaza acá igual que en el archivo. Los secretos no entran por acá: el token y la
+        credencial del modelo se leen del entorno directo y nunca viven en la configuración.
+        """
+        environ = os.environ if environ is None else environ
+        applied = []
+        for section, model in self:
+            if not isinstance(model, BaseModel):
+                continue
+            for field in type(model).model_fields:
+                name = f"{ENV_PREFIX}{section}_{field}".upper()
+                if name not in environ:
+                    continue
+                # `model_validate` sobre un solo campo: valida el tipo y corre el validador que
+                # tenga, que es lo que hace que esto no sea una puerta de atrás a la validación.
+                patched = type(model).model_validate(
+                    {**model.model_dump(), field: environ[name]}
+                )
+                setattr(model, field, getattr(patched, field))
+                applied.append(f"{section}.{field}")
+        return applied
