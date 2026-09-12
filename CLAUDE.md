@@ -154,8 +154,10 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
   Alcances — **son las partes de este repo, no categorías abstractas**, y por eso la lista es
   cerrada y se amplía a mano: `services`, `cli`, `wizard`, `render`, `core` (los módulos de
   dominio), `config`, `matching`, `reasoning`, `tuning`, `use-cases`, `calibration`, `eval`,
-  `spec` (el spec y los planes que lo enmiendan), `deps`. Uno solo por commit; si un cambio
-  toca tres, el alcance es el que explica el porqué, y si no hay uno así se omite.
+  `spec` (el spec y los planes que lo enmiendan), `deps`, `interfaces` (la carpeta con las tres
+  interfaces, y mover algo entre ellas), `api` (la interfaz REST, su configuración y su
+  despliegue). Uno solo por commit; si un cambio toca tres, el alcance es el que explica el
+  porqué, y si no hay uno así se omite.
 
   El asunto va en castellano como el resto de la documentación, sin punto final, y entra en 72
   caracteres. Un cambio que rompe algo lleva `!` antes de los dos puntos y un `BREAKING CHANGE:`
@@ -180,6 +182,13 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
   red ni Docker» en vez de «~6 s»). **La excepción son las mediciones**, y por eso viven en
   [`findings.md`](findings.md): un número medido lleva su n, su fecha y contra qué se midió, y
   eso no envejece porque dice cuándo se tomó.
+- **La documentación no referencia historia de git** (`API-NO-GIT-DOCS`). Describe el estado
+  actual del código y el porqué de cada decisión, y nada más: ni hashes, ni «el commit tal», ni
+  «esto lo cambió tal rama», ni «antes de tal fecha esto decía otra cosa». Si algo cambió y el
+  cambio importa, se explica el estado nuevo **y su razón**, sin el rastro: el rastro ya está en
+  el `git log`, y repetirlo acá es una copia que envejece. Esta es la única copia de la regla; no
+  se repite en otro archivo. **No es lo mismo que fechar una medición**: `findings.md` lleva la
+  fecha de cuándo se midió porque eso es parte del dato, no una referencia a la historia.
 - **El tipo va en la firma, no en el docstring.** El lenguaje ya tiene anotaciones; repetirlas en
   prosa duplica algo que se desactualiza sin que nadie se entere.
 - **Una sesión, un worktree.** Hay más de una sesión trabajando sobre este repo, y dos sesiones
