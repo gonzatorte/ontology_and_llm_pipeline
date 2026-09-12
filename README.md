@@ -263,7 +263,7 @@ uv sync --extra dev --extra matching     # + sentence-transformers (`ITER-MATCH`
 El razonador necesita jars que no se versionan:
 
 ```bash
-./scripts/fetch-jars.sh        # ~83 jars a lib/, resueltos con Maven
+./scripts/fetch-jars.sh        # los jars a lib/, resueltos con Maven
 ```
 
 Baja Maven a `.tools/` si no lo tenés instalado. Requiere Java 11+.
@@ -1205,7 +1205,7 @@ la tasa supere `execution.stage_failure_rate_abort`.
 ## Desarrollo
 
 ```bash
-uv run pytest -q                                       # 126 tests
+uv run pytest -q                                       # la suite entera
 uv run --extra reasoning --extra matching pytest -q    # incluye razonador y encoders
 uv run ruff check .
 ```

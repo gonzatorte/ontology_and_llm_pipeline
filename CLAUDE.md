@@ -12,9 +12,10 @@ desactualizado y no aplica acá.
 
 `onto-pipeline`: enriquecimiento ontológico asistido por LLM. Toma un corpus de PDFs y una
 ontología inicial, y produce versiones sucesivas de la ontología con procedencia textual. Python
-con `uv`, ~19.100 líneas en 56 módulos, 602 tests, uno de ellos de punta a punta. **Dos
-interfaces sobre el mismo pipeline**: un CLI de ~40 comandos y `wizard`, que recorre el mismo plan
-preguntando en cada punto de decisión. Las dos llaman a `services/`.
+con `uv`, con una suite que corre sin red ni Docker e incluye un test de punta a punta. **Dos
+interfaces sobre el mismo pipeline**: el CLI de banderas (`onto-pipeline --help` las lista) y
+`wizard`, que recorre el mismo plan preguntando en cada punto de decisión. Las dos llaman a
+`services/`.
 
 El sistema opera en inglés (prompts, esquemas, logs, docstrings). La documentación y los
 comentarios de configuración son en castellano. El corpus y las glosas son bilingües es/en.
@@ -61,9 +62,9 @@ antes de ver datos.
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 602 tests, ~6 s, sin red ni Docker
+uv run pytest -q                       # la suite entera, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
-./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars)
+./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/
 uv run onto-pipeline --help
 uv run onto-pipeline session list      # las sesiones de usuario que hay
 uv run onto-pipeline next              # qué corresponde correr, y qué espera al usuario
@@ -171,6 +172,14 @@ Cada uno costó un bug o está en el spec como decisión de diseño.
 - **Comentarios que no repiten el código.** No se documenta lo obvio: un docstring que dice lo
   que la firma ya dice es una copia más que hay que mantener. Se comenta el porqué, lo raro, y lo
   que alguna vez costó un bug.
+- **Nada de cifras que el repo ya calcula.** Cuántos tests, cuántas líneas, cuántos módulos,
+  cuántos jars, cuántos comandos, cuánto tarda la suite: eso no se escribe en la documentación ni
+  en un comentario. Envejece sin que nadie se entere —el README dijo «126 tests» hasta el
+  2026-09-11, con la suite en 602— y no cambia ninguna decisión de quien lee. Va el comando que
+  lo dice (`uv run pytest -q`, `onto-pipeline --help`), o la propiedad que sí importa («corre sin
+  red ni Docker» en vez de «~6 s»). **La excepción son las mediciones**, y por eso viven en
+  [`findings.md`](findings.md): un número medido lleva su n, su fecha y contra qué se midió, y
+  eso no envejece porque dice cuándo se tomó.
 - **El tipo va en la firma, no en el docstring.** El lenguaje ya tiene anotaciones; repetirlas en
   prosa duplica algo que se desactualiza sin que nadie se entere.
 - **Una sesión, un worktree.** Hay más de una sesión trabajando sobre este repo, y dos sesiones

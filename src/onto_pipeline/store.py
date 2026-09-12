@@ -1,7 +1,7 @@
 """El almacén, sin dialecto: una interfaz para SQLite y para Postgres.
 
-**Por qué existe.** Hasta el 2026-09-10 el SQL crudo vivía en doce módulos con `sqlite3`
-importado en cada uno, y `DEBT-DATA-ACCESS-LAYER` decía que la inversión que rinde no es migrar
+**Por qué existe.** Hasta el 2026-09-10 el SQL crudo vivía repartido por los módulos de dominio
+con `sqlite3` importado en cada uno, y `DEBT-DATA-ACCESS-LAYER` decía que la inversión no es migrar
 sino escribir esta capa y que el barrido lo haga una sola vez. La necesidad llegó con las
 sesiones de usuario en paralelo: SQLite admite un escritor y muchos lectores, y dos corridas
 escribiendo a la vez es exactamente lo que no admite.
@@ -18,7 +18,7 @@ escribir portable son tres cosas, y son las tres que esta capa cubre:
    dos den lo mismo.
 3. **`executescript`.** No existe en Postgres. `script()` parte en sentencias y las corre.
 
-**El `?` sigue siendo lo que se escribe.** Los doce módulos no saben contra qué motor corren, y
+**El `?` sigue siendo lo que se escribe.** Ningún módulo sabe contra qué motor corre, y
 ésa es la propiedad que hace que la capa sirva: si mañana hay un tercero, cambia acá.
 """
 

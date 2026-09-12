@@ -4,9 +4,9 @@
 
 ```bash
 uv sync --extra dev --extra reasoning --extra matching --extra validation
-uv run pytest -q                       # 602 tests, ~6 s, sin red ni Docker
+uv run pytest -q                       # la suite entera, sin red ni Docker
 uv run ruff check .                    # line-length 100, reglas E,F,I,UP,B
-./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (~80 jars, Java 11+)
+./scripts/fetch-jars.sh                # OWL API + ELK + HermiT en lib/ (Java 11+)
 ```
 
 Los tests no necesitan red, ni Docker, ni JVM, ni credencial, ni servidor de base: los que
@@ -41,7 +41,7 @@ servidor. Si tocás `store.py`, es el archivo que tiene que seguir pasando en ve
 variable puesta.
 
 **Correrla contra Postgres al menos una vez por cambio de esquema vale la pena.** La primera vez
-encontró tres cosas que los 592 tests en SQLite no podían ver: `rowid`, que no existe allá; filas
+encontró tres cosas que la suite en SQLite no podía ver: `rowid`, que no existe allá; filas
 leídas por posición, que `dict_row` no permite; y un comentario SQL con apóstrofe que
 desbalanceaba el separador de sentencias. Está todo en `DEBT-POSTGRES-UNTESTED`.
 

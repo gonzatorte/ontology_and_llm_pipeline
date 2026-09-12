@@ -42,8 +42,8 @@ mirando ninguno de los tres.
 > **dos sesiones de usuario ingestando en paralelo** sin bloqueos ni colisiones — con los ids de
 > documento repetidos entre las dos, que es exactamente lo que antes destruía datos.
 >
-> **Encontró tres cosas que SQLite no podía ver**, y las tres estaban en código que ya pasaba
-> los 592 tests:
+> **Encontró tres cosas que SQLite no podía ver**, y las tres estaban en código que la suite
+> entera ya daba por bueno:
 >
 > - **`rowid` no existe en Postgres.** Lo usaban `resolve_version` para desempatar dos versiones
 >   del mismo segundo y `processing_order` para el orden en que los documentos entraron al
