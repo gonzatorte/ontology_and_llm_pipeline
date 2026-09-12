@@ -46,6 +46,34 @@ class Database(BaseModel):
         return value
 
 
+class Storage(BaseModel):
+    """Dónde se guardan los artefactos derivados.
+
+    `local` enraiza las claves en `paths.work_dir`, que es donde ya vivían, así que una corrida
+    local escribe el mismo árbol de siempre. `s3` es lo que permite que el contenedor se recicle
+    sin perder nada: en la nube el disco del proceso es efímero y todo lo que se escriba derecho
+    ahí desaparece sin avisar. Los módulos no saben cuál está activo — eso vive en
+    `objectstore.py`.
+    """
+
+    backend: str = "local"
+    # Sólo para local, y sólo para sacar los artefactos de `work_dir`. Vacío significa `work_dir`.
+    root: str = ""
+    # Sólo para s3. El prefijo permite compartir un bucket entre despliegues.
+    bucket: str = ""
+    prefix: str = ""
+    region: str = ""
+
+    @field_validator("backend")
+    @classmethod
+    def _implemented(cls, value: str) -> str:
+        from .objectstore import BACKENDS
+
+        if value not in BACKENDS:
+            raise ValueError(f"storage.backend es {' | '.join(sorted(BACKENDS))}, no {value!r}")
+        return value
+
+
 class OwlProfile(BaseModel):
     detected: str = "auto"
     target: str = "OWL_DL_no_cardinality"
@@ -314,6 +342,7 @@ class Execution(BaseModel):
 class Config(BaseModel):
     paths: Paths
     database: Database = Database()
+    storage: Storage = Storage()
     owl_profile: OwlProfile = OwlProfile()
     reasoner: Reasoner = Reasoner()
     upper_ontology: str = "none"

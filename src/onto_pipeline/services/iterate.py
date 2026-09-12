@@ -39,7 +39,6 @@ from ..chunking import chunk_document
 from ..ingest import (
     held_out_documents,
     load_block_objects,
-    markdown_path,
     process_documents,
     select_for_reload,
 )
@@ -230,7 +229,7 @@ def corefer(
         if not mentions:
             continue
         marked = coreference.mark(
-            markdown_path(config, identifier).read_text(encoding="utf-8"), mentions
+            workspace.artifacts.markdown(identifier).read_text(), mentions
         )
 
         progress(f"ITER-COREFER · {identifier[:40]} · {len(mentions)} mentions")
@@ -760,13 +759,13 @@ def shapes_verdict(workspace: Workspace, version_id: str) -> validation.Verdict:
     Las restricciones de forma son sobre los datos de instancia. Sin shapes escritas reporta
     que no corrió, que no es lo mismo que pasar.
     """
-    shapes_path = workspace.config.paths.work_dir / "shapes.ttl"
-    shapes_graph = validation.load_shapes(shapes_path)
+    shapes = workspace.artifacts.shapes()
+    shapes_graph = validation.parse_shapes(shapes.read_text() if shapes.exists() else None)
     if shapes_graph is None:
         return validation.Verdict(
-            "SHACL", validation.SKIPPED, f"no shapes at {shapes_path.name}; nothing to check"
+            "SHACL", validation.SKIPPED, f"no shapes at {shapes.name}; nothing to check"
         )
-    abox = workspace.abox_path(version_id)
+    abox = workspace.abox(version_id)
     if not abox.exists():
         return validation.Verdict(
             "SHACL", validation.SKIPPED, "no ABox for this version; run regenerate"
@@ -775,7 +774,7 @@ def shapes_verdict(workspace: Workspace, version_id: str) -> validation.Verdict:
     # parsear TriG derecho a un Graph se queda en silencio sólo con el default — ahí toda shape
     # no encontraría objetivos y conformaría sobre nada.
     dataset = Dataset()
-    dataset.parse(str(abox), format="trig")
+    dataset.parse(data=abox.read_text(), format="trig")
     try:
         return validation.shapes(mapping.flatten(dataset), shapes_graph)
     except validation.ShapesUnavailable as exc:
@@ -1643,14 +1642,14 @@ def export_misextractions(workspace: Workspace, path: Path) -> Path:
 
 
 def _abox(workspace: Workspace, version_id: str) -> Graph:
-    path = workspace.abox_path(version_id)
-    if not path.exists():
+    abox = workspace.abox(version_id)
+    if not abox.exists():
         raise StageError(
             f"no ABox for {version_id}; run regenerate first — this reads the instance data, "
             "not the TBox"
         )
     dataset = Dataset()
-    dataset.parse(str(path), format="trig")
+    dataset.parse(data=abox.read_text(), format="trig")
     return mapping.flatten(dataset)
 
 
@@ -1810,17 +1809,15 @@ def regenerate(
     changed = versioning.record_rules(conn, version_id, rules.rules_hash())
     # Idempotente sobre (estado, reglas) — pero también sobre el artefacto: una versión ya
     # sellada cuyo archivo no está no tiene nada que saltear, tiene un ABox que falta.
-    if not changed and not force and workspace.abox_path(version_id).exists():
+    if not changed and not force and workspace.abox(version_id).exists():
         return Regeneration(
-            version_id=version_id, wrote=False, target=workspace.abox_path(version_id),
+            version_id=version_id, wrote=False, target=workspace.abox(version_id),
             rules_hash=rules.rules_hash(), mentions=len(rows), already=True,
         )
 
     tbox = workspace.graph(version_id)
     result = mapping.regenerate(rows, typings, rules, conflicts.ancestors(tbox))
-    target = workspace.abox_path(version_id)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(result.dataset.serialize(format="trig"), encoding="utf-8")
+    target = workspace.abox(version_id).write_text(result.dataset.serialize(format="trig"))
     return Regeneration(
         version_id=version_id, wrote=True, target=target, rules_hash=result.rules_hash,
         result=result, mentions=len(rows),

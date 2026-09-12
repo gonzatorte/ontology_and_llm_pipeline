@@ -29,7 +29,6 @@ from ..ingest import (
     held_out_documents,
     load_blocks,
     load_document,
-    markdown_path,
     process_documents,
     set_held_out,
 )
@@ -187,10 +186,10 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
             "no held-out documents. Mark them first: onto-pipeline hold-out <doc_id> ..."
         )
 
-    ontology = config.paths.work_dir / "ontology" / "initial_normalized.ttl"
+    ontology = workspace.artifacts.normalized_ontology()
     if not ontology.exists():
         raise StageError(f"{ontology} not found; run `normalize` first")
-    classes = annotate.inventory_classes(Graph().parse(ontology))
+    classes = annotate.inventory_classes(Graph().parse(data=ontology.read_text(), format="turtle"))
 
     written, missing = [], []
     for identifier in ids:
@@ -200,7 +199,7 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
             continue
         written.append(annotate.build(
             doc_id=identifier,
-            markdown=markdown_path(config, identifier).read_text(encoding="utf-8"),
+            markdown=workspace.artifacts.markdown(identifier).read_text(),
             markdown_hash=document["markdown_hash"],
             classes=classes,
             pages=annotate.page_index(load_blocks(conn, identifier, session_id=session)),
@@ -240,7 +239,7 @@ def export_annotations(workspace: Workspace, path: Path) -> BratExport:
         if stored is None:
             documents.append(ExportedDocument(document.doc_id, error="not ingested"))
             continue
-        markdown = markdown_path(config, document.doc_id).read_text(encoding="utf-8")
+        markdown = workspace.artifacts.markdown(document.doc_id).read_text()
         try:
             annotation.validate(document, markdown, stored["markdown_hash"])
         except annotation.OffsetMismatch as exc:

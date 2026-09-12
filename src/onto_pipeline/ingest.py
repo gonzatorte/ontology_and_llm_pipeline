@@ -16,7 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import parse
+from .artifacts import Artifact, Artifacts
 from .config import Config
+from .objectstore import open_configured as open_objectstore
 from .parse import (
     CAPTION,
     TABLE,
@@ -54,16 +56,21 @@ def ingest(
     *,
     session_id: str,
     ledger: Ledger | None = None,
+    artifacts: Artifacts | None = None,
 ) -> StageResult:
     ledger = ledger or Ledger(conn, config.execution, session_id=session_id)
+    # Se arma una vez y se pasa al worker: con el backend de objetos, construirlo abre un
+    # cliente, y hacerlo por documento sería pagarlo por documento.
+    artifacts = artifacts or artifacts_of(config)
     payloads = [(document_id(path, config.paths.corpus_root), _payload(path, config))
                 for path in paths]
     by_id = {doc_id: path for (doc_id, _), path in zip(payloads, paths, strict=True)}
 
     def worker(payload: dict) -> UnitResult:
         path = by_id[payload["document_id"]]
-        parsed = parse_document(path, config, doc_id=payload["document_id"])
-        _write_markdown(config, parsed)
+        parsed = parse_document(path, config, doc_id=payload["document_id"],
+                                artifacts=artifacts)
+        artifacts.markdown(parsed.document_id).write_text(parsed.markdown)
         _persist(conn, parsed, session_id)
         return UnitResult(output=_summary(parsed))
 
@@ -124,14 +131,16 @@ def table_gap_pages(blocks) -> list[int]:
     return sorted(captioned - with_table)
 
 
-def markdown_path(config: Config, doc_id: str) -> Path:
-    return config.paths.work_dir / "markdown" / f"{doc_id}.md"
+def artifacts_of(config: Config) -> Artifacts:
+    """Los artefactos que no cuelgan de una sesión: el Markdown y los recortes.
+
+    Salen del id de documento, que sale del corpus, así que dos sesiones sobre el mismo corpus
+    escriben lo mismo. Quien tiene un `Workspace` a mano usa el suyo, que sabe la sesión."""
+    return Artifacts(open_objectstore(config.storage, config.paths.work_dir), "")
 
 
-def _write_markdown(config: Config, parsed: ParsedDocument) -> None:
-    target = markdown_path(config, parsed.document_id)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(parsed.markdown, encoding="utf-8")
+def markdown_artifact(config: Config, doc_id: str) -> Artifact:
+    return artifacts_of(config).markdown(doc_id)
 
 
 def _persist(conn: Store, parsed: ParsedDocument, session_id: str) -> None:

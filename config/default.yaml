@@ -22,6 +22,18 @@ database:
   backend: sqlite          # sqlite | postgres
   dsn: ""                  # postgresql://usuario@host/base — sólo para postgres
 
+# ─── Artefactos ──────────────────────────────────────────
+# Dónde van las salidas derivadas: el Markdown, los recortes, la ontología normalizada, el ABox,
+# los diffs y el export. `local` las deja donde siempre estuvieron, enraizadas en `work_dir`;
+# `s3` es lo que hace que sobrevivan a que el contenedor se recicle, que en la nube pasa sin
+# aviso. Los módulos no saben cuál está activo (ver `objectstore.py`).
+storage:
+  backend: local           # local | s3
+  root: ""                 # sólo local; vacío es `paths.work_dir`
+  bucket: ""               # sólo s3
+  prefix: ""               # sólo s3; permite compartir un bucket entre despliegues
+  region: ""               # sólo s3; vacío deja que boto3 la resuelva del entorno
+
 # ─── Profile and reasoning ───────────────────────────────
 owl_profile:
   detected: auto          # computed in PREP-NORMALIZE-PROFILE

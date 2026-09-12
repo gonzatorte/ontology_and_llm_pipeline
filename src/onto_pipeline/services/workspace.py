@@ -20,8 +20,10 @@ from pathlib import Path
 from rdflib import Graph
 
 from .. import versioning
+from ..artifacts import Artifact, Artifacts
 from ..config import Config
 from ..db import open_configured
+from ..objectstore import open_configured as open_objectstore
 from ..store import Store
 from ..telemetry import Ledger
 
@@ -73,6 +75,7 @@ class Workspace:
     # Sobreescrituras de `paths` pedidas por la interfaz, no por el archivo: el par
     # (corpus, ontología) es un parámetro de la corrida y no una decisión de configuración.
     overrides: dict[str, Path] = field(default_factory=dict)
+    _artifacts: Artifacts | None = field(default=None, repr=False)
 
     @classmethod
     def open(
@@ -199,23 +202,29 @@ class Workspace:
     def next_version_id(self) -> str:
         return versioning.next_version_id(self.conn, self.require_session())
 
-    def session_dir(self) -> Path:
-        """Dónde van los artefactos de esta sesión.
+    @property
+    def artifacts(self) -> Artifacts:
+        """Los artefactos de esta sesión, sin que la etapa sepa dónde viven.
 
-        Un solo lugar arma esta ruta. Antes eran siete lugares colgando de `work_dir` con
-        nombres fijos, y dos corridas se pisaban el Markdown, el ABox y los informes.
+        Un solo lugar arma cada clave. Cuando eran rutas armadas en el punto de uso, escribir y
+        leer podían discrepar sin que nadie se enterara —y discreparon: `initial_normalized.ttl`
+        se escribía bajo la sesión y se leía bajo `work_dir`—, y encima lo escrito a disco no
+        sobrevive a que el contenedor se recicle, que en la nube pasa sin aviso.
+
+        Se abre tarde y una sola vez por workspace: con el backend de objetos, construirlo
+        arma un cliente, y hay comandos que no tocan un artefacto.
         """
-        target = self.config.paths.work_dir / "sessions" / (self.session_id or "default")
-        target.mkdir(parents=True, exist_ok=True)
-        return target
+        # La sesión se elige después de construir el workspace, así que el caché se rehace si
+        # cambió: un artefacto de la sesión equivocada es exactamente el bug que esto arregla.
+        if self._artifacts is None or self._artifacts.session_id != (self.session_id or "default"):
+            self._artifacts = Artifacts(
+                open_objectstore(self.config.storage, self.config.paths.work_dir),
+                self.session_id,
+            )
+        return self._artifacts
 
-    def ontology_dir(self) -> Path:
-        target = self.session_dir() / "ontology"
-        target.mkdir(parents=True, exist_ok=True)
-        return target
-
-    def abox_path(self, version_id: str) -> Path:
-        return self.ontology_dir() / f"{_filename(version_id)}.abox.trig"
+    def abox(self, version_id: str) -> Artifact:
+        return self.artifacts.abox(version_id)
 
     # ─────────────────────────  modelo y encoders  ─────────────────────────
 
@@ -327,12 +336,6 @@ def current_session(work_dir: Path) -> str:
 def use_session(work_dir: Path, session_id: str) -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     (work_dir / _CURRENT).write_text(session_id, encoding="utf-8")
-
-
-def _filename(version_id: str) -> str:
-    """El id de versión como nombre de archivo: `sesión:v3` lleva dos puntos, que en Windows no
-    es un carácter de nombre y en una URL es otra cosa."""
-    return version_id.replace(":", "-")
 
 
 def table_exists(conn: Store, name: str) -> bool:

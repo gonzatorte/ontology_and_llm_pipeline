@@ -15,6 +15,7 @@ from rdflib import Dataset, Graph, URIRef
 from rdflib.namespace import OWL, RDF
 
 from .. import versioning
+from ..artifacts import Artifact
 from ..chunking import chunk_document
 from ..ingest import load_block_objects
 from ..report import build_report
@@ -69,17 +70,19 @@ class Comparison:
     target: str
     diff: versioning.Diff
     labels: dict[str, str]
-    path: Path | None = None
+    path: Artifact | None = None
     root: bool = False
 
 
-def write_diff(workspace: Workspace, baseline: str, target: str, result: versioning.Diff) -> Path:
+def write_diff(
+    workspace: Workspace, baseline: str, target: str, result: versioning.Diff
+) -> Artifact:
     """Al lado de la ontología entera, porque las dos se leen juntas: el artefacto dice qué es
     la ontología, el diff dice qué le hizo esta iteración."""
-    path = workspace.ontology_dir() / f"{baseline}-to-{target}.diff.json"
     payload = {"from": baseline, "to": target, **asdict(result)}
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    return path
+    return workspace.artifacts.diff(baseline, target).write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
 
 def publish_diff(workspace: Workspace, version_id: str) -> Comparison | None:
@@ -245,8 +248,11 @@ class Step:
 @dataclass
 class Delivery:
     version_id: str
-    path: Path
-    manifest_path: Path
+    path: Artifact
+    manifest_path: Artifact
+    # Dónde se copió además, cuando el que llama pidió `--out`. El artefacto es el original;
+    # esto es una copia para el que corre en su máquina, y no existe cuando no se pidió.
+    copied_to: Path | None
     fmt: str
     history: list[Step]
     tbox_triples: int
@@ -312,7 +318,7 @@ def export(
     if include_abox:
         from .iterate import regenerate
 
-        path = workspace.abox_path(version_id)
+        abox_artifact = workspace.abox(version_id)
         if refresh_abox:
             progress("regenerating the ABox before exporting it")
             try:
@@ -320,9 +326,9 @@ def export(
                 regenerated = outcome.wrote
             except StageError as exc:
                 warnings.append(f"ABox not refreshed: {exc}")
-        if path.exists():
+        if abox_artifact.exists():
             abox = Dataset()
-            abox.parse(str(path), format=TRIG)
+            abox.parse(data=abox_artifact.read_text(), format=TRIG)
             for quad in abox.quads((None, None, None, None)):
                 dataset.add(quad)
                 abox_quads += 1
@@ -333,10 +339,9 @@ def export(
             )
             include_abox = False
 
-    target = Path(out) if out else workspace.ontology_dir() / f"{version_id}.enriched{_SUFFIX[fmt]}"
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target = workspace.artifacts.export(version_id, _SUFFIX[fmt])
     if fmt == TRIG:
-        target.write_text(dataset.serialize(format=TRIG), encoding="utf-8")
+        target.write_text(dataset.serialize(format=TRIG))
     else:
         # Turtle no tiene grafos con nombre, así que aplanar pierde la procedencia por grafo.
         # Se avisa: perder la procedencia en silencio es exactamente lo que la capa de
@@ -349,7 +354,7 @@ def export(
                 "Turtle has no named graphs: the ABox's per-document provenance was flattened "
                 f"away. `--format {TRIG}` keeps it."
             )
-        target.write_text(flat.serialize(format=TURTLE), encoding="utf-8")
+        target.write_text(flat.serialize(format=TURTLE))
 
     classes = _named_classes(tbox)
     # Lo que agregó el pipeline es lo que está en la cabeza y no estaba en la raíz. Contar los
@@ -358,7 +363,7 @@ def export(
     root = _root_classes(workspace, lineage)
     inventory_classes = len(root)
 
-    manifest = target.with_suffix(target.suffix + ".manifest.json")
+    manifest = target.sibling(".manifest.json")
     manifest.write_text(
         json.dumps(
             {
@@ -374,16 +379,26 @@ def export(
                 "warnings": warnings,
             },
             indent=2, ensure_ascii=False,
-        ),
-        encoding="utf-8",
+        )
     )
+
+    # `--out` es una copia para el que corre en su máquina. El original es el artefacto: si la
+    # copia fuera lo único, exportar desde la nube no dejaría nada que descargar después.
+    copied_to = None
+    if out is not None:
+        copied_to = Path(out)
+        copied_to.parent.mkdir(parents=True, exist_ok=True)
+        copied_to.write_bytes(target.read_bytes())
+        copied_to.with_suffix(copied_to.suffix + ".manifest.json").write_bytes(
+            manifest.read_bytes()
+        )
 
     workspace.note(
         "stage", f"exportada {version_id} a {target.name}",
         {"version": version_id, "path": str(target)},
     )
     return Delivery(
-        version_id=version_id, path=target, manifest_path=manifest, fmt=fmt,
+        version_id=version_id, path=target, manifest_path=manifest, copied_to=copied_to, fmt=fmt,
         history=history, tbox_triples=len(tbox), abox_quads=abox_quads,
         classes=len(classes), inventory_classes=inventory_classes,
         minted_classes=len(classes - root),

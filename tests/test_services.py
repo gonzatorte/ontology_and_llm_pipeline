@@ -259,7 +259,7 @@ def test_export_writes_no_annotation_property_the_seed_did_not_declare(tmp_path)
     result = deliver.export(workspace, version=f"{SESSION}:v0", include_abox=False)
 
     written = Graph()
-    written.parse(result.path, format="trig")
+    written.parse(data=result.path.read_text(), format="trig")
     allowed = set(DECLARED_ANNOTATIONS) | {
         RDF.type, RDFS.subClassOf, RDFS.label, RDFS.comment, OWL.equivalentClass,
         OWL.disjointWith,
@@ -277,7 +277,7 @@ def test_export_records_the_lineage_in_a_manifest_next_to_the_ontology(tmp_path)
     )
     result = deliver.export(workspace, version=f"{SESSION}:v0", include_abox=False)
 
-    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(result.manifest_path.read_text())
     assert manifest["lineage"] == [f"{SESSION}:v0"]
     assert manifest["version"] == f"{SESSION}:v0"
     assert manifest["abox_included"] is False
@@ -294,7 +294,7 @@ def test_exporting_to_turtle_says_that_it_flattened_the_provenance(tmp_path):
     result = deliver.export(
         workspace, version=f"{SESSION}:v0", include_abox=False, fmt=deliver.TURTLE
     )
-    assert result.path.suffix == ".ttl"
+    assert result.path.name.endswith(".ttl")
 
 
 def test_export_says_when_there_is_no_abox_instead_of_pretending(tmp_path):

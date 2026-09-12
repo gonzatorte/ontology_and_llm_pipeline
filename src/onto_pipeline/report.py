@@ -18,7 +18,7 @@ from pathlib import Path
 import pymupdf
 
 from .config import Config
-from .ingest import load_blocks, load_document, load_page_classes, markdown_path
+from .ingest import load_blocks, load_document, load_page_classes, markdown_artifact
 from .parse import CAPTION, TABLE, is_table_caption
 from .store import Store
 
@@ -68,7 +68,7 @@ def build_report(config: Config, conn: Store, doc_id: str, dpi: int = 100) -> Pa
         raise KeyError(f"document {doc_id} has not been ingested")
     blocks = load_blocks(conn, doc_id)
     page_classes = {entry["page"]: entry for entry in load_page_classes(conn, doc_id)}
-    markdown = markdown_path(config, doc_id).read_text(encoding="utf-8")
+    markdown = markdown_artifact(config, doc_id).read_text()
 
     by_page: dict[int, list[dict]] = {}
     for block in blocks:

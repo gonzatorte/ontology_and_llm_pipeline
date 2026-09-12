@@ -3,7 +3,7 @@ from __future__ import annotations
 import pymupdf
 
 from onto_pipeline.db import connect
-from onto_pipeline.ingest import ingest, markdown_path
+from onto_pipeline.ingest import ingest, markdown_artifact
 from onto_pipeline.parse import PARAGRAPH, parse_document
 
 SESSION = "test-1"
@@ -56,7 +56,7 @@ def test_ingest_persists_blocks_pages_and_markdown(two_column_pdf, config):
     assert conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0] > 0
     assert conn.execute("SELECT COUNT(*) FROM page_classification").fetchone()[0] == 4
     stored = conn.execute("SELECT markdown_hash FROM documents").fetchone()[0]
-    written = markdown_path(config, doc_id).read_text(encoding="utf-8")
+    written = markdown_artifact(config, doc_id).read_text()
     assert stored == "sha256:" + __import__("hashlib").sha256(written.encode()).hexdigest()
 
 

@@ -14,7 +14,8 @@ from rdflib import Graph
 from .. import cq, cq_generation, glosses, llm, review, typing_store, versioning
 from ..alignment import check_terms
 from ..alignment import survey as alignment_survey
-from ..ingest import discover, markdown_path
+from ..artifacts import Artifact
+from ..ingest import discover
 from ..ingest import ingest as ingest_documents
 from ..initial_ontology import (
     LabelDecisions,
@@ -75,7 +76,7 @@ def ingest(
 @dataclass
 class Normalization:
     seed: NormalizedOntology
-    target: Path
+    target: Artifact
     kinds: dict[str, int]
     pending_glosses: int
     committed: versioning.Version | None
@@ -137,8 +138,8 @@ def normalize(workspace: Workspace) -> Normalization:
         decisions=label_decisions(workspace),
     )
 
-    target = workspace.ontology_dir() / "initial_normalized.ttl"
-    seed.graph.serialize(target, format="turtle")
+    target = workspace.artifacts.normalized_ontology()
+    target.write_text(seed.graph.serialize(format="turtle"))
 
     conn = workspace.conn
     state = versioning.state_hash(seed.graph)
@@ -193,7 +194,7 @@ class GlossBootstrap:
     out_tokens: int
     committed: versioning.Version
     parent_id: str | None
-    target: Path
+    target: Artifact
 
 
 def generate_glosses(
@@ -227,7 +228,7 @@ def generate_glosses(
         for iri, value in result.outputs.items()
     ]
     glosses.write(seed.graph, written)
-    seed.graph.serialize(target, format="turtle")
+    target.write_text(seed.graph.serialize(format="turtle"))
 
     # Una glosa cambia el artefacto guardado pero no el estado lógico, así que la versión nueva
     # conserva el hash de su padre: re-glosar no es un estado nuevo para razonar (`ITER-APPLY`),
@@ -285,12 +286,15 @@ def alignment(
         raise StageError(f"{version_id} no tiene clases con etiqueta")
 
     documents = [
-        markdown_path(workspace.config, row["id"]).read_text(encoding="utf-8")
-        for row in workspace.conn.execute(
-            "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 ORDER BY id",
-            (session,),
+        markdown.read_text()
+        for markdown in (
+            workspace.artifacts.markdown(row["id"])
+            for row in workspace.conn.execute(
+                "SELECT id FROM documents WHERE session_id = ? AND held_out = 0 ORDER BY id",
+                (session,),
+            )
         )
-        if markdown_path(workspace.config, row["id"]).exists()
+        if markdown.exists()
     ]
     if not documents:
         raise StageError("no hay documentos parseados; corré ingest primero")
@@ -407,9 +411,14 @@ def decide_questions(
 
 
 def initial_graph(workspace: Workspace) -> Graph:
-    """La ontología inicial normalizada tal como quedó en disco, para quien la necesite sin
-    versión."""
-    path = workspace.config.paths.work_dir / "ontology" / "initial_normalized.ttl"
-    if not path.exists():
-        raise StageError(f"{path} not found; run `normalize` first")
-    return Graph().parse(path)
+    """La ontología inicial normalizada tal como la dejó `normalize`, para quien la necesite sin
+    versión.
+
+    La clave sale de la misma función que la escribe. Cuando cada punto de uso armaba su ruta,
+    esta leía de `work_dir/ontology/` y `normalize` escribía bajo la sesión: nunca se
+    encontraban.
+    """
+    artifact = workspace.artifacts.normalized_ontology()
+    if not artifact.exists():
+        raise StageError(f"{artifact} not found; run `normalize` first")
+    return Graph().parse(data=artifact.read_text(), format="turtle")

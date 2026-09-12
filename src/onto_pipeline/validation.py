@@ -114,6 +114,11 @@ def load_shapes(path: Path | None) -> Graph | None:
     return Graph().parse(str(path))
 
 
+def parse_shapes(turtle: str | None) -> Graph | None:
+    """Las shapes ya leídas. Quien las tiene como artefacto no tiene una ruta que pasar."""
+    return Graph().parse(data=turtle, format="turtle") if turtle else None
+
+
 # ─────────────────────────  ITER-VALIDATE-5-PITFALLS — pitfalls  ─────────────────────────
 
 # Each entry is one OOPS! pitfall that can be decided from the graph alone. The identifiers are

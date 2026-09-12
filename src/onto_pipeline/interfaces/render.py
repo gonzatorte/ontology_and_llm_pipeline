@@ -1062,6 +1062,8 @@ def delivery(console: Console, result: deliver.Delivery) -> None:
         console.print("[dim]the ABox was regenerated from the mention layer before export[/]")
     console.print(f"[green]wrote[/] {result.path}")
     console.print(f"[dim]provenance: {result.manifest_path}[/]")
+    if result.copied_to is not None:
+        console.print(f"[green]copiado a[/] {result.copied_to}")
 
 
 def session_list(console: Console, found: list, *, current: str = "") -> None:

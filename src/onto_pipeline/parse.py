@@ -21,6 +21,7 @@ import pymupdf
 
 from . import boilerplate as bp
 from . import language as lang
+from .artifacts import Artifacts
 from .classify import BORN_DIGITAL, PageClass, classify_document
 from .config import Config
 
@@ -185,13 +186,18 @@ def parse_text(path: Path, config: Config, *, doc_id: str | None = None) -> Pars
     )
 
 
-def parse_document(path: Path, config: Config, *, doc_id: str | None = None) -> ParsedDocument:
+def parse_document(
+    path: Path, config: Config, *, doc_id: str | None = None, artifacts: Artifacts | None = None,
+) -> ParsedDocument:
     if path.suffix.lower() in TEXT_SUFFIXES:
         return parse_text(path, config, doc_id=doc_id)
     doc_id = doc_id or document_id(path, config.paths.corpus_root)
     content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
-    assets_dir = config.paths.work_dir / "assets" / doc_id
-    asset_root = config.paths.work_dir
+    # Los recortes van al almacén de artefactos, no al disco: en la nube el disco del proceso se
+    # recicla y el recorte al que apunta el bloque no estaría cuando alguien lo abra.
+    from .ingest import artifacts_of  # noqa: PLC0415 — circular si se importa arriba
+
+    artifacts = artifacts or artifacts_of(config)
 
     with pymupdf.open(path) as doc:
         page_classes = classify_document(doc, config.classification)
@@ -201,9 +207,7 @@ def parse_document(path: Path, config: Config, *, doc_id: str | None = None) -> 
         for page, page_class in zip(doc, page_classes, strict=True):
             if page_class.label == BORN_DIGITAL:
                 blocks.extend(
-                    _page_blocks(
-                        page, page_class.page, doc_id, assets_dir, asset_root, hyphenated
-                    )
+                    _page_blocks(page, page_class.page, doc_id, artifacts, hyphenated)
                 )
             else:
                 blocks.append(
@@ -245,12 +249,12 @@ def _declared_language(doc: pymupdf.Document) -> str | None:
 
 
 def _page_blocks(
-    page: pymupdf.Page, number: int, doc_id: str, assets_dir: Path, asset_root: Path,
+    page: pymupdf.Page, number: int, doc_id: str, artifacts: Artifacts,
     hyphenated: frozenset[str],
 ) -> list[Block]:
     tables = _table_blocks(page, number, doc_id)
     table_rects = [pymupdf.Rect(block.bbox) for block in tables]
-    figures = _figure_blocks(page, number, doc_id, assets_dir, asset_root)
+    figures = _figure_blocks(page, number, doc_id, artifacts)
     text = _text_blocks(page, number, doc_id, table_rects, hyphenated)
 
     ordered = _reading_order(page, text + tables + figures)
@@ -279,7 +283,7 @@ def _table_blocks(page: pymupdf.Page, number: int, doc_id: str) -> list[Block]:
 
 
 def _figure_blocks(
-    page: pymupdf.Page, number: int, doc_id: str, assets_dir: Path, asset_root: Path
+    page: pymupdf.Page, number: int, doc_id: str, artifacts: Artifacts
 ) -> list[Block]:
     """No parser reads figures. They come out as a crop plus a placeholder (PREP-PARSE); the
     VLM captioning second pass consumes the crops."""
@@ -288,9 +292,8 @@ def _figure_blocks(
         rect = pymupdf.Rect(image["bbox"]) & page.rect
         if rect.is_empty or rect.get_area() < 2500:
             continue
-        assets_dir.mkdir(parents=True, exist_ok=True)
-        asset = assets_dir / f"p{number}_f{index}.png"
-        page.get_pixmap(clip=rect, dpi=150).save(asset)
+        crop = artifacts.crop(doc_id, f"p{number}_f{index}.png")
+        crop.write_bytes(page.get_pixmap(clip=rect, dpi=150).tobytes("png"))
         blocks.append(
             Block(
                 document_id=doc_id,
@@ -299,9 +302,9 @@ def _figure_blocks(
                 bbox=tuple(rect),
                 block_type=FIGURE,
                 text="",
-                # Relative to the work directory: an absolute path would put this machine's
-                # filesystem into the Markdown, which is exported and annotated elsewhere.
-                asset_path=str(asset.relative_to(asset_root)),
+                # La clave del artefacto, no una ruta: una ruta absoluta metería el filesystem de
+                # esta máquina en el Markdown, que se exporta y se anota en otra.
+                asset_path=crop.key,
             )
         )
     return blocks
