@@ -65,6 +65,11 @@ class ObjectStore(ABC):
     @abstractmethod
     def presigned_put(self, key: str, *, expires_s: int) -> str: ...
 
+    def copy_in(self, key: str, source: Path) -> None:
+        """Subir un archivo que ya está en disco. Los backends lo sobreescriben con lo suyo, que
+        no lee el archivo entero a memoria: un corpus en PDF pesa."""
+        self.put(key, Path(source).read_bytes())
+
 
 class LocalObjectStore(ObjectStore):
     """El filesystem. Para correr sin nube, y para los tests."""

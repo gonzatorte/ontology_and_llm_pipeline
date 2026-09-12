@@ -22,6 +22,7 @@ from .. import (
     sessions,
     stopping,
     tuning,
+    uploads,
     use_cases,
     versioning,
 )
@@ -533,13 +534,27 @@ def list_sessions(workspace: Workspace) -> list[sessions.UserSession]:
 
 
 def new_session(
-    workspace: Workspace, *, use_case: str, name: str = ""
+    workspace: Workspace, *, use_case: str = "", upload_id: str = "", name: str = ""
 ) -> sessions.UserSession:
-    """Crear una sesión sobre un caso de uso, y dejarla como la actual.
+    """Crear una sesión sobre un caso de uso o sobre un upload, y dejarla como la actual.
 
-    El caso de uso tiene que existir: crear una sesión sobre un directorio que no está es
-    descubrirlo tres etapas después, cuando `ingest` no encuentra el corpus.
+    Los dos son lo mismo —el par (corpus, ontología)— y se guardan en la misma columna: un caso
+    publicado por su nombre, un upload como `upload:<id>` (`API-UPLOADED-AND-PUBLISHED`). Que
+    exista se verifica acá: crear una sesión sobre algo que no está es descubrirlo tres etapas
+    después, cuando `ingest` no encuentra el corpus.
     """
+    if bool(use_case) == bool(upload_id):
+        raise StageError(
+            "una sesión corre sobre un caso de uso o sobre un upload, no sobre los dos"
+        )
+    if upload_id:
+        try:
+            upload = uploads.load(workspace.conn, upload_id)
+        except uploads.UnknownUpload as exc:
+            raise StageError(str(exc)) from exc
+        created = sessions.create(workspace.conn, use_case=upload.use_case, name=name)
+        use_current(workspace, created.id)
+        return created
     directory = workspace.config.paths.use_cases_root / use_case
     if not directory.is_dir():
         available = sorted(
