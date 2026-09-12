@@ -1419,6 +1419,16 @@ uv run ruff check .
 
 Los tests del razonador se saltean solos si no corriste `fetch-jars.sh`.
 
+**La suite no necesita los servicios**, aunque una corrida sí: usa SQLite y un doble de S3 en
+memoria. El doble entra por el mismo `S3ObjectStore` que corre en producción —reemplaza al
+cliente de boto3 y nada más—, así que lo que se ejercita es el código que se despliega. Contra
+los motores de verdad se corre así:
+
+```bash
+docker compose up -d
+ONTO_PIPELINE_TEST_DSN=postgresql://onto:onto@127.0.0.1:5432/onto uv run pytest -q
+```
+
 Las mejoras a futuro y las decisiones tomadas con evidencia insuficiente están en
 [`technical_debt.md`](technical_debt.md), que además lleva la nota de coordinación entre las
 conversaciones que trabajan sobre este repo.
