@@ -842,7 +842,7 @@ def brat_export(console: Console, result: evaluate.BratExport) -> None:
             str(document.relations), "[green]exported[/]",
         )
     console.print(table)
-    console.print(f"output in {result.out_dir}")
+    console.print(f"[dim]{result.prefix}[/]")
 
 
 def review_list(console: Console, items: list[dict], counts: dict) -> None:

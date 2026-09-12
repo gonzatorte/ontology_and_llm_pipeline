@@ -5,6 +5,7 @@ import json
 import pytest
 
 from onto_pipeline import annotation
+from onto_pipeline.artifacts import Artifacts
 
 MARKDOWN = "Empirical legal research applies document analysis to court rulings."
 ENTRY = {
@@ -74,30 +75,30 @@ def test_a_wrong_class_is_mistyped_not_an_orphan(document):
     assert report.typing_f1 == pytest.approx(0.5)
 
 
-def test_brat_export_keeps_types_relations_and_coreference(document, tmp_path):
-    paths = annotation.export_brat(document, MARKDOWN, tmp_path / "brat")
-    ann = next(path for path in paths if path.suffix == ".ann").read_text()
+def test_brat_export_keeps_types_relations_and_coreference(document, object_store):
+    paths = annotation.export_brat(document, MARKDOWN, Artifacts(object_store, "s1"))
+    ann = next(path for path in paths if path.key.endswith(".ann")).read_text()
 
     assert "T1\tResearchField 0 25\tEmpirical legal research" in ann
     assert "T3\tUnassigned 55 68\tcourt rulings" in ann
     assert "R1\thasMethodology Arg1:T1 Arg2:T2" in ann
     assert "A1\tInInventory T2" in ann, "in_inventory survives only as an ad-hoc attribute"
-    assert next(path for path in paths if path.suffix == ".txt").read_text() == MARKDOWN
+    assert next(path for path in paths if path.key.endswith(".txt")).read_text() == MARKDOWN
 
 
-def test_the_export_carries_the_hash_its_offsets_belong_to(document, tmp_path):
-    paths = annotation.export_brat(document, MARKDOWN, tmp_path / "brat")
+def test_the_export_carries_the_hash_its_offsets_belong_to(document, object_store):
+    paths = annotation.export_brat(document, MARKDOWN, Artifacts(object_store, "s1"))
     carried = next(path for path in paths if path.name.endswith("markdown_hash"))
     assert carried.read_text().strip() == "sha256:abc"
 
 
-def test_coreference_chains_are_exported_as_equivalence_groups(tmp_path):
+def test_coreference_chains_are_exported_as_equivalence_groups(tmp_path, object_store):
     entry = json.loads(json.dumps(ENTRY))
     entry["mentions"][1]["entity_id"] = "e7"
     path = tmp_path / "coref.jsonl"
     path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
     document = annotation.read_jsonl(path)[0]
 
-    paths = annotation.export_brat(document, MARKDOWN, tmp_path / "brat")
-    ann = next(item for item in paths if item.suffix == ".ann").read_text()
+    paths = annotation.export_brat(document, MARKDOWN, Artifacts(object_store, "s1"))
+    ann = next(item for item in paths if item.key.endswith(".ann")).read_text()
     assert "*\tCoreference T1 T2" in ann

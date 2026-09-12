@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 
 from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF, SKOS
+
+from .artifacts import Artifact
 
 
 @dataclass
@@ -64,8 +65,8 @@ def build(
     markdown_hash: str,
     classes: list[InventoryClass],
     pages: list[list[int]],
-    target: Path,
-) -> Path:
+    target: Artifact,
+) -> Artifact:
     payload = {
         "doc_id": doc_id,
         "markdown_hash": markdown_hash,
@@ -74,9 +75,7 @@ def build(
     }
     html = _TEMPLATE.replace("__PAYLOAD__", json.dumps(payload, ensure_ascii=False))
     html = html.replace("__TEXT__", _escape(markdown))
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(html, encoding="utf-8")
-    return target
+    return target.write_text(html)
 
 
 def _escape(text: str) -> str:

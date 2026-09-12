@@ -21,6 +21,10 @@ MARKDOWN = "markdown"
 ASSETS = "assets"
 ONTOLOGY = "ontology"
 EXPORT = "export"
+REPORTS = "reports"
+ANNOTATE = "annotate"
+BRAT = "brat"
+CALIBRATION = "calibration"
 
 NORMALIZED = "initial_normalized.ttl"
 SHAPES = "shapes.ttl"
@@ -119,6 +123,30 @@ class Artifacts:
         return Artifact(
             self.store, f"{self.prefix}/{ONTOLOGY}/{filename(version_id)}.enriched{suffix}"
         )
+
+    def report(self, doc_id: str) -> Artifact:
+        """El HTML de evaluación del parser (`DELIVERABLES-PENDING-PARSER-EVAL`).
+
+        Sale del documento y no de la sesión, como el Markdown que describe: dos sesiones sobre
+        el mismo documento producen el mismo informe.
+        """
+        return Artifact(self.store, f"{REPORTS}/{doc_id}.html")
+
+    def annotation_tool(self, doc_id: str) -> Artifact:
+        """La herramienta de anotación de un documento retenido (`EVAL-PIPELINE`)."""
+        return Artifact(self.store, f"{self.prefix}/{ANNOTATE}/{doc_id}.html")
+
+    def brat(self, doc_id: str, suffix: str) -> Artifact:
+        """Un archivo del par standoff de brat: `.txt`, `.ann` o `.markdown_hash`."""
+        return Artifact(self.store, f"{self.prefix}/{BRAT}/{doc_id}{suffix}")
+
+    def calibration(self, name: str) -> Artifact:
+        """El resultado de un barrido de umbrales sobre un caso de uso.
+
+        Del caso de uso y no de la sesión: es una medición del sistema contra un par publicado,
+        y quien la mira después la compara entre corridas.
+        """
+        return Artifact(self.store, f"{CALIBRATION}/{name}.json")
 
     def shapes(self) -> Artifact:
         """Las shapes de SHACL se escriben a mano y son insumo, no salida; se leen por acá

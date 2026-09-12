@@ -26,6 +26,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .artifacts import Artifact, Artifacts
+
 FALSE_ORPHAN = "false_orphan"
 GENUINE_ORPHAN = "genuine_orphan"
 MISTYPED = "mistyped"
@@ -162,17 +164,17 @@ def score(document: AnnotatedDocument, predicted: dict[str, str | None]) -> Orph
     return report
 
 
-def export_brat(document: AnnotatedDocument, markdown: str, out_dir: Path) -> list[Path]:
+def export_brat(
+    document: AnnotatedDocument, markdown: str, artifacts: Artifacts
+) -> list[Artifact]:
     """`.txt` + `.ann`, plus the `markdown_hash` the offsets belong to.
 
     `in_inventory` survives only as an ad-hoc attribute — the single loss against the standard
     format, and the reason the project's own JSONL stays the source of truth.
     """
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    text_path = out_dir / f"{document.doc_id}.txt"
-    ann_path = out_dir / f"{document.doc_id}.ann"
-    hash_path = out_dir / f"{document.doc_id}.markdown_hash"
+    text = artifacts.brat(document.doc_id, ".txt")
+    annotations = artifacts.brat(document.doc_id, ".ann")
+    hash_file = artifacts.brat(document.doc_id, ".markdown_hash")
 
     lines: list[str] = []
     term_of: dict[str, str] = {}
@@ -208,7 +210,8 @@ def export_brat(document: AnnotatedDocument, markdown: str, out_dir: Path) -> li
         if len(members) > 1:
             lines.append("*\tCoreference " + " ".join(members))
 
-    text_path.write_text(markdown, encoding="utf-8")
-    ann_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    hash_path.write_text(document.markdown_hash + "\n", encoding="utf-8")
-    return [text_path, ann_path, hash_path]
+    return [
+        text.write_text(markdown),
+        annotations.write_text("\n".join(lines) + "\n"),
+        hash_file.write_text(document.markdown_hash + "\n"),
+    ]

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pymupdf
 
-from .config import Config
-from .ingest import load_blocks, load_document, load_page_classes, markdown_artifact
+from .artifacts import Artifact, Artifacts
+from .ingest import load_blocks, load_document, load_page_classes
 from .parse import CAPTION, TABLE, is_table_caption
 from .store import Store
 
@@ -62,13 +62,21 @@ pre { white-space: pre-wrap; word-break: break-word; background: #8881; padding:
 """
 
 
-def build_report(config: Config, conn: Store, doc_id: str, dpi: int = 100) -> Path:
-    document = load_document(conn, doc_id)
+def build_report(
+    artifacts: Artifacts, conn: Store, doc_id: str, *, session_id: str, dpi: int = 100
+) -> Artifact:
+    # Las tres lecturas van con la sesión (`SESSION-SCOPED-DATA`). Este módulo se quedó sin
+    # pasarla cuando la columna se agregó, y como el corte lo fija un test que lee **el SQL**, un
+    # llamado con la firma vieja no lo tocaba: `report` levantaba TypeError desde entonces.
+    document = load_document(conn, doc_id, session_id=session_id)
     if document is None:
         raise KeyError(f"document {doc_id} has not been ingested")
-    blocks = load_blocks(conn, doc_id)
-    page_classes = {entry["page"]: entry for entry in load_page_classes(conn, doc_id)}
-    markdown = markdown_artifact(config, doc_id).read_text()
+    blocks = load_blocks(conn, doc_id, session_id=session_id)
+    page_classes = {
+        entry["page"]: entry
+        for entry in load_page_classes(conn, doc_id, session_id=session_id)
+    }
+    markdown = artifacts.markdown(doc_id).read_text()
 
     by_page: dict[int, list[dict]] = {}
     for block in blocks:
@@ -79,18 +87,14 @@ def build_report(config: Config, conn: Store, doc_id: str, dpi: int = 100) -> Pa
         pages = [
             _page_section(
                 pdf[number - 1], number, page_classes.get(number),
-                by_page.get(number, []), markdown, dpi, number in gaps,
-                config.paths.work_dir,
+                by_page.get(number, []), markdown, dpi, number in gaps, artifacts,
             )
             for number in sorted(page_classes)
         ]
 
     needs_katex = any(block["block_type"] == "formula" for block in blocks)
     body = _header(document, blocks, markdown, gaps) + "\n".join(pages)
-    target = config.paths.work_dir / "reports" / f"{doc_id}.html"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(_document(document["id"], body, needs_katex), encoding="utf-8")
-    return target
+    return artifacts.report(doc_id).write_text(_document(document["id"], body, needs_katex))
 
 
 def _document(title: str, body: str, needs_katex: bool) -> str:
@@ -148,12 +152,12 @@ def _header(document: dict, blocks: list[dict], markdown: str, gaps: set[int]) -
 
 def _page_section(
     page: pymupdf.Page, number: int, page_class: dict | None, blocks: list[dict],
-    markdown: str, dpi: int, table_gap: bool, work_dir: Path,
+    markdown: str, dpi: int, table_gap: bool, artifacts: Artifacts,
 ) -> str:
     render = page.get_pixmap(dpi=dpi).tobytes("png")
     encoded = base64.b64encode(render).decode("ascii")
     rendered_blocks = (
-        "".join(_block_html(block, work_dir) for block in blocks)
+        "".join(_block_html(block, artifacts) for block in blocks)
         or "<p><em>no blocks</em></p>"
     )
     slice_ = _markdown_slice(markdown, blocks)
@@ -191,7 +195,7 @@ def _format(value) -> str:
     return str(value)
 
 
-def _block_html(block: dict, work_dir: Path) -> str:
+def _block_html(block: dict, artifacts: Artifacts) -> str:
     kind = block["block_type"]
     classes = f"block {kind}" + (" boilerplate" if block["is_boilerplate"] else "")
     span = (
@@ -205,16 +209,16 @@ def _block_html(block: dict, work_dir: Path) -> str:
     )
     return (
         f"<div class='{classes}'><span class='tag'>{html.escape(tag)}</span>"
-        f"<div class='body'>{_body_html(block, work_dir)}</div></div>"
+        f"<div class='body'>{_body_html(block, artifacts)}</div></div>"
     )
 
 
-def _body_html(block: dict, work_dir: Path) -> str:
+def _body_html(block: dict, artifacts: Artifacts) -> str:
     kind = block["block_type"]
     if kind == "figure":
-        asset = _resolve_asset(block["asset_path"], work_dir)
-        if asset and asset.exists():
-            encoded = base64.b64encode(asset.read_bytes()).decode("ascii")
+        crop = _crop(artifacts, block["asset_path"])
+        if crop is not None:
+            encoded = base64.b64encode(crop).decode("ascii")
             return f"<img alt='figure' src='data:image/png;base64,{encoded}'>"
         return "<em>figure crop missing</em>"
     if kind == "table":
@@ -226,12 +230,16 @@ def _body_html(block: dict, work_dir: Path) -> str:
     return html.escape(block["text"])
 
 
-def _resolve_asset(asset_path: str | None, work_dir: Path) -> Path | None:
-    """Asset paths are stored relative to the work directory so the Markdown stays portable."""
+def _crop(artifacts: Artifacts, asset_path: str | None) -> bytes | None:
+    """El recorte de una figura, o `None` si no está.
+
+    `asset_path` es la clave del artefacto, no una ruta: una ruta absoluta metería el filesystem
+    de la máquina que parseó en el Markdown, que se exporta y se anota en otra.
+    """
     if not asset_path:
         return None
-    path = Path(asset_path)
-    return path if path.is_absolute() else work_dir / path
+    crop = artifacts.of(asset_path)
+    return crop.read_bytes() if crop.exists() else None
 
 
 def _table_html(markdown: str) -> str:

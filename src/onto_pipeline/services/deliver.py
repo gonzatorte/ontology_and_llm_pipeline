@@ -188,17 +188,22 @@ def telemetry(workspace: Workspace) -> Telemetry:
     return Telemetry(stages=stages, page_classes=page_classes, failures=failures)
 
 
-def reports(workspace: Workspace, *, doc_id: str | None = None) -> list[Path]:
+def reports(workspace: Workspace, *, doc_id: str | None = None) -> list[Artifact]:
     """`DELIVERABLES-PENDING-PARSER-EVAL`: HTML autocontenido para evaluar el parseo a mano."""
+    session = workspace.require_session()
     ids = [doc_id] if doc_id else [
         row["id"] for row in workspace.conn.execute(
-            "SELECT id FROM documents WHERE session_id = ? ORDER BY id",
-            (workspace.require_session(),),
+            "SELECT id FROM documents WHERE session_id = ? ORDER BY id", (session,),
         )
     ]
     if not ids:
         raise StageError("nothing ingested yet")
-    return [build_report(workspace.config, workspace.conn, identifier) for identifier in ids]
+    return [
+        build_report(
+            workspace.artifacts, workspace.conn, identifier, session_id=session,
+        )
+        for identifier in ids
+    ]
 
 
 def chunks(workspace: Workspace, doc_id: str) -> list:

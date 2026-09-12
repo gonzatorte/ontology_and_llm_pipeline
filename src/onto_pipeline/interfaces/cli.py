@@ -40,6 +40,10 @@ UseCaseNameOption = typer.Option(
     ..., "--use-case", help="Directorio bajo `use_cases/`: el par (ontología inicial, corpus)."
 )
 SessionNameOption = typer.Option("", "--name", help="Un nombre para acordarse, opcional.")
+OutDirOption = typer.Option(
+    None, "--out", metavar="<dir>",
+    help="Copiar además a esta carpeta local: el archivo es el entregable.",
+)
 SessionArgument = typer.Argument(None, help="Por defecto, la sesión actual.")
 SessionOption = typer.Option(
     None, "--session",
@@ -192,6 +196,24 @@ def _workspace(config_path: Path) -> Workspace:
     return Workspace.open(config_path, session_id=_CHOSEN["session"])
 
 
+def _deliver(artifacts, out: Path | None) -> None:
+    """Decir dónde quedó cada artefacto, y copiarlo si pidieron una carpeta.
+
+    Hay salidas cuyo entregable **es** el archivo: un HTML que se abre en el navegador, el par
+    de brat que se carga en la herramienta. El artefacto sigue siendo el original —está en el
+    almacén como todo lo demás—; `--out` es una copia para el que corre en su máquina, igual
+    que en `export`. Que el core escriba a una clave y la interfaz materialice es lo que evita
+    que la terminal sea menos cómoda por estar el almacén de por medio.
+    """
+    for artifact in artifacts:
+        console.print(f"[green]escrito[/] {artifact}")
+    if out is None:
+        return
+    out.mkdir(parents=True, exist_ok=True)
+    for artifact in artifacts:
+        console.print(f"[dim]copiado a {artifact.materialize(out)}[/]")
+
+
 # ─────────────────────────────  PREP  ─────────────────────────────
 
 
@@ -211,10 +233,13 @@ def ingest_cmd(
 
 
 @app.command()
-def report(config_path: Path = ConfigOption, doc_id: str | None = DocIdOption) -> None:
+def report(
+    config_path: Path = ConfigOption,
+    doc_id: str | None = DocIdOption,
+    out: Path | None = OutDirOption,
+) -> None:
     """DELIVERABLES-PENDING-PARSER-EVAL: self-contained HTML for manual parser evaluation."""
-    for target in deliver.reports(_workspace(config_path), doc_id=doc_id):
-        console.print(f"[green]wrote[/] {target}")
+    _deliver(deliver.reports(_workspace(config_path), doc_id=doc_id), out)
 
 
 @app.command("normalize")
@@ -650,11 +675,16 @@ def calibrate_cmd(
 
 
 @app.command("annotate")
-def annotate_cmd(config_path: Path = ConfigOption, doc_id: str | None = DocIdOption) -> None:
+def annotate_cmd(
+    config_path: Path = ConfigOption,
+    doc_id: str | None = DocIdOption,
+    out: Path | None = OutDirOption,
+) -> None:
     """Build the annotation tool for the held-out documents (EVAL-PIPELINE)."""
-    render.annotation_tool(
-        console, evaluate.build_annotation_tool(_workspace(config_path), doc_id=doc_id)
-    )
+    result = evaluate.build_annotation_tool(_workspace(config_path), doc_id=doc_id)
+    render.annotation_tool(console, result)
+    if out is not None:
+        _deliver(result.written, out)
 
 
 @app.command("hold-out")
@@ -670,9 +700,15 @@ def hold_out(
 
 
 @app.command("export-annotations")
-def export_annotations(path: Path, config_path: Path = ConfigOption) -> None:
+def export_annotations(
+    path: Path, config_path: Path = ConfigOption, out: Path | None = OutDirOption
+) -> None:
     """DELIVERABLES-PENDING-BRAT-EXPORTER: retention-set JSONL to BRAT/INCEpTION."""
-    render.brat_export(console, evaluate.export_annotations(_workspace(config_path), path))
+    workspace = _workspace(config_path)
+    result = evaluate.export_annotations(workspace, path)
+    render.brat_export(console, result)
+    if out is not None:
+        _deliver(result.written, out)
 
 
 review_app = typer.Typer(help="Findings from PREP-NORMALIZE that are waiting for a decision.")

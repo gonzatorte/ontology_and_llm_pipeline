@@ -7,6 +7,7 @@ import pytest
 from rdflib import Graph
 
 from onto_pipeline import annotate
+from onto_pipeline.artifacts import Artifacts
 from onto_pipeline.db import connect
 from onto_pipeline.ingest import (
     held_out_documents,
@@ -44,29 +45,29 @@ def test_page_index_skips_blocks_with_no_span():
     assert annotate.page_index(blocks) == [[0, 10, 1], [12, 30, 2]]
 
 
-def test_the_tool_embeds_the_markdown_verbatim(tmp_path):
+def test_the_tool_embeds_the_markdown_verbatim(object_store):
     """The offsets index this string character for character, so anything that rewrote it
     would silently shift every annotation."""
     markdown = 'A <table> & "quotes" — ünïcode\n\nsecond paragraph'
     target = annotate.build(
         doc_id="doc1", markdown=markdown, markdown_hash="sha256:abc",
         classes=annotate.inventory_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
-        pages=[[0, 46, 1]], target=tmp_path / "doc1.html",
+        pages=[[0, 46, 1]], target=Artifacts(object_store, "s1").annotation_tool("doc1"),
     )
-    html = target.read_text(encoding="utf-8")
+    html = target.read_text()
     body = re.search(r'<div id="text">(.*?)</div>', html, re.DOTALL).group(1)
     unescaped = body.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
     assert unescaped == markdown
 
 
-def test_the_payload_carries_what_the_export_has_to_reproduce(tmp_path):
+def test_the_payload_carries_what_the_export_has_to_reproduce(object_store):
     target = annotate.build(
         doc_id="doc1", markdown="text", markdown_hash="sha256:abc",
         classes=annotate.inventory_classes(Graph().parse(data=ONTOLOGY, format="turtle")),
-        pages=[[0, 4, 1]], target=tmp_path / "doc1.html",
+        pages=[[0, 4, 1]], target=Artifacts(object_store, "s1").annotation_tool("doc1"),
     )
 
-    html = target.read_text(encoding="utf-8")
+    html = target.read_text()
     payload = json.loads(re.search(r"const DATA = (\{.*?\});", html, re.DOTALL).group(1))
     assert payload["doc_id"] == "doc1"
     assert payload["markdown_hash"] == "sha256:abc"

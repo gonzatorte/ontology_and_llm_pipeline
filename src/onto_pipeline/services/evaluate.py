@@ -7,7 +7,7 @@ ontología: contestan qué tan bien anda lo que las otras produjeron.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from rdflib import Graph
@@ -25,6 +25,8 @@ from .. import (
     use_cases,
     versioning,
 )
+from .. import artifacts as artifacts_module
+from ..artifacts import Artifact
 from ..ingest import (
     held_out_documents,
     load_blocks,
@@ -166,7 +168,7 @@ def hold_out(workspace: Workspace, doc_ids: list[str], *, release: bool = False)
 
 @dataclass
 class AnnotationTool:
-    written: list[Path]
+    written: list[Artifact]
     missing: list[str]
     classes: int
     glossed: int
@@ -179,7 +181,7 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
     corpus nunca sale de la máquina.
     """
     session = workspace.require_session()
-    config, conn = workspace.config, workspace.conn
+    conn = workspace.conn
     ids = [doc_id] if doc_id else held_out_documents(conn, session_id=session)
     if not ids:
         raise StageError(
@@ -203,7 +205,7 @@ def build_annotation_tool(workspace: Workspace, *, doc_id: str | None = None) ->
             markdown_hash=document["markdown_hash"],
             classes=classes,
             pages=annotate.page_index(load_blocks(conn, identifier, session_id=session)),
-            target=config.paths.work_dir / "annotate" / f"{identifier}.html",
+            target=workspace.artifacts.annotation_tool(identifier),
         ))
     return AnnotationTool(
         written=written, missing=missing, classes=len(classes),
@@ -222,18 +224,20 @@ class ExportedDocument:
 
 @dataclass
 class BratExport:
-    out_dir: Path
+    prefix: str
     documents: list[ExportedDocument]
+    written: list[Artifact] = field(default_factory=list)
 
 
 def export_annotations(workspace: Workspace, path: Path) -> BratExport:
     """`DELIVERABLES-PENDING-BRAT-EXPORTER`: JSONL del conjunto de retención a BRAT/INCEpTION,
     validado contra el Markdown en disco."""
     session = workspace.require_session()
-    config, conn = workspace.config, workspace.conn
-    out_dir = config.paths.work_dir / "brat"
+    conn = workspace.conn
+    artifacts = workspace.artifacts
 
     documents: list[ExportedDocument] = []
+    written: list[Artifact] = []
     for document in annotation.read_jsonl(path):
         stored = load_document(conn, document.doc_id, session_id=session)
         if stored is None:
@@ -245,13 +249,16 @@ def export_annotations(workspace: Workspace, path: Path) -> BratExport:
         except annotation.OffsetMismatch as exc:
             documents.append(ExportedDocument(document.doc_id, error=str(exc)))
             continue
-        annotation.export_brat(document, markdown, out_dir)
+        written.extend(annotation.export_brat(document, markdown, artifacts))
         documents.append(ExportedDocument(
             doc_id=document.doc_id, mentions=len(document.mentions),
             in_inventory=sum(1 for mention in document.mentions if mention.in_inventory),
             relations=len(document.relations),
         ))
-    return BratExport(out_dir=out_dir, documents=documents)
+    return BratExport(
+        prefix=f"{artifacts.prefix}/{artifacts_module.BRAT}",
+        documents=documents, written=written,
+    )
 
 
 # ─────────────────────────────  review: lo que espera decisión  ─────────────────────
@@ -296,7 +303,7 @@ class Sweep:
     described: list
     reports: list
     distributions: list[tuple[str, object]]
-    path: Path
+    path: Artifact
 
 
 def calibrate(
@@ -376,8 +383,7 @@ def calibrate(
             reports.extend(runs)
             distributions.append((label, runs[0].distribution))
 
-    path = config.paths.work_dir / "calibration" / f"{name}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = workspace.artifacts.calibration(name)
     path.write_text(
         json.dumps(
             [
