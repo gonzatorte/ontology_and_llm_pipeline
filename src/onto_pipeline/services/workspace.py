@@ -208,6 +208,18 @@ class Workspace:
         except StageError:
             return None
 
+    # Lo que `orchestration.survey` recibe cuando todavía no hay ninguna versión. No es un id:
+    # es lo que se muestra, y por eso vive en un solo lugar — las tres interfaces preguntan el
+    # plan y las tres tienen que decir lo mismo.
+    NO_VERSION = "(sin versión todavía)"
+
+    def plan_version(self, version: str | None = None) -> str:
+        """La versión contra la que se arma el plan. Sin ninguna todavía no es un error: es el
+        estado de un almacén recién creado, y el plan es justamente lo que dice qué hacer."""
+        if version:
+            return version
+        return self.latest_version() or self.NO_VERSION
+
     def graph(self, version_id: str) -> Graph:
         return versioning.load(self.conn, version_id)[1]
 

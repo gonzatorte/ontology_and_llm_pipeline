@@ -151,6 +151,21 @@ class Store:
         )
         return {row["column_name"] for row in rows}
 
+    @property
+    def integrity_error(self) -> type[Exception]:
+        """La excepción de violación de restricción, que cada driver nombra a su modo.
+
+        Vive acá por la invariante 10: quien encola un job atrapa «esta sesión ya tiene uno» sin
+        saber contra qué motor corre. Ojo con lo que dice `table_exists`: en Postgres la
+        sentencia que falla aborta la transacción, así que quien la atrape tiene que hacer
+        `rollback` antes de seguir usando la conexión.
+        """
+        if self.backend == SQLITE:
+            return sqlite3.IntegrityError
+        import psycopg  # noqa: PLC0415 — extra opcional, como en `open_postgres`
+
+        return psycopg.errors.IntegrityError
+
     def commit(self) -> None:
         self._raw.commit()
 

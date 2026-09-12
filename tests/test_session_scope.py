@@ -23,7 +23,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "src" / "onto_pipeline"
 SCOPED = (
     "documents", "blocks", "page_classification", "mentions", "versions",
     "competency_questions", "cq_results", "decisions", "assertion_marks", "grey_decisions",
-    "review_items",
+    "review_items", "jobs",
 )
 
 _STATEMENT = re.compile(
@@ -52,8 +52,10 @@ def touches(sql: str, table: str) -> bool:
 
 
 # Un id de versión es `<sesión>:v<N>`, único globalmente: filtrar por él ya acota la sesión, y
-# es lo que deja que las seis tablas colgadas de `version_id` no lleven columna propia.
+# es lo que deja que las seis tablas colgadas de `version_id` no lleven columna propia. El id de
+# un job es un uuid, también único: tocar **una** fila por id no puede alcanzar a otra sesión.
 _BY_VERSION_ID = re.compile(r"\b(id|version_id|parent_id)\s*=\s*\?", re.IGNORECASE)
+_UNIQUE_ROW_ID = ("versions", "jobs")
 
 
 # La única consulta que lee una tabla por sesión sin filtrar, porque lee la tabla **anterior** a
@@ -62,12 +64,22 @@ _BY_VERSION_ID = re.compile(r"\b(id|version_id|parent_id)\s*=\s*\?", re.IGNORECA
 _BEFORE_SESSIONS = ("SELECT * FROM review_items",)
 
 
+# La cola de jobs es lo único que se mira entre sesiones, y tiene que serlo: un worker reclama el
+# job más viejo **de cualquiera**, porque atender a una sesión sola sería no tener cola. El
+# reclamo escribe por `id`, que es único, y el barrido de arranque cierra lo que quedó colgado de
+# un proceso muerto — las dos cosas son del proceso y no de una sesión.
+_QUEUE_WIDE = (
+    "SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at, id LIMIT 20",
+    "SELECT id FROM jobs WHERE status = 'running'",
+)
+
+
 def test_every_query_on_a_per_session_table_filters_by_the_session():
     offenders = []
     for path, sql in statements():
-        if "session_id" in sql or sql in _BEFORE_SESSIONS:
+        if "session_id" in sql or sql in _BEFORE_SESSIONS or sql in _QUEUE_WIDE:
             continue
-        if touches(sql, "versions") and _BY_VERSION_ID.search(sql):
+        if any(touches(sql, table) for table in _UNIQUE_ROW_ID) and _BY_VERSION_ID.search(sql):
             continue
         for table in SCOPED:
             if touches(sql, table):

@@ -249,7 +249,7 @@ def test_the_enriched_ontology_carries_the_induced_class_and_its_provenance(pipe
 
     delivered = deliver.export(workspace)
     graph = Dataset()
-    graph.parse(delivered.path, format="trig")
+    graph.parse(data=delivered.path.read_text(), format="trig")
 
     labels = {str(o) for _, p, o, _ in graph.quads((None, SKOS.prefLabel, None, None))}
     assert "Field Note" in labels, "la clase inducida no llegó al archivo"
@@ -257,6 +257,6 @@ def test_the_enriched_ontology_carries_the_induced_class_and_its_provenance(pipe
                if isinstance(s, URIRef)}
     assert len(classes) == 5, "las tres iniciales más las dos inducidas"
 
-    manifest = json.loads(delivered.manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(delivered.manifest_path.read_text())
     assert manifest["lineage"][-1].endswith(":v0")
     assert manifest["classes_in_the_root_version"] == 3

@@ -26,6 +26,7 @@ Hence REJECTED / INCONCLUSIVE, never OK.
 from __future__ import annotations
 
 import glob
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +40,11 @@ SKIPPED = "SKIPPED"
 PROFILES = ("OWL2_EL", "OWL2_QL", "OWL2_RL", "OWL2_DL", "OWL2_FULL")
 
 _jvm_started = False
+# Arrancar la JVM es una vez por proceso, y con más de un worker hay más de un hilo que puede
+# intentarlo primero: sin el candado, los dos ven `isJVMStarted()` en falso y el segundo se
+# encuentra con una JVM a medio arrancar. No es hipotético — es lo que pasa con
+# `api.worker_count > 1` y dos sesiones validando a la vez.
+_jvm_lock = threading.Lock()
 
 
 class ReasonerUnavailable(RuntimeError):
@@ -93,9 +99,10 @@ def start_jvm(lib_dir: Path) -> None:
     jars = sorted(glob.glob(str(Path(lib_dir) / "*.jar")))
     if not jars:
         raise ReasonerUnavailable(f"no jars under {lib_dir}; run scripts/fetch-jars.sh")
-    if not jpype.isJVMStarted():
-        jpype.startJVM(classpath=jars)
-    _jvm_started = True
+    with _jvm_lock:
+        if not _jvm_started and not jpype.isJVMStarted():
+            jpype.startJVM(classpath=jars)
+        _jvm_started = True
 
 
 def _offending_axioms(profile, ontology) -> set[str]:
