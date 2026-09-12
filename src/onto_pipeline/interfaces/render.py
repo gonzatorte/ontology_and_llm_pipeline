@@ -62,6 +62,8 @@ def normalization(console: Console, result: prep.Normalization) -> None:
     for kind, count in sorted(result.kinds.items()):
         summary.add_row(kind, str(count))
     summary.add_row("classes awaiting a gloss", str(result.pending_glosses))
+    if result.carried_glosses:
+        summary.add_row("glosses carried over", str(result.carried_glosses))
     summary.add_row("review: new findings", str(result.review_added))
     summary.add_row("review: already decided or open", str(result.review_known))
     summary.add_row("review: superseded", str(result.review_superseded))

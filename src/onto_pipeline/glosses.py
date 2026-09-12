@@ -90,6 +90,30 @@ def parse(text: str, payload: dict[str, str]) -> dict[str, str]:
     return {"en": str(data["en"]).strip(), "es": str(data["es"]).strip()}
 
 
+def carry_over(previous: Graph, graph: Graph) -> int:
+    """The glosses a previous version already has, onto a freshly derived graph.
+
+    `normalize_initial_ontology` re-reads the seed from disk, so re-normalizing produces a graph
+    with no `skos:definition` at all. Serializing that over the artifact — or committing it —
+    drops every gloss until someone runs the bootstrap again, and the matcher compares against
+    names in the meantime. Opaque IRIs are a uuid5 of the original, so they line up across
+    derivations and the definitions can simply be carried.
+
+    A definition already in `graph` wins: a re-glossed or enriched entity is not overwritten
+    with an older sentence.
+    """
+    # Which subjects already have one is read before writing any: a gloss is two literals, one
+    # per language, and checking as we go would carry the first and skip the second.
+    defined = {subject for subject, _, _ in graph.triples((None, SKOS.definition, None))}
+    carried = 0
+    for subject, _, obj in previous.triples((None, SKOS.definition, None)):
+        if subject in defined:
+            continue
+        graph.add((subject, SKOS.definition, obj))
+        carried += 1
+    return carried
+
+
 def write(graph: Graph, glosses: list[Gloss]) -> None:
     for gloss in glosses:
         iri = URIRef(gloss.iri)

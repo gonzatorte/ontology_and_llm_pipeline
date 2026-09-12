@@ -85,6 +85,7 @@ class Normalization:
     review_known: int
     review_superseded: int
     contexts: list = field(default_factory=list)
+    carried_glosses: int = 0
 
     @property
     def version_id(self) -> str:
@@ -138,10 +139,12 @@ def normalize(workspace: Workspace) -> Normalization:
         decisions=label_decisions(workspace),
     )
 
+    conn = workspace.conn
+    carried = _carry_glosses(workspace, seed.graph)
+
     target = workspace.artifacts.normalized_ontology()
     target.write_text(seed.graph.serialize(format="turtle"))
 
-    conn = workspace.conn
     state = versioning.state_hash(seed.graph)
     existing = versioning.find_by_hash(conn, state, session_id=session)
     committed = None
@@ -180,8 +183,22 @@ def normalize(workspace: Workspace) -> Normalization:
         seed=seed, target=target, kinds=kinds, pending_glosses=len(contexts),
         committed=committed, same_state_as=existing,
         review_added=sync.added, review_known=sync.already_known,
-        review_superseded=sync.superseded, contexts=contexts,
+        review_superseded=sync.superseded, contexts=contexts, carried_glosses=carried,
     )
+
+
+def _carry_glosses(workspace: Workspace, graph: Graph) -> int:
+    """Las definiciones que la versión más nueva ya tiene, sobre el grafo recién derivado.
+
+    Normalizar re-lee la semilla del disco: sin esto, re-normalizar una sesión ya glosada pisa
+    el artefacto con un grafo sin `skos:definition` y commitea una versión que las perdió — y el
+    matcher pasa a comparar contra nombres hasta que alguien vuelva a glosar.
+    """
+    latest = workspace.latest_version()
+    if latest is None:
+        return 0
+    _, previous = versioning.load(workspace.conn, latest)
+    return glosses.carry_over(previous, graph)
 
 
 @dataclass

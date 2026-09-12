@@ -177,6 +177,39 @@ def test_a_decided_label_reaches_the_dag_although_it_is_only_an_annotation(tmp_p
         "y volver a correrla no apila una versión por corrida"
 
 
+def test_re_normalizing_keeps_the_glosses_the_session_already_has(tmp_path):
+    """Normalizar re-lee la semilla del disco, así que el grafo derivado no tiene ninguna
+    definición. Sin acarrear las que ya están, cualquier `normalize` posterior al bootstrap de
+    glosas pisa el artefacto y commitea una versión sin ellas — y el matcher pasa a comparar
+    contra nombres, que es justo lo que la glosa existe para evitar.
+    """
+    from rdflib.namespace import SKOS as SKOS_NS
+
+    from onto_pipeline import glosses, versioning
+    from onto_pipeline.services import prep
+
+    workspace = _workspace(tmp_path)
+    workspace.config.paths.initial_ontology.write_text(_SEED_RDF, encoding="utf-8")
+    first = prep.normalize(workspace)
+    glossed = [
+        glosses.Gloss(iri=context.iri, en="what it is", es="lo que es")
+        for context in first.contexts
+    ]
+    assert glossed, "la semilla tiene clases sin definición"
+    glosses.write(first.seed.graph, glossed)
+    versioning.commit(
+        workspace.conn, first.seed.graph, version_id=workspace.next_version_id(),
+        parent_id=first.committed.id, note="glosses", session_id=SESSION,
+    )
+
+    second = prep.normalize(workspace)
+
+    assert second.carried_glosses == len(glossed) * 2, "en y es, por clase"
+    assert not second.pending_glosses, "y no vuelve a pedir las que ya están"
+    graph = versioning.load(workspace.conn, workspace.latest_version())[1]
+    assert set(graph.objects(None, SKOS_NS.definition)), "la versión más nueva las conserva"
+
+
 # ─────────────────────────  resolución de versión  ─────────────────────────
 
 
