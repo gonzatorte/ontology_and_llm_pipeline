@@ -52,11 +52,18 @@ COPY scripts/ scripts/
 COPY --from=jars /build/lib/ lib/
 
 # La configuración de verdad llega por entorno (`API-ENV-FIRST`): el archivo que viaja acá es el
-# de defaults, y lo que cambia en el despliegue son variables — `ONTO_PIPELINE_STORAGE_BACKEND`,
-# `ONTO_PIPELINE_STORAGE_BUCKET`, `ONTO_PIPELINE_DATABASE_BACKEND`, `ONTO_PIPELINE_DATABASE_DSN`.
-# El token de la API y la credencial del modelo son secretos y nunca están en un archivo.
-ENV ONTO_PIPELINE_STORAGE_BACKEND=s3 \
-    ONTO_PIPELINE_DATABASE_BACKEND=postgres
+# de defaults, y lo que cambia en el despliegue son variables. El token de la API y la credencial
+# del modelo son secretos y nunca están en un archivo.
+# `storage.backend` y `database.backend` no se declaran acá: ya son `s3` y `postgres` en el
+# config, porque son lo único soportado en runtime. Lo que **sí** hay que pasar en el despliegue
+# es a qué apuntan, y son secretos o dependen del entorno:
+#
+#   ONTO_PIPELINE_DATABASE_DSN      postgresql://usuario@host/base
+#   ONTO_PIPELINE_STORAGE_BUCKET    el bucket
+#   ONTO_PIPELINE_STORAGE_REGION    vacío deja que boto3 la resuelva
+#   ONTO_PIPELINE_STORAGE_ENDPOINT_URL   vacío es AWS; con valor, MinIO
+#   ONTO_PIPELINE_API_KEY           el token de `X-Auth-Key`
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY    o el rol de la tarea
 
 EXPOSE 8000
-CMD ["onto-pipeline", "serve", "--config", "config/default.yaml"]
+CMD ["onto-pipeline-api", "serve", "--config", "config/default.yaml"]

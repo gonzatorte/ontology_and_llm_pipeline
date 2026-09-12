@@ -20,7 +20,6 @@ import typer
 from rich.console import Console
 
 from .. import orchestration, sessions, versioning
-from ..config import Config
 from ..providers import load_env_file
 from ..services import StageError, Workspace, deliver, evaluate, iterate, prep
 from ..telemetry import StageAborted
@@ -1019,32 +1018,6 @@ def session_close(
     workspace = _workspace(config_path)
     closed = evaluate.close_session(workspace, session_id, note=comment)
     console.print(f"[green]cerrada[/] {closed.id}")
-
-
-@app.command("serve")
-def serve_cmd(
-    config_path: Path = ConfigOption,
-    host: str | None = typer.Option(None, "--host", help="Sobreescribe api.host."),
-    port: int | None = typer.Option(None, "--port", help="Sobreescribe api.port."),
-) -> None:
-    """La tercera interfaz: la misma capa de servicios, por HTTP.
-
-    Necesita el extra `api` (`uv sync --extra api`) y el token en el entorno: sin token no
-    arranca, porque una API que queda abierta no da ningún error y nadie se entera.
-    """
-    # Tarde y adentro: el extra es opcional, y quien corre una etapa suelta no tiene por qué
-    # tener fastapi instalado para que `--help` funcione.
-    import uvicorn
-
-    from .api import create_app
-
-    config = Config.load(config_path)
-    try:
-        app_instance = create_app(config_path)
-    except Exception as exc:  # noqa: BLE001 - lo que falta se dice, no se tracea
-        console.print(f"[red]{exc}[/]")
-        raise typer.Exit(code=2) from exc
-    uvicorn.run(app_instance, host=host or config.api.host, port=port or config.api.port)
 
 
 @app.command("wizard")

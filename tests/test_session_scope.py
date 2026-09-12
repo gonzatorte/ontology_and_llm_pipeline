@@ -71,6 +71,10 @@ _BEFORE_SESSIONS = ("SELECT * FROM review_items",)
 _QUEUE_WIDE = (
     "SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at, id LIMIT 20",
     "SELECT id FROM jobs WHERE status = 'running'",
+    # La vista de administración (`onto-pipeline-api jobs list`), que mira la cola entera a
+    # propósito: acotarla a una sesión sería no poder ver el estado del despliegue, que es para
+    # lo que existe ese comando. Filtrar por sesión es justamente su bandera `--session`.
+    "SELECT id FROM jobs ORDER BY created_at DESC LIMIT 50",
 )
 
 
