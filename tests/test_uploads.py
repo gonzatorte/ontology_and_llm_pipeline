@@ -11,10 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from onto_pipeline import sessions, uploads
+from onto_pipeline import sessions
 from onto_pipeline.db import connect
+from onto_pipeline.interfaces.api import uploads
+from onto_pipeline.interfaces.api.deps import workspace as api_workspace
 from onto_pipeline.objectstore import LocalObjectStore
-from onto_pipeline.services import StageError, Workspace
+from onto_pipeline.services import StageError
 
 
 @pytest.fixture
@@ -120,36 +122,38 @@ def test_materializing_keeps_the_corpus_structure(conn, store, tmp_path):
     assert ontology is not None and ontology.name == "ontology.ttl"
 
 
-def _workspace(tmp_path, conn, session_id: str) -> Workspace:
-    from onto_pipeline.config import Config
+def _config_file(tmp_path) -> Path:
+    """Un config de verdad en disco: la dependencia de la API abre el workspace desde el archivo,
+    como en un request."""
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "paths:\n"
+        f"  corpus_root: {tmp_path / 'no-existe'}\n"
+        f"  initial_ontology: {tmp_path / 'tampoco.rdf'}\n"
+        f"  work_dir: {tmp_path / 'work'}\n"
+        "storage:\n"
+        f"  backend: local\n  root: {tmp_path / 'objects'}\n",
+        encoding="utf-8",
+    )
+    return path
 
-    config = Config.model_validate({
-        "paths": {
-            "corpus_root": tmp_path / "no-existe",
-            "initial_ontology": tmp_path / "tampoco.rdf",
-            "work_dir": tmp_path / "work",
-        },
-        "storage": {"backend": "local", "root": str(tmp_path / "objects")},
-    })
-    return Workspace.of(config, conn, session_id=session_id)
 
-
-def test_the_inputs_of_an_upload_session_are_brought_down_before_a_stage_reads_them(
+def test_the_inputs_of_an_upload_session_are_brought_down_by_the_api_and_not_by_the_core(
     tmp_path, conn, store
 ):
-    """`ingest` recorre un directorio y el razonador abre archivos: sobre un upload hay que
-    bajarlo primero. Se baja una vez por workspace, y `paths` queda apuntando ahí."""
+    """El core sabe abrir un workspace sobre archivos; qué es un upload lo sabe la API. Baja el
+    material a un directorio efímero, apunta `paths` ahí —lo mismo que `--corpus-root` en el
+    CLI— y lo borra al terminar la unidad de trabajo."""
     upload = _upload(conn, store)
     created = sessions.create(conn, use_case=upload.use_case)
-    workspace = _workspace(tmp_path, conn, created.id)
+    conn.close()
 
-    directory = workspace.materialize_inputs()
+    with api_workspace(_config_file(tmp_path), created.id) as opened:
+        corpus = opened.config.paths.corpus_root
+        assert corpus.is_dir() and (corpus / "a.txt").exists()
+        assert opened.config.paths.initial_ontology.name == "ontology.ttl"
 
-    assert directory is not None
-    assert workspace.config.paths.corpus_root == directory / "corpus"
-    assert workspace.config.paths.initial_ontology.name == "ontology.ttl"
-    workspace.cleanup()
-    assert not directory.exists()
+    assert not corpus.exists(), "lo efímero se borra al cerrar"
 
 
 def test_a_stage_refuses_to_run_on_an_upload_that_is_still_incomplete(tmp_path, conn, store):
@@ -158,20 +162,21 @@ def test_a_stage_refuses_to_run_on_an_upload_that_is_still_incomplete(tmp_path, 
     upload = uploads.create(conn, name="x", filenames=["corpus/a.txt", "corpus/b.txt"])
     store.put(upload.key("corpus/a.txt"), b"a")
     created = sessions.create(conn, use_case=upload.use_case)
-    workspace = _workspace(tmp_path, conn, created.id)
+    conn.close()
 
-    with pytest.raises(StageError, match="falta"):
-        workspace.materialize_inputs()
+    with pytest.raises(StageError, match="falta"), api_workspace(
+        _config_file(tmp_path), created.id
+    ):
+        pass
 
 
 def test_a_published_use_case_is_left_alone(tmp_path, conn):
-    """Sobre un caso publicado no hay nada que bajar, y `paths` no se toca."""
+    """Sobre un caso publicado no hay nada que bajar, y `paths` queda como lo dejó el config."""
     created = sessions.create(conn, use_case="craft-cl")
-    workspace = _workspace(tmp_path, conn, created.id)
-    before = workspace.config.paths.corpus_root
+    conn.close()
 
-    assert workspace.materialize_inputs() is None
-    assert workspace.config.paths.corpus_root == before
+    with api_workspace(_config_file(tmp_path), created.id) as opened:
+        assert opened.config.paths.corpus_root.name == "no-existe"
 
 
 def test_the_seed_script_reads_a_use_case_the_way_the_pipeline_does(tmp_path):

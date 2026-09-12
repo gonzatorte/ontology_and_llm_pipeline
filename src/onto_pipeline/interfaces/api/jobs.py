@@ -34,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .store import POSTGRES, Store
+from ...store import POSTGRES, Store
 
 QUEUED = "queued"
 RUNNING = "running"
@@ -274,7 +274,7 @@ def execute(conn: Store, job: Job, run: Callable[[Job, Callable[[str], None]], d
 
 
 def _message(exc: Exception) -> str:
-    from .services import StageError
+    from ...services import StageError
 
     if isinstance(exc, StageError):
         return str(exc)

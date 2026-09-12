@@ -14,9 +14,6 @@ tres cosas va a pasar es justamente el punto.
 
 from __future__ import annotations
 
-import atexit
-import shutil
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,10 +78,6 @@ class Workspace:
     # (corpus, ontología) es un parámetro de la corrida y no una decisión de configuración.
     overrides: dict[str, Path] = field(default_factory=dict)
     _artifacts: Artifacts | None = field(default=None, repr=False)
-    # Dónde se bajó el upload de esta sesión, si corre sobre uno. Es del trabajo en curso y se
-    # borra al terminarlo: en la nube el disco se pierde igual, pero llenárselo al proceso
-    # mientras corre sí se nota.
-    _materialized: Path | None = field(default=None, repr=False)
 
     @classmethod
     def open(
@@ -133,18 +126,13 @@ class Workspace:
         Sin ellos se cae a lo que diga `paths`, y `ingest` dirá que no encuentra el corpus —
         que es la falla correcta y no una corrida silenciosa sobre otra cosa.
         """
-        from .. import sessions, uploads
+        from .. import sessions
 
         if not self.session_id or not sessions_table(self.conn):
             return
         try:
             session = sessions.load(self.conn, self.session_id)
         except sessions.UnknownSession:
-            return
-        if uploads.session_upload(session.use_case):
-            # Un upload no está en el filesystem hasta que alguien lo baje, y bajarlo en cada
-            # `Workspace.open` sería pagar el corpus entero para listar sesiones. Lo hace
-            # `materialize_inputs`, que llaman las dos etapas que leen material de entrada.
             return
         directory = self.config.paths.use_cases_root / session.use_case
         corpus = directory / "corpus"
@@ -251,55 +239,6 @@ class Workspace:
 
     def abox(self, version_id: str) -> Artifact:
         return self.artifacts.abox(version_id)
-
-    # ─────────────────────────  material de entrada  ─────────────────────────
-
-    def materialize_inputs(self) -> Path | None:
-        """Dejar el corpus y la ontología inicial donde una etapa pueda abrirlos.
-
-        Sobre un caso de uso publicado no hay nada que hacer: ya están en el filesystem. Sobre un
-        upload hay que bajarlos, porque `ingest.discover` recorre un directorio y el razonador
-        abre archivos. Se baja una vez por workspace y se borra con `cleanup`.
-
-        Falla si falta algún archivo prometido: el pre-signed PUT no avisa cuándo terminó de
-        subir, así que ingestar «lo que haya» sería correr sobre medio corpus sin decirlo.
-        """
-        from .. import sessions, uploads
-
-        if self._materialized is not None or not self.session_id:
-            return self._materialized
-        if not sessions_table(self.conn):
-            return None
-        try:
-            session = sessions.load(self.conn, self.session_id)
-        except sessions.UnknownSession:
-            return None
-        upload_id = uploads.session_upload(session.use_case)
-        if not upload_id:
-            return None
-        upload = uploads.load(self.conn, upload_id)
-        pending = uploads.missing(self.artifacts.store, upload)
-        if pending:
-            raise StageError(
-                f"al upload {upload_id} le faltan {len(pending)} archivo(s) por subir: "
-                + ", ".join(pending[:5])
-            )
-        directory = Path(tempfile.mkdtemp(prefix=f"onto-{upload_id}-"))
-        corpus, ontology = uploads.materialize(self.artifacts.store, upload, directory)
-        self.config.paths.corpus_root = corpus
-        if ontology is not None:
-            self.config.paths.initial_ontology = ontology
-        self._materialized = directory
-        # Quien corre un job llama a `cleanup` en cuanto termina; esto es para el que corre un
-        # comando y se va. Es idempotente, así que las dos cosas pueden pasar.
-        atexit.register(self.cleanup)
-        return directory
-
-    def cleanup(self) -> None:
-        """Lo efímero, borrado. Lo llama quien abrió el workspace al terminar el trabajo."""
-        if self._materialized is not None:
-            shutil.rmtree(self._materialized, ignore_errors=True)
-            self._materialized = None
 
     # ─────────────────────────  modelo y encoders  ─────────────────────────
 

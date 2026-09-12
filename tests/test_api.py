@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from onto_pipeline import jobs, uploads
-from onto_pipeline.interfaces.api import create_app
+from onto_pipeline.interfaces.api import create_app, jobs, uploads
 from onto_pipeline.interfaces.api.auth import HEADER, MissingToken
 from onto_pipeline.services import Workspace
 
@@ -273,7 +272,7 @@ def test_a_session_over_an_upload_is_created_by_id(client, config_path):
 def test_creating_a_session_over_an_upload_that_is_not_there_is_a_404(client):
     response = client.post("/sessions", json={"upload_id": "no-existe"}, headers=AUTH)
 
-    assert response.status_code == 400
+    assert response.status_code == 404
     assert "no hay upload" in response.json()["error"]
 
 

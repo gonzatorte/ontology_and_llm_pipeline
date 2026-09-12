@@ -26,8 +26,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .objectstore import ObjectStore, check_key
-from .store import Store
+from ...objectstore import ObjectStore, check_key
+from ...store import Store
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS uploads (

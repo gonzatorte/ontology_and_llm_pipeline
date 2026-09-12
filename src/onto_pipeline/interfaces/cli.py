@@ -38,10 +38,7 @@ IterationOption = typer.Option(0, "--iteration", "-i")
 VersionOption = typer.Option(None, "--version", help="Default: the newest version.")
 EnvFileOption = typer.Option(None, "--env-file", help="Env file with the provider credential.")
 UseCaseNameOption = typer.Option(
-    "", "--use-case", help="Directorio bajo `use_cases/`: el par (ontología inicial, corpus)."
-)
-UploadIdOption = typer.Option(
-    "", "--upload", help="Id de un upload: el mismo par, subido en vez de publicado."
+    ..., "--use-case", help="Directorio bajo `use_cases/`: el par (ontología inicial, corpus)."
 )
 SessionNameOption = typer.Option("", "--name", help="Un nombre para acordarse, opcional.")
 SessionArgument = typer.Argument(None, help="Por defecto, la sesión actual.")
@@ -943,19 +940,20 @@ def session_list(config_path: Path = ConfigOption) -> None:
 def session_new(
     config_path: Path = ConfigOption,
     use_case: str = UseCaseNameOption,
-    upload: str = UploadIdOption,
     name: str = SessionNameOption,
 ) -> None:
-    """Crear una sesión sobre un caso de uso o sobre un upload, y dejarla como la actual.
+    """Crear una sesión sobre un caso de uso, y dejarla como la actual.
 
-    Las dos cosas son el par (ontología inicial, corpus): uno publicado en `use_cases/`, el otro
-    subido. Es material de entrada y se comparte — dos sesiones sobre el mismo son la
-    comparación que este proyecto existe para poder hacer.
+    El caso de uso es el par (ontología inicial, corpus) que vive en `use_cases/`. Es material
+    de entrada y se comparte: dos sesiones sobre el mismo son la comparación que este proyecto
+    existe para poder hacer. Un corpus subido por la API se elige desde la API, no desde acá:
+    este CLI es para enriquecer una ontología, no para administrar un despliegue.
     """
     workspace = Workspace.open(config_path)
-    created = evaluate.new_session(
-        workspace, use_case=use_case, upload_id=upload, name=name
-    )
+    created = evaluate.new_session(workspace, use_case=use_case, name=name)
+    # Crear no es elegir: el marcador de sesión actual es de esta interfaz, y la API —que
+    # direcciona por id— no tiene ninguna.
+    evaluate.use_current(workspace, created.id)
     console.print(
         f"[green]creada[/] {created.id}"
         + (f" ({created.name})" if created.name else "")

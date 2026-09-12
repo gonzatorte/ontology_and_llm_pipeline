@@ -18,8 +18,9 @@ import threading
 
 import pytest
 
-from onto_pipeline import jobs, store
+from onto_pipeline import store
 from onto_pipeline.db import connect, prepare
+from onto_pipeline.interfaces.api import jobs
 
 DSN = os.environ.get("ONTO_PIPELINE_TEST_DSN", "")
 

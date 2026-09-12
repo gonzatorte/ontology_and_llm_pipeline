@@ -47,8 +47,6 @@ def ingest(
 ) -> Ingestion:
     """`PREP-CLASSIFY`+`PREP-PARSE`: clasificar páginas, parsear, poblar bloques y Markdown."""
     session = workspace.require_session()
-    # Sobre un upload, el corpus está en el almacén y hay que bajarlo antes de recorrerlo.
-    workspace.materialize_inputs()
     paths = (
         [path.resolve() for path in documents] if documents
         else discover(workspace.config.paths.corpus_root)
@@ -131,8 +129,6 @@ def normalize(workspace: Workspace) -> Normalization:
     aparte que la interfaz decide si corre.
     """
     session = workspace.require_session()
-    # La ontología inicial de un upload viaja con su corpus, así que se baja igual que él.
-    workspace.materialize_inputs()
     config = workspace.config
     seed = normalize_initial_ontology(
         config.paths.initial_ontology,

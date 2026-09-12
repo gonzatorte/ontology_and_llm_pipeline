@@ -17,10 +17,10 @@ from fastapi import Depends, FastAPI, status
 from fastapi.responses import JSONResponse
 
 from ... import artifacts as artifacts_module
-from ... import jobs, orchestration, sessions, uploads
+from ... import orchestration, sessions
 from ...config import Config
 from ...services import StageError, Workspace, catalog, evaluate, iterate
-from . import auth
+from . import auth, jobs, uploads
 from .deps import workspace as workspace_for
 from .models import (
     ArtifactOut,
@@ -182,10 +182,25 @@ def _install_routes(app: FastAPI, config_path: Path, protected: list) -> None:
 
     @app.post("/sessions", dependencies=protected, status_code=status.HTTP_201_CREATED)
     def create_session(body: NewSession) -> SessionOut:
+        """Sobre un caso publicado o sobre un upload: los dos son el par (corpus, ontología) y
+        conviven sin distinción (`API-UPLOADED-AND-PUBLISHED`).
+
+        Quién resuelve cuál es distinto, y a propósito: el caso publicado lo valida el servicio,
+        que es el que sabe qué hay en `use_cases/`; el upload lo resuelve esta capa, porque el
+        core no sabe qué es un upload.
+        """
+        if bool(body.use_case) == bool(body.upload_id):
+            raise StageError("una sesión corre sobre un caso de uso o sobre un upload")
         with workspace_for(config_path) as opened:
-            created = evaluate.new_session(
-                opened, use_case=body.use_case, upload_id=body.upload_id, name=body.name
-            )
+            if body.upload_id:
+                upload = uploads.load(opened.conn, body.upload_id)
+                created = sessions.create(
+                    opened.conn, use_case=upload.use_case, name=body.name
+                )
+            else:
+                created = evaluate.new_session(
+                    opened, use_case=body.use_case, name=body.name
+                )
             return _session_out(created)
 
     @app.get("/sessions", dependencies=protected)
