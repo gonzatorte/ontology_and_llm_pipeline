@@ -137,16 +137,60 @@ def load_ontology(path: Path, *, reasoner_lib: Path | None = None) -> Graph:
         ) from exc
 
 
+@dataclass(frozen=True)
+class LabelDecisions:
+    """Lo ya decidido sobre las etiquetas, como **entrada** de la normalización.
+
+    Normalizar es función determinista de la ontología que está en disco: una corrección escrita
+    encima de la versión commiteada desaparece en la próxima corrida y nadie se entera. Entrando
+    por acá se vuelve a aplicar sola, el resultado sigue siendo reproducible, y la decisión —que
+    es lo único que no se puede recomputar— vive donde se tomó.
+
+    Qué significa cada una, y las dos son «el hallazgo se sostiene»:
+
+    `typo_fixes`         una errata aceptada. La palabra se corrige en las etiquetas de esa
+                         entidad, nunca en el identificador: después de `PREP-NORMALIZE-IRIS` el
+                         identificador no carga significado.
+    `dropped_derived`    una divergencia aceptada: el nombre que sale del identificador **no** es
+                         otro nombre de este concepto, así que se descarta en vez de quedar como
+                         una etiqueta más contra la que el matcher compara.
+    """
+
+    typo_fixes: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
+    dropped_derived: frozenset[str] = frozenset()
+
+
+def _corrected(text: str, fixes: list[tuple[str, str]]) -> str:
+    """El texto con las erratas aceptadas ya aplicadas, palabra por palabra.
+
+    Se respeta la mayúscula inicial de lo que había: `Subre` corregido con `sobre` da `Sobre`, y
+    cambiarle la capitalización a la etiqueta sería una segunda corrección que nadie pidió.
+    """
+    if not fixes:
+        return text
+    words = text.split(" ")
+    for index, word in enumerate(words):
+        for token, suggestion in fixes:
+            if word.lower() == token.lower():
+                words[index] = (
+                    suggestion[:1].upper() + suggestion[1:] if word[:1].isupper() else suggestion
+                )
+                break
+    return " ".join(words)
+
+
 def normalize_initial_ontology(
     path: Path, base_iri: str, *, divergence_threshold: float,
     reasoner_lib: Path | None = None,
+    decisions: LabelDecisions | None = None,
 ) -> NormalizedOntology:
     source = load_ontology(path, reasoner_lib=reasoner_lib)
     mapping = _mint_opaque_iris(source, base_iri)
     graph = _rewrite(source, mapping)
+    decisions = decisions or LabelDecisions()
 
     entities = [
-        _entity(graph, URIRef(new), str(old), divergence_threshold)
+        _entity(graph, URIRef(new), str(old), divergence_threshold, decisions)
         for old, new in mapping.items()
     ]
     entities.sort(key=lambda entity: entity.original_iri)
@@ -186,30 +230,43 @@ def _rewrite(graph: Graph, mapping: dict[URIRef, str]) -> Graph:
     return rewritten
 
 
-def _entity(graph: Graph, iri: URIRef, original_iri: str, threshold: float) -> Entity:
+def _entity(
+    graph: Graph, iri: URIRef, original_iri: str, threshold: float,
+    decisions: LabelDecisions | None = None,
+) -> Entity:
+    decisions = decisions or LabelDecisions()
     kind = next(
         (_KINDS[obj] for obj in graph.objects(iri, RDF.type) if obj in _KINDS), CLASS
     )
     entity = Entity(iri=str(iri), original_iri=original_iri, kind=kind)
 
-    derived = terms.denormalize(terms.local_name(original_iri))
-    entity.labels.append(
-        Label(text=derived, language=terms.guess_language(derived), source="iri")
-    )
+    fixes = decisions.typo_fixes.get(str(iri), [])
+    derived = _corrected(terms.denormalize(terms.local_name(original_iri)), fixes)
     declared = [
         Label(
-            text=str(literal),
+            text=_corrected(str(literal), fixes),
             language=str(literal.language) if literal.language else
-            terms.guess_language(str(literal)),
+            terms.guess_language(_corrected(str(literal), fixes)),
             source="declared",
         )
         for literal in graph.objects(iri, RDFS.label)
         if isinstance(literal, Literal)
     ]
+
+    # Una divergencia aceptada dice que el nombre del identificador no es un nombre de este
+    # concepto: se descarta, y con él se va el hallazgo, porque volver a preguntar lo ya
+    # contestado es lo que esta entrada evita. Salvo que sea el único nombre que hay — una
+    # entidad sin etiqueta desaparece del matcher, que es peor que una etiqueta discutida.
+    dropped = str(iri) in decisions.dropped_derived and bool(declared)
+    if not dropped:
+        entity.labels.append(
+            Label(text=derived, language=terms.guess_language(derived), source="iri")
+        )
     entity.labels.extend(declared)
 
     entity.preferred = declared[0].text if declared else derived
-    _assess_divergence(entity, derived, declared, threshold)
+    if not dropped:
+        _assess_divergence(entity, derived, declared, threshold)
     return entity
 
 

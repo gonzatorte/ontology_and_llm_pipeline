@@ -551,15 +551,19 @@ Lo que haría falta ver antes de contestar, y de dónde sale:
 - **Dónde se usa la entidad**: superclases, subclases, dominio y rango, disjunciones.
   `initial_ontology.GlossContext` ya calcula exactamente ese vecindario para las glosas.
 
-Dos hechos que pesan sobre cuánto invertir, verificados el 2026-09-11:
+Dos hechos que pesaban sobre cuánto invertir, y los dos cambiaron el 2026-09-12:
 
-- **Ningún código lee la decisión.** `review.py` lo dice —«the decision is recorded, acting on
-  it is a separate step»— y ese paso no existe para ninguno de los tres tipos de
-  `PREP-NORMALIZE` (divergencia, chequeo semántico pendiente, errata). El spec sí dice que las
-  correcciones de erratas «se aplican a las etiquetas».
-- **El matcher no ve la etiqueta que sale del IRI** cuando hay una declarada:
-  `typing_store.targets_from` lee `skos:prefLabel` y `skos:altLabel`, y la derivada queda como
-  una `rdfs:label` más.
+- **Las decisiones de `PREP-NORMALIZE` ya tienen consumidor.** Una errata aceptada corrige la
+  etiqueta y una divergencia aceptada descarta el nombre sacado del identificador, las dos como
+  **insumo** de `normalize` y no como edición sobre la versión commiteada —que se perdería en la
+  corrida siguiente—. Sigue sin consumidor el resto de los tipos: conflictos y candidatas a
+  propiedad funcional, que se declaran por su propio comando.
+- **El matcher ve todas las etiquetas**, no sólo la preferida, así que la que sale del
+  identificador ahora pesa en el mapeo. Por eso la decisión importa: mientras sólo se leía
+  `skos:prefLabel`, aceptar o rechazar una divergencia no podía cambiar nada.
+
+Lo que falta sigue siendo el contexto: la pregunta se contesta mejor con la evidencia a la vista,
+y ahora además tiene efecto.
 
 ### DEBT-RUN-PARAMETERS — Sobre qué corre el pipeline es un parámetro — RESUELTA
 

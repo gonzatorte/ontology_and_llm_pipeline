@@ -205,3 +205,47 @@ def test_the_prompt_is_handed_to_readline_so_redrawing_the_line_keeps_it(monkeyp
     assert "¿Cuál es?" in handed[0]
     assert "\x1b[" in handed[0]
     assert "\x1b" not in re.sub("\001[^\002]*\002", "", handed[0])
+
+
+# ─────────────────────────  decidir no es aplicar  ─────────────────────────
+
+
+def _one_typo(*_args, **_kwargs):
+    return [{"id": "f1", "kind": "typo", "summary": "subre -> sobre"}]
+
+
+def test_deciding_on_the_initial_ontology_offers_to_apply_it(tmp_path, console, monkeypatch):
+    """Contestar el hallazgo no lo aplica: lo aplica volver a normalizar, porque la corrección es
+    **insumo** de esa etapa y no una edición sobre la versión ya commiteada. Un wizard que
+    registrara la decisión y siguiera de largo dejaría al usuario creyendo que corrigió algo."""
+    from onto_pipeline.services import evaluate, prep
+
+    class Result:
+        committed = None
+
+    applied: list = []
+    monkeypatch.setattr(evaluate, "review_items", _one_typo)
+    monkeypatch.setattr(evaluate, "resolve_review", lambda *_a, **_k: None)
+    monkeypatch.setattr(prep, "normalize", lambda ws: applied.append(ws) or Result())
+    monkeypatch.setattr(wizard.render, "normalization", lambda *_a, **_k: None)
+    monkeypatch.setattr(wizard, "_ask", lambda *_a, **_k: "a")
+    monkeypatch.setattr(wizard, "_confirm", lambda *_a, **_k: True)
+
+    wizard._decide_review(console, _workspace(tmp_path))
+
+    assert len(applied) == 1
+
+
+def test_a_decision_nobody_took_normalizes_nothing(tmp_path, console, monkeypatch):
+    """Saltear deja el hallazgo abierto, y nada que aplicar: volver a normalizar commitea una
+    versión de la ontología, y una versión que nadie pidió es lo que este wizard no hace."""
+    from onto_pipeline.services import evaluate, prep
+
+    applied: list = []
+    monkeypatch.setattr(evaluate, "review_items", _one_typo)
+    monkeypatch.setattr(prep, "normalize", lambda ws: applied.append(ws))
+    monkeypatch.setattr(wizard, "_ask", lambda *_a, **_k: wizard.SKIP)
+
+    wizard._decide_review(console, _workspace(tmp_path))
+
+    assert applied == []

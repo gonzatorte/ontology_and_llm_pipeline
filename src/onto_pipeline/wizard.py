@@ -495,6 +495,24 @@ def _decide_branch(console: Console, workspace: Workspace) -> None:
     render.branch_choice(console, result)
 
 
+# Qué significa aceptar y qué rechazar, por tipo de hallazgo. Aceptar es siempre «el hallazgo se
+# sostiene»; lo que cambia es qué se sigue de eso, y sin decirlo la pregunta no se puede contestar.
+MEANING = {
+    "typo": ("es una errata — se corrige la etiqueta al volver a normalizar",
+             "no es una errata — la etiqueta queda como está"),
+    "divergent_label": (
+        "no son el mismo término — el nombre que sale del identificador deja de ser un nombre "
+        "del concepto",
+        "sí son el mismo término — el concepto se queda con los dos nombres",
+    ),
+    "pending_semantic_check": (
+        "no son el mismo término — el nombre que sale del identificador deja de ser un nombre "
+        "del concepto",
+        "sí son el mismo término — el concepto se queda con los dos nombres",
+    ),
+}
+
+
 def _decide_review(console: Console, workspace: Workspace) -> None:
     """Lo que espera decisión: erratas de la ontología inicial, conflictos, propiedades
     funcionales."""
@@ -503,11 +521,17 @@ def _decide_review(console: Console, workspace: Workspace) -> None:
         return
     console.print(Panel.fit(
         f"[bold]revisión[/] · {len(items)} hallazgos esperando una decisión\n"
-        "[dim]Nada se aplica acá: lo que se registra es la decisión.[/]",
+        "[dim]Las decisiones sobre la ontología inicial se aplican al volver a normalizar; las "
+        "demás se registran.[/]",
         border_style="yellow",
     ))
+    decided_on_the_ontology = 0
     for item in items:
         console.print(f"\n[bold]{item['kind']}[/] · {item['summary']}")
+        meaning = MEANING.get(item["kind"])
+        if meaning:
+            console.print(f"  [dim]aceptar: {meaning[0]}[/]")
+            console.print(f"  [dim]rechazar: {meaning[1]}[/]")
         choice = _ask(
             console,
             f"{_key('a')}ceptar · {_key('r')}echazar · {_key(SKIP)} saltear · "
@@ -522,6 +546,36 @@ def _decide_review(console: Console, workspace: Workspace) -> None:
         elif choice.startswith("r"):
             comment = _ask(console, "¿Por qué? (opcional)", default="")
             evaluate.resolve_review(workspace, item["id"], "rejected", comment=comment)
+        else:
+            continue
+        decided_on_the_ontology += bool(meaning)
+
+    if decided_on_the_ontology:
+        _apply_to_the_ontology(console, workspace, decided_on_the_ontology)
+
+
+def _apply_to_the_ontology(console: Console, workspace: Workspace, decided: int) -> None:
+    """Volver a normalizar es lo que **aplica** lo decidido: las correcciones son insumo de esa
+    etapa, no una edición sobre la versión ya commiteada.
+
+    Se ofrece en vez de hacerse solo porque commitea una versión nueva de la ontología, y una
+    versión que nadie pidió es la clase de cosa que este wizard no hace.
+    """
+    console.print(
+        f"\n[bold]{decided} decisión(es) sobre la ontología inicial.[/] Se aplican volviendo a "
+        "normalizar, que deriva las etiquetas otra vez y commitea una versión nueva si algo "
+        "cambió."
+    )
+    if not _confirm(console, "¿Vuelvo a normalizar?"):
+        console.print("[yellow]quedan registradas[/]: se aplican en la próxima normalización.")
+        return
+    with console.status("normalizando la ontología inicial"):
+        result = prep.normalize(workspace)
+    render.normalization(console, result)
+    if result.committed is not None:
+        published = deliver.publish_diff(workspace, result.committed.id)
+        if published is not None:
+            render.comparison(console, published)
 
 
 DECISIONS = {

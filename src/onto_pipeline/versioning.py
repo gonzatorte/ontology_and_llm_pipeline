@@ -389,6 +389,27 @@ def find_by_hash(conn: Store, hash_value: str, *, session_id: str) -> Version | 
     )
 
 
+def latest_by_hash(conn: Store, hash_value: str, *, session_id: str) -> Version | None:
+    """La **punta** de la cadena de versiones que comparten un estado lógico.
+
+    `find_by_hash` devuelve la más vieja, que es lo que la detección de loops necesita: volver a
+    un estado es volver al que ya estaba. Para preguntar «¿cambió algo desde la última vez?» hay
+    que mirar la última, porque las anotaciones —etiquetas y glosas— cambian sin cambiar el
+    hash, y comparar contra la raíz haría que cada corrida commiteara lo mismo otra vez.
+    """
+    install(conn)
+    row = conn.execute(
+        "SELECT * FROM versions WHERE session_id = ? AND state_hash = ? "
+        "ORDER BY created_at DESC, seq DESC LIMIT 1", (session_id, hash_value),
+    ).fetchone()
+    if row is None:
+        return None
+    return Version(
+        id=row["id"], state_hash=row["state_hash"], parent_id=row["parent_id"],
+        iteration=row["iteration"], branch_id=row["branch_id"], note=row["note"] or "",
+    )
+
+
 def nearest_state(
     conn: Store, graph: Graph, threshold: float, *, session_id: str
 ) -> tuple[Version, float] | None:

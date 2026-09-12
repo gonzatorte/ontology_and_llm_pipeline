@@ -85,6 +85,86 @@ def _workspace(tmp_path: Path) -> Workspace:
     return Workspace.of(config, conn, session_id=created.id)
 
 
+def test_only_a_decided_finding_becomes_an_input_of_the_normalization(tmp_path):
+    """Lo que el usuario contestó tiene que volver a aplicarse solo en cada `normalize`, porque
+    normalizar es función determinista de la ontología en disco y una corrección escrita encima
+    de la versión commiteada se pierde en la corrida siguiente.
+
+    Lo que sigue abierto no entra: sería tomar la decisión por default, que es lo que
+    `BRANCH-ONLY-REVIEW` nombra.
+    """
+    from onto_pipeline import review
+    from onto_pipeline.services import prep
+
+    workspace = _workspace(tmp_path)
+    findings = [
+        review.Finding(review.TYPO, "c:1", "subre -> sobre",
+                       {"token": "subre", "suggestion": "sobre"}),
+        review.Finding(review.DIVERGENT_LABEL, "c:2", "Valor (en) | value (en)", {"labels": []}),
+        review.Finding(review.TYPO, "c:3", "frm -> framework",
+                       {"token": "frm", "suggestion": "framework"}),
+    ]
+    review.sync(workspace.conn, findings, version_id="v0", session_id=SESSION,
+                kinds=[review.TYPO, review.DIVERGENT_LABEL])
+    review.resolve(workspace.conn, findings[0].id, review.ACCEPTED, session_id=SESSION)
+    review.resolve(workspace.conn, findings[1].id, review.ACCEPTED, session_id=SESSION)
+
+    decisions = prep.label_decisions(workspace)
+
+    assert decisions.typo_fixes == {"c:1": [("subre", "sobre")]}, "la tercera sigue abierta"
+    assert decisions.dropped_derived == frozenset({"c:2"})
+
+
+_SEED_RDF = """<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+  <owl:Class rdf:about="http://example.org/onto#Nota">
+    <rdfs:label>Subre el tema</rdfs:label></owl:Class>
+  <owl:Class rdf:about="http://example.org/onto#Otra">
+    <rdfs:label>Sobre el metodo</rdfs:label></owl:Class>
+  <owl:Class rdf:about="http://example.org/onto#Tercera">
+    <rdfs:label>Sobre el resultado</rdfs:label></owl:Class>
+</rdf:RDF>
+"""
+
+
+def test_a_decided_label_reaches_the_dag_although_it_is_only_an_annotation(tmp_path):
+    """El hash de estado descarta las anotaciones, así que corregir una etiqueta no produce un
+    estado lógico nuevo. Sin commitear igual, la corrección quedaría sólo en el TTL del disco y
+    el grafo que lee el pipeline —que sale de la versión guardada— seguiría con la etiqueta
+    vieja: la decisión del usuario no llegaría al matcher.
+
+    La versión nueva conserva el hash de su padre, como ya hace `generate_glosses`: no es un
+    estado nuevo para razonar, pero es algo que el DAG tiene que llevar.
+    """
+    from rdflib.namespace import RDFS
+
+    from onto_pipeline import review, versioning
+    from onto_pipeline.services import prep
+
+    workspace = _workspace(tmp_path)
+    workspace.config.paths.initial_ontology.write_text(_SEED_RDF, encoding="utf-8")
+    first = prep.normalize(workspace)
+    typo = next(
+        item for item in review.load(
+            workspace.conn, status=review.OPEN, kind=review.TYPO, session_id=SESSION
+        )
+        if item["payload"].get("token") == "subre"
+    )
+    review.resolve(workspace.conn, typo["id"], review.ACCEPTED, session_id=SESSION)
+
+    second = prep.normalize(workspace)
+
+    assert second.committed is not None, "la corrección tiene que llegar al DAG"
+    assert second.committed.parent_id == first.committed.id
+    assert second.committed.state_hash == first.committed.state_hash, "mismo estado lógico"
+    graph = versioning.load(workspace.conn, second.committed.id)[1]
+    assert "Sobre el tema" in {str(text) for text in graph.objects(None, RDFS.label)}
+    assert prep.normalize(workspace).committed is None, \
+        "y volver a correrla no apila una versión por corrida"
+
+
 # ─────────────────────────  resolución de versión  ─────────────────────────
 
 

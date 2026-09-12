@@ -16,7 +16,12 @@ from ..alignment import check_terms
 from ..alignment import survey as alignment_survey
 from ..ingest import discover, markdown_path
 from ..ingest import ingest as ingest_documents
-from ..initial_ontology import NormalizedOntology, gloss_contexts, normalize_initial_ontology
+from ..initial_ontology import (
+    LabelDecisions,
+    NormalizedOntology,
+    gloss_contexts,
+    normalize_initial_ontology,
+)
 from ..parse import TEXT_SUFFIXES
 from .workspace import Progress, StageError, Workspace, silent
 
@@ -85,6 +90,37 @@ class Normalization:
         return (self.committed or self.same_state_as).id
 
 
+def label_decisions(workspace: Workspace) -> LabelDecisions:
+    """Lo que el usuario ya decidió sobre las etiquetas, para que la normalización lo re-aplique.
+
+    Normalizar es función determinista de la ontología que está en disco, así que una corrección
+    escrita encima de la versión commiteada se pierde en la próxima corrida sin que nadie se
+    entere. Por eso la decisión entra como insumo: se lee de `review_items` —donde se tomó— y se
+    vuelve a aplicar sola.
+
+    Aceptar es siempre «el hallazgo se sostiene»: una errata aceptada se corrige, y una
+    divergencia aceptada dice que el nombre sacado del identificador no nombra a ese concepto.
+    """
+    session = workspace.require_session()
+    fixes: dict[str, list[tuple[str, str]]] = {}
+    for item in review.load(
+        workspace.conn, status=review.ACCEPTED, kind=review.TYPO, session_id=session
+    ):
+        payload = item["payload"]
+        if payload.get("token") and payload.get("suggestion"):
+            fixes.setdefault(item["subject_iri"], []).append(
+                (payload["token"], payload["suggestion"])
+            )
+    dropped = {
+        item["subject_iri"]
+        for kind in (review.DIVERGENT_LABEL, review.PENDING_SEMANTIC_CHECK)
+        for item in review.load(
+            workspace.conn, status=review.ACCEPTED, kind=kind, session_id=session
+        )
+    }
+    return LabelDecisions(typo_fixes=fixes, dropped_derived=frozenset(dropped))
+
+
 def normalize(workspace: Workspace) -> Normalization:
     """`PREP-NORMALIZE`: IRIs opacos, etiquetas derivadas, erratas, contextos de glosa.
 
@@ -98,22 +134,36 @@ def normalize(workspace: Workspace) -> Normalization:
         config.initial_ontology.base_iri,
         divergence_threshold=config.initial_ontology.label_divergence_threshold,
         reasoner_lib=config.paths.reasoner_lib,
+        decisions=label_decisions(workspace),
     )
 
     target = workspace.ontology_dir() / "initial_normalized.ttl"
     seed.graph.serialize(target, format="turtle")
 
     conn = workspace.conn
-    existing = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
+    state = versioning.state_hash(seed.graph)
+    existing = versioning.find_by_hash(conn, state, session_id=session)
     committed = None
     if existing is None:
         committed = versioning.commit(
             conn, seed.graph, version_id=workspace.next_version_id(),
             note="ontología inicial normalizada"
         , session_id=session)
+    else:
+        # Una etiqueta es una anotación, así que corregir una no mueve el hash de estado y esta
+        # etapa no commitearía nada: quedaría el TTL del disco corregido y el grafo que lee el
+        # pipeline —que sale de la versión guardada, no del archivo— con la etiqueta vieja. La
+        # versión nueva conserva el hash de su padre, como ya hace `generate_glosses`.
+        tip = versioning.latest_by_hash(conn, state, session_id=session) or existing
+        if versioning.diff(versioning.load(conn, tip.id)[1], seed.graph).labels_changed:
+            committed = versioning.commit(
+                conn, seed.graph, version_id=workspace.next_version_id(), parent_id=tip.id,
+                note="etiquetas decididas en revisión (sólo anotaciones; mismo estado lógico)",
+                session_id=session,
+            )
 
     contexts = gloss_contexts(seed)
-    current = versioning.find_by_hash(conn, versioning.state_hash(seed.graph), session_id=session)
+    current = committed or existing
     sync = review.sync(
         conn, review.findings_from_initial(seed),
         version_id=current.id if current else workspace.next_version_id(),

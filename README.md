@@ -524,6 +524,21 @@ duplica nada ni reabre lo ya decidido: lo que rechazaste queda rechazado. Y si u
 de aparecer porque cambiaste la ontología inicial, pasa a `superseded` en vez de quedar colgado como
 pendiente.
 
+**Qué hace tu decisión.** Aceptar es siempre «el hallazgo se sostiene», y de eso se sigue algo
+distinto según el tipo:
+
+| Hallazgo | Aceptar | Rechazar |
+|---|---|---|
+| `typo` | la palabra se corrige en las etiquetas de esa entidad | la etiqueta queda como está |
+| `divergent_label`, `pending_semantic_check` | no son el mismo término: el nombre que sale del identificador deja de ser un nombre del concepto | son el mismo término: el concepto se queda con los dos |
+
+**Se aplican al volver a normalizar, no en el momento.** `normalize` es función determinista de
+la ontología que está en disco: una corrección escrita encima de la versión commiteada
+desaparecería en la corrida siguiente sin que nadie se entere. Por eso la decisión es **insumo**
+de la etapa —se lee de `review_items` y se re-aplica sola— y por eso corregir una errata es
+contestar el hallazgo y volver a correr `normalize`. El wizard lo ofrece apenas decidís; el
+identificador no se toca nunca, porque después de `PREP-NORMALIZE-IRIS` no significa nada.
+
 Sin proveedor configurado saltea `PREP-NORMALIZE-GLOSSES` y te dice cuántas glosas quedaron pendientes.
 
 ### 3. ¿Y ahora qué? (`next`)

@@ -8,6 +8,7 @@ from onto_pipeline import terms
 from onto_pipeline.initial_ontology import (
     CLASS,
     OBJECT_PROPERTY,
+    LabelDecisions,
     detect_typos,
     gloss_contexts,
     normalize_initial_ontology,
@@ -108,6 +109,73 @@ def test_every_name_is_also_an_altlabel_including_the_preferred_one(seed):
     alternatives = {str(literal) for literal in seed.graph.objects(applies, SKOS.altLabel)}
 
     assert alternatives == {"appliesTechnique", "Aplica una o varias"}
+
+
+def test_an_accepted_typo_is_corrected_the_next_time_the_ontology_is_normalized(tmp_path):
+    """La decisión entra como **insumo** y no como edición encima de la versión commiteada:
+    normalizar es función determinista de la ontología en disco, así que una corrección escrita
+    sobre el grafo desaparece en la próxima corrida sin que nadie se entere.
+
+    Se corrige la etiqueta, nunca el identificador: después de `PREP-NORMALIZE-IRIS` el
+    identificador no carga significado.
+    """
+    source = tmp_path / "seed.ttl"
+    source.write_text(f"""
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix : <{NS}> .
+:Nota a owl:Class ; rdfs:label "Subre el tema" .
+:Otra a owl:Class ; rdfs:label "Sobre el metodo" .
+:Tercera a owl:Class ; rdfs:label "Sobre el resultado" .
+""", encoding="utf-8")
+    # `sobre` dos veces y `subre` una: una errata es más rara que la palabra que corrompe, y el
+    # detector no dispara sin esa asimetría.
+    plain = normalize_initial_ontology(source, BASE, divergence_threshold=0.8)
+    nota = {entity.original_iri: entity for entity in plain.entities}[f"{NS}Nota"]
+    assert ("subre", "sobre") in [(typo.token, typo.suggestion) for typo in plain.typos]
+
+    corrected = normalize_initial_ontology(
+        source, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(typo_fixes={nota.iri: [("subre", "sobre")]}),
+    )
+
+    fixed = {entity.original_iri: entity for entity in corrected.entities}[f"{NS}Nota"]
+    assert "Sobre el tema" in [label.text for label in fixed.labels], "y con su mayúscula"
+    assert fixed.iri == nota.iri, "el identificador no se toca"
+    assert not [typo for typo in corrected.typos if typo.token == "subre"], \
+        "corregida, deja de ser un hallazgo y no se vuelve a preguntar"
+
+
+def test_an_accepted_divergence_drops_the_name_that_came_from_the_identifier(seed, initial_file):
+    """Aceptar una divergencia es decir que no son el mismo término, y entonces el nombre sacado
+    del identificador no es un nombre de este concepto: deja de estar entre las etiquetas contra
+    las que compara el matcher."""
+    applies = {entity.original_iri: entity for entity in seed.entities}[f"{NS}Aplica_una_o_varias"]
+    assert applies.divergent
+
+    decided = normalize_initial_ontology(
+        initial_file, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(dropped_derived=frozenset({applies.iri})),
+    )
+
+    entity = {e.original_iri: e for e in decided.entities}[f"{NS}Aplica_una_o_varias"]
+    assert [label.text for label in entity.labels] == ["appliesTechnique"]
+    assert not entity.divergent, "contestada, el hallazgo no vuelve a levantarse"
+    names = {str(literal) for literal in decided.graph.objects(URIRef(entity.iri), SKOS.altLabel)}
+    assert names == {"appliesTechnique"}
+
+
+def test_the_derived_name_survives_when_it_is_the_only_one(seed, initial_file):
+    """Una entidad sin etiqueta desaparece del matcher, que es peor que una etiqueta discutida."""
+    strategy = {e.original_iri: e for e in seed.entities}[f"{NS}MethodologicalStrategy"]
+
+    decided = normalize_initial_ontology(
+        initial_file, BASE, divergence_threshold=0.8,
+        decisions=LabelDecisions(dropped_derived=frozenset({strategy.iri})),
+    )
+
+    entity = {e.original_iri: e for e in decided.entities}[f"{NS}MethodologicalStrategy"]
+    assert [label.text for label in entity.labels] == ["Methodological Strategy"]
 
 
 def test_gloss_context_is_the_neighbourhood_not_the_name(seed):
